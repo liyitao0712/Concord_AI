@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Concord AI - One-click Setup Script
-# Usage: ./scripts/setup.sh
+# Concord AI - 一键部署脚本
+# 用法: ./scripts/setup.sh
 
 set -e
 
@@ -11,82 +11,82 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
 echo "=========================================="
-echo "  Concord AI - One-click Setup"
+echo "  Concord AI - 一键部署"
 echo "=========================================="
 
-# 1. Check prerequisites
+# 1. 检查依赖
 echo ""
-echo "[1/6] Checking prerequisites..."
+echo "[1/6] 检查系统依赖..."
 
 if ! command -v docker &> /dev/null; then
-    echo "Error: Docker is not installed. Please install Docker first."
+    echo "错误: 未安装 Docker，请先安装 Docker。"
     exit 1
 fi
 
 if ! command -v python3 &> /dev/null; then
-    echo "Error: Python3 is not installed. Please install Python 3.11+ first."
+    echo "错误: 未安装 Python3，请先安装 Python 3.11+。"
     exit 1
 fi
 
-echo "  - Docker: OK"
-echo "  - Python3: OK"
+echo "  - Docker: 已安装"
+echo "  - Python3: 已安装"
 
-# 2. Create .env file
+# 2. 创建 .env 文件
 echo ""
-echo "[2/6] Setting up environment..."
+echo "[2/6] 配置环境变量..."
 
 if [ ! -f ".env" ]; then
     cp .env.example .env
-    echo "  Created .env file from .env.example"
-    echo "  Please edit .env to add your API keys!"
+    echo "  已从 .env.example 创建 .env 文件"
+    echo "  请编辑 .env 文件，填入你的 API 密钥！"
 else
-    echo "  .env file already exists"
+    echo "  .env 文件已存在"
 fi
 
-# 3. Start Docker containers
+# 3. 启动 Docker 容器
 echo ""
-echo "[3/6] Starting Docker containers..."
+echo "[3/6] 启动 Docker 容器..."
 docker-compose up -d
 
-# Wait for containers to be healthy
-echo "  Waiting for containers to be ready..."
+# 等待容器就绪
+echo "  等待容器就绪..."
 sleep 5
 
-# 4. Create virtual environment
+# 4. 创建虚拟环境
 echo ""
-echo "[4/6] Creating Python virtual environment..."
+echo "[4/6] 创建 Python 虚拟环境..."
 cd backend
 
 if [ ! -d "venv" ]; then
     python3 -m venv venv
-    echo "  Virtual environment created"
+    echo "  虚拟环境创建成功"
 else
-    echo "  Virtual environment already exists"
+    echo "  虚拟环境已存在"
 fi
 
-# 5. Install dependencies
+# 5. 安装依赖
 echo ""
-echo "[5/6] Installing Python dependencies..."
+echo "[5/6] 安装 Python 依赖..."
 source venv/bin/activate
 pip install -r requirements.txt --quiet
 
-# 6. Verify setup
+# 6. 验证安装
 echo ""
-echo "[6/6] Verifying setup..."
+echo "[6/6] 验证安装..."
 
-# Check Docker containers
+# 检查 Docker 容器
 if docker-compose ps | grep -q "healthy"; then
-    echo "  - Docker containers: OK"
+    echo "  - Docker 容器: 正常"
 else
-    echo "  - Docker containers: Starting (may take a moment)"
+    echo "  - Docker 容器: 启动中（可能需要稍等）"
 fi
 
 echo ""
 echo "=========================================="
-echo "  Setup Complete!"
+echo "  部署完成！"
 echo "=========================================="
 echo ""
-echo "Next steps:"
-echo "  1. Edit .env file with your API keys"
-echo "  2. Run: ./scripts/start.sh"
+echo "后续步骤:"
+echo "  1. 编辑 .env 文件，填入你的 API 密钥"
+echo "  2. 运行: ./scripts/start.sh"
 echo ""

@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Concord AI - Database Migration Script
-# Usage:
-#   ./scripts/migrate.sh                    # Run migrations
-#   ./scripts/migrate.sh create "message"   # Create new migration
-#   ./scripts/migrate.sh downgrade          # Rollback last migration
+# Concord AI - 数据库迁移脚本
+# 用法:
+#   ./scripts/migrate.sh                    # 执行迁移
+#   ./scripts/migrate.sh create "描述信息"   # 创建新迁移
+#   ./scripts/migrate.sh down               # 回滚上一次迁移
 
 set -e
 
@@ -13,11 +13,11 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_ROOT/backend"
 
-# Activate virtual environment
+# 激活虚拟环境
 if [ -d "venv" ]; then
     source venv/bin/activate
 else
-    echo "Error: Virtual environment not found. Run ./scripts/setup.sh first."
+    echo "错误: 未找到虚拟环境，请先运行 ./scripts/setup.sh"
     exit 1
 fi
 
@@ -26,41 +26,41 @@ MESSAGE=$2
 
 case $ACTION in
     upgrade|up)
-        echo "Running migrations..."
+        echo "执行数据库迁移..."
         alembic upgrade head
-        echo "Migrations complete."
+        echo "迁移完成。"
         ;;
     downgrade|down)
-        echo "Rolling back last migration..."
+        echo "回滚上一次迁移..."
         alembic downgrade -1
-        echo "Rollback complete."
+        echo "回滚完成。"
         ;;
     create|new)
         if [ -z "$MESSAGE" ]; then
-            echo "Error: Please provide a migration message"
-            echo "Usage: ./scripts/migrate.sh create \"your message\""
+            echo "错误: 请提供迁移描述"
+            echo "用法: ./scripts/migrate.sh create \"你的描述\""
             exit 1
         fi
-        echo "Creating new migration: $MESSAGE"
+        echo "创建新迁移: $MESSAGE"
         alembic revision --autogenerate -m "$MESSAGE"
-        echo "Migration created. Check alembic/versions/"
+        echo "迁移文件已创建，请检查 alembic/versions/ 目录"
         ;;
     history)
-        echo "Migration history:"
+        echo "迁移历史:"
         alembic history
         ;;
     current)
-        echo "Current migration:"
+        echo "当前迁移版本:"
         alembic current
         ;;
     *)
-        echo "Usage: ./scripts/migrate.sh [command]"
+        echo "用法: ./scripts/migrate.sh [命令]"
         echo ""
-        echo "Commands:"
-        echo "  upgrade, up     Run all pending migrations (default)"
-        echo "  downgrade, down Rollback last migration"
-        echo "  create, new     Create new migration (requires message)"
-        echo "  history         Show migration history"
-        echo "  current         Show current migration"
+        echo "可用命令:"
+        echo "  upgrade, up     执行所有待处理的迁移（默认）"
+        echo "  downgrade, down 回滚上一次迁移"
+        echo "  create, new     创建新迁移（需要描述信息）"
+        echo "  history         查看迁移历史"
+        echo "  current         查看当前迁移版本"
         ;;
 esac

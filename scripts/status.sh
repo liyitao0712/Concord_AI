@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Concord AI - Status Script
-# Usage: ./scripts/status.sh
+# Concord AI - 状态查看脚本
+# 用法: ./scripts/status.sh
 
 set -e
 
@@ -11,44 +11,44 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
 echo "=========================================="
-echo "  Concord AI - Service Status"
+echo "  Concord AI - 服务状态"
 echo "=========================================="
 
 echo ""
-echo "Docker Containers:"
+echo "Docker 容器:"
 echo "------------------------------------------"
 docker-compose ps
 
 echo ""
-echo "Port Usage:"
+echo "端口占用:"
 echo "------------------------------------------"
 echo "  PostgreSQL: 5432"
 echo "  Redis:      6379"
 echo "  FastAPI:    8000"
 
 echo ""
-echo "Health Check:"
+echo "健康检查:"
 echo "------------------------------------------"
 
-# Check FastAPI
+# 检查 FastAPI
 if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-    echo "  FastAPI:    Running"
+    echo "  FastAPI:    运行中"
 else
-    echo "  FastAPI:    Not running"
+    echo "  FastAPI:    未运行"
 fi
 
-# Check PostgreSQL
+# 检查 PostgreSQL
 if docker-compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then
-    echo "  PostgreSQL: Running"
+    echo "  PostgreSQL: 运行中"
 else
-    echo "  PostgreSQL: Not running"
+    echo "  PostgreSQL: 未运行"
 fi
 
-# Check Redis
+# 检查 Redis
 if docker-compose exec -T redis redis-cli ping > /dev/null 2>&1; then
-    echo "  Redis:      Running"
+    echo "  Redis:      运行中"
 else
-    echo "  Redis:      Not running"
+    echo "  Redis:      未运行"
 fi
 
 echo ""

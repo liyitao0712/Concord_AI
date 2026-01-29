@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Concord AI - Restart Script
-# Usage: ./scripts/restart.sh
+# Concord AI - 重启脚本
+# 用法: ./scripts/restart.sh
 
 set -e
 
@@ -11,27 +11,27 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
 echo "=========================================="
-echo "  Restarting Concord AI"
+echo "  重启 Concord AI"
 echo "=========================================="
 
-# Stop services
+# 停止服务
 echo ""
-echo "[1/2] Stopping services..."
+echo "[1/2] 停止服务..."
 docker-compose down
 
-# Start services
+# 启动服务
 echo ""
-echo "[2/2] Starting services..."
+echo "[2/2] 启动服务..."
 docker-compose up -d
 
-# Wait for containers
+# 等待容器
 sleep 3
 
 echo ""
-echo "Docker containers restarted."
+echo "Docker 容器已重启。"
 docker-compose ps
 
 echo ""
-echo "To start the FastAPI server, run:"
+echo "如需启动 FastAPI 服务，请运行:"
 echo "  cd backend && source venv/bin/activate"
 echo "  uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"

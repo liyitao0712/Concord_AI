@@ -1,11 +1,10 @@
 #!/bin/bash
 
-# Concord AI - View Logs Script
-# Usage: ./scripts/logs.sh [service]
-# Examples:
-#   ./scripts/logs.sh          # All services
-#   ./scripts/logs.sh postgres # PostgreSQL only
-#   ./scripts/logs.sh redis    # Redis only
+# Concord AI - 日志查看脚本
+# 用法:
+#   ./scripts/logs.sh          # 查看所有服务日志
+#   ./scripts/logs.sh postgres # 只看 PostgreSQL 日志
+#   ./scripts/logs.sh redis    # 只看 Redis 日志
 
 set -e
 
@@ -17,9 +16,9 @@ cd "$PROJECT_ROOT"
 SERVICE=$1
 
 if [ -z "$SERVICE" ]; then
-    echo "Showing logs for all services (Ctrl+C to exit)..."
+    echo "查看所有服务日志 (按 Ctrl+C 退出)..."
     docker-compose logs -f
 else
-    echo "Showing logs for $SERVICE (Ctrl+C to exit)..."
+    echo "查看 $SERVICE 日志 (按 Ctrl+C 退出)..."
     docker-compose logs -f "$SERVICE"
 fi

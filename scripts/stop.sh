@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Concord AI - Stop Script
-# Usage: ./scripts/stop.sh
+# Concord AI - 停止脚本
+# 用法: ./scripts/stop.sh
 
 set -e
 
@@ -11,13 +11,13 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
 echo "=========================================="
-echo "  Stopping Concord AI"
+echo "  停止 Concord AI"
 echo "=========================================="
 
-# Stop Docker containers
+# 停止 Docker 容器
 echo ""
-echo "Stopping Docker containers..."
+echo "停止 Docker 容器..."
 docker-compose down
 
 echo ""
-echo "All services stopped."
+echo "所有服务已停止。"

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Concord AI - Start Script
-# Usage: ./scripts/start.sh
+# Concord AI - 启动脚本
+# 用法: ./scripts/start.sh
 
 set -e
 
@@ -11,44 +11,44 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
 echo "=========================================="
-echo "  Starting Concord AI"
+echo "  启动 Concord AI"
 echo "=========================================="
 
-# 1. Start Docker containers
+# 1. 启动 Docker 容器
 echo ""
-echo "[1/3] Starting Docker containers..."
+echo "[1/3] 启动 Docker 容器..."
 docker-compose up -d
 
-# Wait for containers to be healthy
-echo "Waiting for containers to be healthy..."
+# 等待容器健康
+echo "等待容器就绪..."
 sleep 3
 
-# Check container status
+# 检查容器状态
 if ! docker-compose ps | grep -q "healthy"; then
-    echo "Warning: Some containers may not be healthy yet"
+    echo "警告: 部分容器可能尚未就绪"
     docker-compose ps
 fi
 
-# 2. Activate virtual environment
+# 2. 激活虚拟环境
 echo ""
-echo "[2/3] Activating virtual environment..."
+echo "[2/3] 激活虚拟环境..."
 cd backend
 
 if [ ! -d "venv" ]; then
-    echo "Virtual environment not found. Run ./scripts/setup.sh first."
+    echo "错误: 未找到虚拟环境，请先运行 ./scripts/setup.sh"
     exit 1
 fi
 
 source venv/bin/activate
 
-# 3. Start FastAPI server
+# 3. 启动 FastAPI 服务
 echo ""
-echo "[3/3] Starting FastAPI server..."
+echo "[3/3] 启动 FastAPI 服务..."
 echo ""
 echo "=========================================="
-echo "  Server starting at http://localhost:8000"
-echo "  API docs at http://localhost:8000/docs"
-echo "  Press Ctrl+C to stop"
+echo "  服务地址: http://localhost:8000"
+echo "  API 文档: http://localhost:8000/docs"
+echo "  按 Ctrl+C 停止服务"
 echo "=========================================="
 echo ""
 
