@@ -126,6 +126,56 @@ tests/
 
 ---
 
+## 2026-01-29 - Git 初始化与文档完善
+
+### 开发内容
+
+1. **Git 仓库初始化**
+   - 初始化 Git 仓库
+   - 首次提交所有代码
+
+2. **版本管理文档**
+   - 创建 VERSION_MANIFEST.md 记录所有依赖版本
+
+### Git 提交记录
+
+```
+commit 1efe8d9
+Author: alexli
+Date:   2026-01-29
+
+feat: initialize project with M1 infrastructure
+
+- Project structure with FastAPI backend
+- Docker Compose for PostgreSQL and Redis
+- Database connection with async SQLAlchemy + Alembic
+- Redis client wrapper
+- Health check endpoints
+- Environment configuration with Pydantic Settings
+- DevOps scripts (setup, start, stop, restart, migrate, etc.)
+- Technical documentation (spec, MVP plan, dev log)
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+```
+
+### 产出文件
+
+| 文件 | 说明 |
+|------|------|
+| `devdoc/VERSION_MANIFEST.md` | 版本清单文档 |
+
+### VERSION_MANIFEST.md 内容概要
+
+记录了以下版本信息：
+- **运行环境**: Python 3.11+, Docker 24+
+- **容器镜像**: PostgreSQL 16-alpine, Redis 7-alpine
+- **Python 依赖**: 20+ 个包的版本要求
+- **未来依赖**: Phase 2 计划使用的包
+- **前端依赖**: Next.js 14+ 等（未来）
+- **版本更新策略**: 更新频率和流程
+
+---
+
 ## 开发约定
 
 ### 文件命名规范
@@ -151,4 +201,4 @@ chore: 构建/工具相关
 
 ---
 
-*最后更新: 2026-01-29*
+*最后更新: 2026-01-29 20:10*
