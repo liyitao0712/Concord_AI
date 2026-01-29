@@ -19,7 +19,7 @@
 
 | 服务 | 镜像 | 版本 | 端口 |
 |------|------|------|------|
-| PostgreSQL | postgres | 15-alpine | 5432 |
+| PostgreSQL | postgres | 18-alpine | 5432 |
 | Redis | redis | 7-alpine | 6379 |
 
 ---
@@ -149,7 +149,7 @@
 
 ### 版本兼容性
 - Python: 保持 3.11+ 兼容
-- PostgreSQL: 保持 15.x 兼容（阿里云 RDS 版本）
+- PostgreSQL: 保持 18.x 兼容（阿里云 RDS 版本）
 - Redis: 保持 7+ 兼容
 
 ---
