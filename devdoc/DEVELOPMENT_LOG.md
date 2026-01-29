@@ -176,6 +176,44 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 
 ---
 
+## 2026-01-29 - 文档中文化
+
+### 开发内容
+
+将所有运维脚本和项目 README 翻译为中文，提升中文用户体验。
+
+### 修改文件
+
+| 文件 | 改动说明 |
+|------|----------|
+| `README.md` | 完全中文化 |
+| `scripts/setup.sh` | 注释和输出改为中文 |
+| `scripts/start.sh` | 注释和输出改为中文 |
+| `scripts/stop.sh` | 注释和输出改为中文 |
+| `scripts/restart.sh` | 注释和输出改为中文 |
+| `scripts/status.sh` | 注释和输出改为中文 |
+| `scripts/logs.sh` | 注释和输出改为中文 |
+| `scripts/migrate.sh` | 注释和输出改为中文 |
+| `scripts/reset-db.sh` | 注释和输出改为中文 |
+
+### Git 提交记录
+
+```
+commit 8e438d5
+Author: alexli
+Date:   2026-01-29
+
+docs: 将脚本和 README 翻译为中文
+
+- README.md 完全中文化
+- 所有 scripts/ 目录下的脚本注释和输出改为中文
+- 包括: setup.sh, start.sh, stop.sh, restart.sh, status.sh, logs.sh, migrate.sh, reset-db.sh
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+```
+
+---
+
 ## 开发约定
 
 ### 文件命名规范
