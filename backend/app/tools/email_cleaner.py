@@ -241,7 +241,7 @@ class EmailCleanerTool(BaseTool):
 
     @tool(
         name="clean_email",
-        description="清洗邮件正文，移除签名、引用、HTML 等，提取核心内容",
+        description="清洗邮件正文，移除签名、HTML 等，提取核心内容",
         parameters={
             "body_text": {
                 "type": "string",
@@ -253,7 +253,7 @@ class EmailCleanerTool(BaseTool):
             },
             "max_length": {
                 "type": "integer",
-                "description": "最大长度，超过会截断（默认 3000）",
+                "description": "最大长度，超过会截断（默认 10000）",
             },
             "remove_signature": {
                 "type": "boolean",
@@ -261,7 +261,7 @@ class EmailCleanerTool(BaseTool):
             },
             "remove_quotes": {
                 "type": "boolean",
-                "description": "是否移除引用历史（默认 true）",
+                "description": "是否移除引用历史（默认 false，保留历史邮件）",
             },
         },
     )
@@ -269,9 +269,9 @@ class EmailCleanerTool(BaseTool):
         self,
         body_text: str = "",
         body_html: str = "",
-        max_length: int = 3000,
+        max_length: int = 10000,
         remove_signature_flag: bool = True,
-        remove_quotes: bool = True,
+        remove_quotes: bool = False,
     ) -> dict:
         """
         清洗邮件正文
@@ -332,7 +332,9 @@ class EmailCleanerTool(BaseTool):
 async def clean_email_content(
     body_text: str = "",
     body_html: str = "",
-    max_length: int = 3000,
+    max_length: int = 10000,
+    remove_signature: bool = False,
+    remove_quotes: bool = False,
 ) -> str:
     """
     清洗邮件正文的便捷函数
@@ -340,7 +342,9 @@ async def clean_email_content(
     Args:
         body_text: 邮件纯文本正文
         body_html: 邮件 HTML 正文（可选）
-        max_length: 最大长度
+        max_length: 最大长度（默认 10000）
+        remove_signature: 是否移除签名（默认 False，保留签名）
+        remove_quotes: 是否移除引用历史（默认 False，保留历史邮件）
 
     Returns:
         str: 清洗后的正文
@@ -350,5 +354,7 @@ async def clean_email_content(
         body_text=body_text,
         body_html=body_html,
         max_length=max_length,
+        remove_signature_flag=remove_signature,
+        remove_quotes=remove_quotes,
     )
     return result["cleaned_content"]

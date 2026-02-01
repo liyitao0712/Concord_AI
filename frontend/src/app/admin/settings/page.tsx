@@ -412,6 +412,11 @@ function EmailAccountsTab() {
     imap_user: '',
     imap_password: '',
     imap_use_ssl: true,
+    imap_folder: 'INBOX',
+    imap_mark_as_read: false,
+    imap_sync_days: undefined,  // undefined 表示同步全部历史邮件
+    imap_unseen_only: false,    // 同步所有邮件（包括已读）
+    imap_fetch_limit: 50,
     is_default: false,
   });
 
@@ -904,6 +909,71 @@ function EmailAccountsTab() {
                 />
                 <span className="ml-2 text-sm text-gray-600">使用 SSL</span>
               </label>
+            </div>
+
+            {/* IMAP 同步策略配置 */}
+            <div className="mt-4 p-3 bg-gray-50 rounded-md">
+              <h5 className="text-xs font-medium text-gray-700 mb-3">📩 邮件同步策略</h5>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    同步天数
+                    <span className="text-gray-400 ml-1" title="留空表示同步全部历史邮件">ⓘ</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.imap_sync_days || ''}
+                    onChange={(e) => setFormData({ ...formData, imap_sync_days: e.target.value ? parseInt(e.target.value) : undefined })}
+                    placeholder="留空=全部"
+                    min="1"
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">首次拉取 N 天内邮件</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">每次拉取数量</label>
+                  <input
+                    type="number"
+                    value={formData.imap_fetch_limit}
+                    onChange={(e) => setFormData({ ...formData, imap_fetch_limit: parseInt(e.target.value) || 50 })}
+                    min="1"
+                    max="500"
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">单次最多拉取邮件数</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">邮件文件夹</label>
+                  <input
+                    type="text"
+                    value={formData.imap_folder}
+                    onChange={(e) => setFormData({ ...formData, imap_folder: e.target.value })}
+                    placeholder="INBOX"
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">监控的邮箱文件夹</p>
+                </div>
+              </div>
+              <div className="mt-3 space-y-2">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.imap_unseen_only}
+                    onChange={(e) => setFormData({ ...formData, imap_unseen_only: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-xs text-gray-600">只同步未读邮件（默认同步全部）</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.imap_mark_as_read}
+                    onChange={(e) => setFormData({ ...formData, imap_mark_as_read: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-xs text-gray-600">拉取后标记为已读</span>
+                </label>
+              </div>
             </div>
           </div>
 

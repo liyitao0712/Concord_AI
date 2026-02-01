@@ -166,11 +166,13 @@ class EmailSummarizerAgent(BaseAgent):
         """
         logger.info(f"[EmailSummarizer] 开始分析邮件: {email_id}")
 
-        # 1. 清洗邮件正文
+        # 1. 清洗邮件正文（保留引用历史和签名，增加 token 限制）
         cleaned_content = await clean_email_content(
             body_text=body_text or "",
             body_html=body_html or "",
-            max_length=3000,
+            max_length=10000,  # 增加到 10000 字符
+            remove_signature=False,  # 保留签名（否则签名后的引用也会被删）
+            remove_quotes=False,  # 保留引用历史邮件
         )
 
         if not cleaned_content:
