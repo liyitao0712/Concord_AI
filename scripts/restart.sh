@@ -169,36 +169,10 @@ if [ "$RUN_MODE" = "all" ] || [ "$RUN_MODE" = "worker" ]; then
     cd "$PROJECT_ROOT"
 fi
 
-# 6.5. 启动飞书 Worker（仅单独重启时）
-if [ "$RUN_MODE" = "feishu" ]; then
-    echo ""
-    echo "[6/7] 启动飞书 Worker..."
-
-    # 检查飞书配置
-    if [ -z "$FEISHU_APP_ID" ] || [ -z "$FEISHU_APP_SECRET" ]; then
-        echo "  错误: 请设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET 环境变量"
-        exit 1
-    fi
-
-    cd backend
-    source venv/bin/activate
-    if [ "$BACKGROUND" = true ]; then
-        nohup python -m app.workers.feishu_worker --app-id "$FEISHU_APP_ID" --app-secret "$FEISHU_APP_SECRET" > ../logs/feishu.log 2>&1 &
-        FEISHU_PID=$!
-        echo "  飞书 Worker 已后台启动 (PID: $FEISHU_PID)"
-        echo "  日志: logs/feishu.log"
-    else
-        echo "  按 Ctrl+C 停止服务"
-        python -m app.workers.feishu_worker --app-id "$FEISHU_APP_ID" --app-secret "$FEISHU_APP_SECRET"
-    fi
-    cd "$PROJECT_ROOT"
-    exit 0
-fi
-
-# 7. 启动前端
+# 6. 启动前端
 if [ "$RUN_MODE" = "all" ] || [ "$RUN_MODE" = "frontend" ]; then
     echo ""
-    echo "[7/7] 启动前端..."
+    echo "[6/6] 启动前端..."
 
     if [ -d "frontend" ] && command -v npm &> /dev/null; then
         cd frontend
@@ -222,6 +196,7 @@ if [ "$RUN_MODE" = "all" ] || [ "$RUN_MODE" = "api" ]; then
     echo "  - API 文档:    http://localhost:8000/docs"
     echo "  - 前端:        http://localhost:3000"
     echo "  - Temporal UI: http://localhost:8080"
+    echo "  - Flower:      http://localhost:5555 (需启动)"
     echo ""
 
     cd backend
