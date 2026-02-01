@@ -74,6 +74,8 @@ concord-ai/
 
 - **后端**: FastAPI + SQLAlchemy + PostgreSQL
 - **缓存**: Redis
+- **任务队列**: Celery + Redis
+- **工作流**: Temporal
 - **AI**: LiteLLM (Claude/GPT)
 - **容器**: Docker Compose
 

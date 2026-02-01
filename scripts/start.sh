@@ -7,14 +7,12 @@
 #   ./scripts/start.sh --api     # 只启动后端 API
 #   ./scripts/start.sh --worker  # 只启动 Temporal Worker
 #   ./scripts/start.sh --frontend # 只启动前端
-#   ./scripts/start.sh --feishu  # 只启动飞书 Worker
 #
 # 服务列表：
-# - Docker 容器（PostgreSQL、Redis、Temporal、Temporal UI）
+# - Docker 容器（PostgreSQL、Redis、Temporal、Temporal UI、Celery Beat/Worker）
 # - FastAPI 后端（端口 8000）
 # - Temporal Worker（处理工作流）
 # - Next.js 前端（端口 3000）
-# - 飞书 Worker（长连接，可选）
 
 set -e
 
@@ -40,9 +38,6 @@ for arg in "$@"; do
             ;;
         --frontend)
             RUN_MODE="frontend"
-            ;;
-        --feishu)
-            RUN_MODE="feishu"
             ;;
     esac
 done
@@ -141,42 +136,10 @@ if [ "$RUN_MODE" = "all" ] || [ "$RUN_MODE" = "frontend" ]; then
     fi
 fi
 
-# 4. 启动飞书 Worker（可选）
-if [ "$RUN_MODE" = "feishu" ]; then
-    echo ""
-    echo "[4/5] 启动飞书 Worker..."
-
-    # 停止已有的飞书 Worker
-    FEISHU_PID=$(pgrep -f "app.workers.feishu_worker" 2>/dev/null || true)
-    if [ -n "$FEISHU_PID" ]; then
-        kill $FEISHU_PID 2>/dev/null || true
-        sleep 1
-    fi
-
-    # 检查飞书配置
-    if [ -z "$FEISHU_APP_ID" ] || [ -z "$FEISHU_APP_SECRET" ]; then
-        echo "  错误: 请设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET 环境变量"
-        exit 1
-    fi
-
-    cd backend
-    source venv/bin/activate
-    if [ "$BACKGROUND" = true ]; then
-        nohup python -m app.workers.feishu_worker --app-id "$FEISHU_APP_ID" --app-secret "$FEISHU_APP_SECRET" > ../logs/feishu.log 2>&1 &
-        FEISHU_PID=$!
-        echo "  飞书 Worker 已后台启动 (PID: $FEISHU_PID)"
-        echo "  日志: logs/feishu.log"
-    else
-        echo "  按 Ctrl+C 停止服务"
-        python -m app.workers.feishu_worker --app-id "$FEISHU_APP_ID" --app-secret "$FEISHU_APP_SECRET"
-    fi
-    cd "$PROJECT_ROOT"
-    exit 0
-fi
-
+# 4. 启动 FastAPI 后端
 if [ "$RUN_MODE" = "all" ] || [ "$RUN_MODE" = "api" ]; then
     echo ""
-    echo "[4/5] 启动 FastAPI 后端..."
+    echo "[4/4] 启动 FastAPI 后端..."
     echo ""
     echo "=========================================="
     echo "  服务地址"
@@ -186,6 +149,7 @@ if [ "$RUN_MODE" = "all" ] || [ "$RUN_MODE" = "api" ]; then
     echo "  - API 文档:    http://localhost:8000/docs"
     echo "  - 前端:        http://localhost:3000"
     echo "  - Temporal UI: http://localhost:8080"
+    echo "  - Flower:      http://localhost:5555 (需启动)"
     echo ""
 
     cd backend

@@ -4,10 +4,9 @@
 # 用法: ./scripts/status.sh
 #
 # 显示所有服务的运行状态：
-# - Docker 容器（PostgreSQL、Redis、Temporal、Temporal UI）
+# - Docker 容器（PostgreSQL、Redis、Temporal、Temporal UI、Celery）
 # - FastAPI 后端
 # - Temporal Worker
-# - 飞书 Worker
 # - Next.js 前端
 
 set -e

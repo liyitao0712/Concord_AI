@@ -13,6 +13,7 @@
 # 7. 验证安装
 #
 # 可选功能：
+# - Celery 任务队列（邮件轮询、定时任务）
 # - 飞书机器人集成（需要在管理后台配置 App ID/Secret）
 
 set -e
@@ -227,6 +228,6 @@ echo "  2. 创建管理员: cd backend && source venv/bin/activate && python ../
 echo "  3. 启动服务:   ./scripts/start.sh"
 echo ""
 echo "可选功能："
+echo "  - Celery 监控面板: docker compose --profile monitoring up -d flower"
 echo "  - 飞书机器人: 访问管理后台 -> 飞书配置，填写 App ID/Secret"
-echo "  - 启动飞书 Worker: ./scripts/start.sh --feishu"
 echo ""
