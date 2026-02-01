@@ -1,0 +1,751 @@
+# app/adapters/feishu_ws.py
+# 飞书长连接 Worker
+#
+# 功能说明：
+# 1. 使用 lark-oapi SDK 建立 WebSocket 长连接
+# 2. 接收飞书消息 → 调用 Chat Agent → 回复飞书
+# 3. 作为独立 Worker 进程运行
+#
+# 启动方式：
+#   python -m app.adapters.feishu_ws
+#
+# 优点（相比 HTTP 回调）：
+# - 无需公网 IP
+# - 实时性好
+# - 连接稳定
+#
+# 飞书长连接文档：
+# https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/im-v1/message/events/message_receive
+
+import asyncio
+import json
+from typing import Optional
+
+import lark_oapi as lark
+from lark_oapi.api.im.v1 import P2ImMessageReceiveV1
+from lark_oapi.ws import Client as WSClient
+
+from app.core.logging import get_logger, setup_logging
+from app.core.config import settings
+from app.core.redis import redis_client
+from app.core.database import async_session_maker
+from app.adapters.feishu import feishu_adapter, feishu_client, FeishuClient
+from app.agents.chat_agent import ChatAgent
+from app.models.chat import ChatSession, ChatMessage
+from app.schemas.event import UnifiedEvent, EventResponse
+
+logger = get_logger(__name__)
+
+
+class FeishuMessageHandler:
+    """
+    飞书消息处理器
+
+    接收飞书消息并调用 Chat Agent 处理
+    """
+
+    def __init__(self):
+        self.chat_agent = ChatAgent()
+        self.client: Optional[FeishuClient] = None
+
+    def set_client(self, client: FeishuClient) -> None:
+        """设置飞书客户端"""
+        self.client = client
+        feishu_adapter.client = client
+
+    async def handle_message(self, event: UnifiedEvent) -> str:
+        """
+        处理消息事件
+
+        Args:
+            event: 统一事件对象
+
+        Returns:
+            str: 回复内容
+        """
+        logger.info(f"[FeishuWorker] 收到消息: {event.content[:50]}...")
+
+        session_id = event.session_id or event.source_id
+
+        try:
+            # 使用 Chat Agent 处理消息
+            result = await self.chat_agent.chat(
+                session_id=session_id,
+                message=event.content,
+            )
+
+            if result.success:
+                return result.content
+            else:
+                logger.error(f"[FeishuWorker] Agent 处理失败: {result.error}")
+                return "抱歉，处理消息时遇到了问题，请稍后重试。"
+
+        except Exception as e:
+            logger.error(f"[FeishuWorker] 消息处理异常: {e}")
+            return "系统繁忙，请稍后再试。"
+
+
+class FeishuWSWorker:
+    """
+    飞书 WebSocket 长连接 Worker
+
+    使用 lark-oapi SDK 建立长连接，接收并处理消息
+
+    使用方法：
+        worker = FeishuWSWorker(
+            app_id="cli_xxx",
+            app_secret="xxx",
+        )
+        await worker.start()
+    """
+
+    def __init__(
+        self,
+        app_id: str,
+        app_secret: str,
+    ):
+        """
+        初始化 Worker
+
+        Args:
+            app_id: 飞书应用 App ID
+            app_secret: 飞书应用 App Secret
+        """
+        self.app_id = app_id
+        self.app_secret = app_secret
+        self.handler = FeishuMessageHandler()
+        self._ws_client: Optional[WSClient] = None
+
+    def _create_lark_client(self) -> lark.Client:
+        """创建飞书 SDK 客户端"""
+        return lark.Client.builder() \
+            .app_id(self.app_id) \
+            .app_secret(self.app_secret) \
+            .build()
+
+    def _handle_message_event(self, data: P2ImMessageReceiveV1) -> None:
+        """
+        处理消息接收事件
+
+        这是 lark-oapi SDK 的回调函数
+        """
+        try:
+            # 转换为原始字典格式
+            raw_data = self._event_to_dict(data)
+
+            # 使用 asyncio 运行异步处理
+            asyncio.create_task(self._process_message(raw_data))
+
+        except Exception as e:
+            logger.error(f"[FeishuWorker] 处理事件失败: {e}")
+
+    def _event_to_dict(self, event: P2ImMessageReceiveV1) -> dict:
+        """将 SDK 事件对象转换为字典"""
+        header = event.header
+        event_data = event.event
+
+        return {
+            "header": {
+                "event_id": header.event_id,
+                "event_type": header.event_type,
+                "create_time": header.create_time,
+                "token": header.token,
+                "app_id": header.app_id,
+                "tenant_key": header.tenant_key,
+            },
+            "event": {
+                "sender": {
+                    "sender_id": {
+                        "open_id": event_data.sender.sender_id.open_id if event_data.sender and event_data.sender.sender_id else "",
+                        "user_id": event_data.sender.sender_id.user_id if event_data.sender and event_data.sender.sender_id else "",
+                    },
+                    "sender_type": event_data.sender.sender_type if event_data.sender else "",
+                },
+                "message": {
+                    "message_id": event_data.message.message_id if event_data.message else "",
+                    "root_id": event_data.message.root_id if event_data.message else "",
+                    "parent_id": event_data.message.parent_id if event_data.message else "",
+                    "create_time": event_data.message.create_time if event_data.message else "",
+                    "chat_id": event_data.message.chat_id if event_data.message else "",
+                    "chat_type": event_data.message.chat_type if event_data.message else "",
+                    "message_type": event_data.message.message_type if event_data.message else "",
+                    "content": event_data.message.content if event_data.message else "",
+                },
+            },
+        }
+
+    async def _process_message(self, raw_data: dict) -> None:
+        """异步处理消息"""
+        try:
+            # 转换为统一事件
+            event = await feishu_adapter.to_unified_event(raw_data)
+
+            # 过滤空消息
+            if not event.content.strip():
+                logger.debug("[FeishuWorker] 忽略空消息")
+                return
+
+            # 处理消息
+            reply_content = await self.handler.handle_message(event)
+
+            # 发送回复
+            response = EventResponse(
+                event_id=event.event_id,
+                status="completed",
+                message=reply_content,
+            )
+            await feishu_adapter.send_response(event, response, reply_content)
+
+            logger.info(f"[FeishuWorker] 消息处理完成: {event.event_id}")
+
+        except Exception as e:
+            logger.error(f"[FeishuWorker] 处理消息失败: {e}")
+
+    async def start(self) -> None:
+        """
+        启动 Worker
+
+        建立长连接并开始接收消息
+        """
+        logger.info("[FeishuWorker] 正在启动...")
+
+        # 初始化 Redis
+        await redis_client.connect()
+        logger.info("[FeishuWorker] Redis 连接成功")
+
+        # 配置飞书客户端
+        feishu_client.configure(self.app_id, self.app_secret)
+        self.handler.set_client(feishu_client)
+
+        # 测试连接
+        if not await feishu_client.test_connection():
+            logger.error("[FeishuWorker] 飞书连接测试失败")
+            return
+
+        logger.info("[FeishuWorker] 飞书连接测试成功")
+
+        # 创建事件处理器
+        event_handler = lark.EventDispatcherHandler.builder(
+            "",  # encrypt_key（如果有的话）
+            "",  # verification_token（如果有的话）
+        ).register_p2_im_message_receive_v1(
+            self._handle_message_event
+        ).build()
+
+        # 创建 WebSocket 客户端
+        self._ws_client = WSClient(
+            self.app_id,
+            self.app_secret,
+            event_handler=event_handler,
+            log_level=lark.LogLevel.INFO,
+        )
+
+        logger.info("[FeishuWorker] WebSocket 长连接已建立，等待消息...")
+
+        # 启动长连接
+        self._ws_client.start()
+
+    async def stop(self) -> None:
+        """停止 Worker"""
+        logger.info("[FeishuWorker] 正在停止...")
+
+        if self._ws_client:
+            self._ws_client.stop()
+
+        await redis_client.disconnect()
+
+        logger.info("[FeishuWorker] 已停止")
+
+
+async def load_config_from_db() -> tuple[str, str]:
+    """
+    从数据库加载飞书配置
+
+    优先从 worker_configs 表读取，如果没有再从 system_settings 读取（兼容旧配置）
+
+    Returns:
+        tuple[str, str]: (app_id, app_secret)
+    """
+    from sqlalchemy import select
+    from app.models.settings import SystemSetting
+
+    async with async_session_maker() as session:
+        # 1. 优先从 worker_configs 表读取
+        try:
+            from app.models.worker import WorkerConfig
+            result = await session.execute(
+                select(WorkerConfig).where(
+                    WorkerConfig.worker_type == "feishu",
+                    WorkerConfig.is_enabled == True,
+                )
+            )
+            worker_config = result.scalar_one_or_none()
+            if worker_config and worker_config.config:
+                app_id = worker_config.config.get("app_id", "")
+                app_secret = worker_config.config.get("app_secret", "")
+                if app_id and app_secret:
+                    logger.info(f"[FeishuWorker] 从 worker_configs 加载配置: {worker_config.name}")
+                    return app_id, app_secret
+        except Exception as e:
+            logger.warning(f"[FeishuWorker] 从 worker_configs 加载失败: {e}")
+
+        # 2. 兼容：从 system_settings 读取（旧配置）
+        result = await session.execute(
+            select(SystemSetting).where(
+                SystemSetting.key.in_([
+                    "feishu.app_id",
+                    "feishu.app_secret",
+                ])
+            )
+        )
+        settings_dict = {s.key: s.value for s in result.scalars().all()}
+
+    app_id = settings_dict.get("feishu.app_id", "")
+    app_secret = settings_dict.get("feishu.app_secret", "")
+
+    return app_id, app_secret
+
+
+# ==================== 全局 Worker 状态（独立进程模式） ====================
+
+import subprocess
+import signal
+
+_feishu_process: Optional[subprocess.Popen] = None
+
+
+async def is_feishu_enabled() -> bool:
+    """
+    检查飞书是否已启用
+
+    优先从 worker_configs 表检查，兼容 system_settings（旧配置）
+
+    Returns:
+        bool: 是否启用
+    """
+    from sqlalchemy import select
+    from app.models.settings import SystemSetting
+
+    try:
+        async with async_session_maker() as session:
+            # 1. 优先从 worker_configs 检查
+            try:
+                from app.models.worker import WorkerConfig
+                result = await session.execute(
+                    select(WorkerConfig).where(
+                        WorkerConfig.worker_type == "feishu",
+                        WorkerConfig.is_enabled == True,
+                    )
+                )
+                worker_config = result.scalar_one_or_none()
+                if worker_config:
+                    return True
+            except Exception as e:
+                logger.debug(f"检查 worker_configs 失败: {e}")
+
+            # 2. 兼容：检查 system_settings（旧配置）
+            result = await session.execute(
+                select(SystemSetting).where(SystemSetting.key == "feishu.enabled")
+            )
+            setting = result.scalar_one_or_none()
+            return setting and setting.value == "true"
+    except Exception as e:
+        logger.warning(f"检查飞书配置失败: {e}")
+        return False
+
+
+async def start_feishu_worker_if_enabled() -> bool:
+    """
+    如果飞书已启用，自动启动 Worker（作为独立子进程）
+
+    这个函数在 FastAPI 启动时调用
+
+    Returns:
+        bool: 是否成功启动
+    """
+    global _feishu_process
+
+    # 检查是否已启用
+    if not await is_feishu_enabled():
+        logger.info("[Feishu] 飞书未启用，跳过 Worker 启动")
+        return False
+
+    # 检查配置是否完整
+    import os
+    app_id = os.getenv("FEISHU_APP_ID", "")
+    app_secret = os.getenv("FEISHU_APP_SECRET", "")
+
+    if not app_id or not app_secret:
+        logger.info("[Feishu] 环境变量未配置，尝试从数据库加载...")
+        try:
+            app_id, app_secret = await load_config_from_db()
+        except Exception as e:
+            logger.error(f"[Feishu] 从数据库加载配置失败: {e}")
+            return False
+
+    if not app_id or not app_secret:
+        logger.warning("[Feishu] 飞书已启用但配置不完整，跳过 Worker 启动")
+        return False
+
+    # 作为独立子进程启动
+    try:
+        import sys
+        python_path = sys.executable
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        log_dir = os.path.join(os.path.dirname(project_root), "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, "feishu.log")
+
+        # 打开日志文件
+        log_handle = open(log_file, "a")
+
+        # 启动子进程
+        _feishu_process = subprocess.Popen(
+            [python_path, "-m", "app.adapters.feishu_ws"],
+            cwd=project_root,
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,  # 创建新会话，避免信号传播
+        )
+
+        logger.info(f"[Feishu] Worker 已作为独立进程启动 (PID: {_feishu_process.pid})")
+        logger.info(f"[Feishu] Worker 日志: {log_file}")
+        return True
+
+    except Exception as e:
+        logger.error(f"[Feishu] 启动 Worker 进程失败: {e}")
+        return False
+
+
+async def stop_feishu_worker() -> None:
+    """
+    停止飞书 Worker
+
+    这个函数在 FastAPI 关闭时调用
+    """
+    global _feishu_process
+
+    if _feishu_process:
+        logger.info(f"[Feishu] 正在停止 Worker 进程 (PID: {_feishu_process.pid})...")
+        try:
+            _feishu_process.terminate()
+            _feishu_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            _feishu_process.kill()
+        except Exception as e:
+            logger.warning(f"[Feishu] 停止进程时出错: {e}")
+        _feishu_process = None
+        logger.info("[Feishu] Worker 进程已停止")
+
+
+def get_feishu_worker_status() -> dict:
+    """
+    获取飞书 Worker 状态
+
+    Returns:
+        dict: 状态信息
+    """
+    global _feishu_process
+
+    # 检查子进程是否还在运行
+    if _feishu_process and _feishu_process.poll() is None:
+        return {
+            "running": True,
+            "pid": _feishu_process.pid,
+        }
+
+    # 也检查是否有其他飞书 Worker 进程在运行
+    import shutil
+    if shutil.which("pgrep"):
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", "app.adapters.feishu_ws"],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                pids = result.stdout.strip().split('\n')
+                return {
+                    "running": True,
+                    "pid": int(pids[0]),
+                }
+        except Exception:
+            pass
+
+    return {
+        "running": False,
+        "pid": None,
+    }
+
+
+# ==================== 独立进程模式（同步） ====================
+
+def _load_llm_settings_sync() -> None:
+    """从数据库同步加载 LLM 设置到环境变量"""
+    import os
+    import asyncio
+    import asyncpg
+    from app.core.config import settings as app_settings
+
+    async def _fetch_settings():
+        # 解析数据库 URL
+        db_url = app_settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+        conn = await asyncpg.connect(db_url)
+        try:
+            rows = await conn.fetch(
+                "SELECT key, value FROM system_settings WHERE category = 'llm'"
+            )
+            return rows
+        finally:
+            await conn.close()
+
+    try:
+        loop = asyncio.new_event_loop()
+        rows = loop.run_until_complete(_fetch_settings())
+        loop.close()
+
+        for row in rows:
+            key, value = row['key'], row['value']
+            if key == "llm.anthropic_api_key" and value:
+                os.environ["ANTHROPIC_API_KEY"] = value
+                logger.info("[FeishuWorker] 已设置 ANTHROPIC_API_KEY")
+            elif key == "llm.openai_api_key" and value:
+                os.environ["OPENAI_API_KEY"] = value
+                logger.info("[FeishuWorker] 已设置 OPENAI_API_KEY")
+            elif key == "llm.volcengine_api_key" and value:
+                os.environ["VOLCENGINE_API_KEY"] = value
+                logger.info("[FeishuWorker] 已设置 VOLCENGINE_API_KEY")
+
+    except Exception as e:
+        logger.error(f"[FeishuWorker] 加载 LLM 设置失败: {e}")
+        raise
+
+
+def load_config_from_db_sync() -> tuple[str, str]:
+    """
+    从数据库同步加载飞书配置
+
+    Returns:
+        tuple[str, str]: (app_id, app_secret)
+    """
+    import asyncio
+
+    async def _load():
+        return await load_config_from_db()
+
+    # 创建新的事件循环来执行异步操作
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(_load())
+    finally:
+        loop.close()
+
+
+def main_sync():
+    """主函数（独立进程模式，同步）"""
+    # 初始化日志
+    setup_logging()
+
+    logger.info("=" * 60)
+    logger.info("飞书长连接 Worker 启动（独立进程模式）")
+    logger.info("=" * 60)
+
+    # 从环境变量或数据库加载配置
+    import os
+    app_id = os.getenv("FEISHU_APP_ID", "")
+    app_secret = os.getenv("FEISHU_APP_SECRET", "")
+
+    if not app_id or not app_secret:
+        logger.info("环境变量未配置，尝试从数据库加载...")
+        try:
+            app_id, app_secret = load_config_from_db_sync()
+        except Exception as e:
+            logger.error(f"从数据库加载配置失败: {e}")
+
+    if not app_id or not app_secret:
+        logger.error("飞书配置未找到，请设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET")
+        return
+
+    logger.info(f"[FeishuWorker] App ID: {app_id[:8]}...")
+
+    # 初始化 Redis（同步）
+    import asyncio
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(redis_client.connect())
+        logger.info("[FeishuWorker] Redis 连接成功")
+    except Exception as e:
+        logger.error(f"[FeishuWorker] Redis 连接失败: {e}")
+    finally:
+        loop.close()
+
+    # 加载 LLM 设置到环境变量（同步）
+    try:
+        _load_llm_settings_sync()
+        logger.info("[FeishuWorker] LLM 设置已加载")
+    except Exception as e:
+        logger.warning(f"[FeishuWorker] 加载 LLM 设置失败: {e}")
+
+    # 配置飞书客户端
+    feishu_client.configure(app_id, app_secret)
+
+    # 测试连接（同步）
+    loop = asyncio.new_event_loop()
+    try:
+        connected = loop.run_until_complete(feishu_client.test_connection())
+        if not connected:
+            logger.error("[FeishuWorker] 飞书连接测试失败")
+            return
+        logger.info("[FeishuWorker] 飞书连接测试成功")
+    finally:
+        loop.close()
+
+    # 创建消息处理器
+    handler = FeishuMessageHandler()
+    handler.set_client(feishu_client)
+
+    # 使用线程池处理消息
+    import concurrent.futures
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
+
+    def process_message_in_thread(raw_data: dict) -> None:
+        """在新线程中处理消息"""
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                # 在新线程中重新连接 Redis（每个线程有自己的事件循环）
+                loop.run_until_complete(redis_client.connect())
+                loop.run_until_complete(_process_message_handler(handler, raw_data))
+            finally:
+                # 断开 Redis 连接，避免连接泄漏
+                try:
+                    loop.run_until_complete(redis_client.disconnect())
+                except Exception:
+                    pass
+                loop.close()
+        except Exception as e:
+            logger.error(f"[FeishuWorker] 线程处理失败: {e}")
+
+    # 创建事件处理器
+    def handle_message_event(data: P2ImMessageReceiveV1) -> None:
+        """处理消息接收事件"""
+        try:
+            # 转换为原始字典格式
+            raw_data = _event_to_dict(data)
+            logger.info(f"[FeishuWorker] 收到消息事件: {raw_data.get('header', {}).get('event_id', 'unknown')}")
+
+            # 提交到线程池异步处理
+            executor.submit(process_message_in_thread, raw_data)
+
+        except Exception as e:
+            logger.error(f"[FeishuWorker] 处理事件失败: {e}")
+
+    event_handler = lark.EventDispatcherHandler.builder(
+        "",  # encrypt_key
+        "",  # verification_token
+    ).register_p2_im_message_receive_v1(
+        handle_message_event
+    ).build()
+
+    # 创建 WebSocket 客户端
+    ws_client = WSClient(
+        app_id,
+        app_secret,
+        event_handler=event_handler,
+        log_level=lark.LogLevel.INFO,
+    )
+
+    logger.info("[FeishuWorker] WebSocket 长连接启动中...")
+
+    try:
+        # start() 会阻塞并运行自己的事件循环
+        ws_client.start()
+    except KeyboardInterrupt:
+        logger.info("[FeishuWorker] 收到中断信号")
+    except Exception as e:
+        logger.error(f"[FeishuWorker] 运行异常: {e}")
+
+
+def _event_to_dict(event: P2ImMessageReceiveV1) -> dict:
+    """将 SDK 事件对象转换为字典"""
+    header = event.header
+    event_data = event.event
+
+    return {
+        "header": {
+            "event_id": header.event_id,
+            "event_type": header.event_type,
+            "create_time": header.create_time,
+            "token": header.token,
+            "app_id": header.app_id,
+            "tenant_key": header.tenant_key,
+        },
+        "event": {
+            "sender": {
+                "sender_id": {
+                    "open_id": event_data.sender.sender_id.open_id if event_data.sender and event_data.sender.sender_id else "",
+                    "user_id": event_data.sender.sender_id.user_id if event_data.sender and event_data.sender.sender_id else "",
+                },
+                "sender_type": event_data.sender.sender_type if event_data.sender else "",
+            },
+            "message": {
+                "message_id": event_data.message.message_id if event_data.message else "",
+                "root_id": event_data.message.root_id if event_data.message else "",
+                "parent_id": event_data.message.parent_id if event_data.message else "",
+                "create_time": event_data.message.create_time if event_data.message else "",
+                "chat_id": event_data.message.chat_id if event_data.message else "",
+                "chat_type": event_data.message.chat_type if event_data.message else "",
+                "message_type": event_data.message.message_type if event_data.message else "",
+                "content": event_data.message.content if event_data.message else "",
+            },
+        },
+    }
+
+
+async def _process_message_handler(handler: FeishuMessageHandler, raw_data: dict) -> None:
+    """异步处理消息"""
+    message_id = raw_data.get("event", {}).get("message", {}).get("message_id", "")
+
+    try:
+        # 1. 检查消息是否已处理（Redis 去重）
+        if message_id:
+            dedup_key = f"feishu:processed:{message_id}"
+            already_processed = await redis_client.get(dedup_key)
+            if already_processed:
+                logger.info(f"[FeishuWorker] 跳过已处理消息: {message_id}")
+                return
+
+        # 2. 转换为统一事件
+        event = await feishu_adapter.to_unified_event(raw_data)
+
+        # 3. 过滤空消息
+        if not event.content.strip():
+            logger.debug("[FeishuWorker] 忽略空消息")
+            return
+
+        # 4. 处理消息
+        reply_content = await handler.handle_message(event)
+
+        # 5. 发送回复
+        response = EventResponse(
+            event_id=event.event_id,
+            status="completed",
+            message=reply_content,
+        )
+        await feishu_adapter.send_response(event, response, reply_content)
+
+        # 6. 成功回复后，标记消息为已处理（TTL 1小时）
+        if message_id:
+            await redis_client.set(dedup_key, "1", ex=3600)
+            logger.debug(f"[FeishuWorker] 消息已标记为已处理: {message_id}")
+
+        logger.info(f"[FeishuWorker] 消息处理完成: {event.event_id}")
+
+    except Exception as e:
+        logger.error(f"[FeishuWorker] 处理消息失败: {e}")
+        # 注意：失败时不标记为已处理，允许重连后重试
+
+
+if __name__ == "__main__":
+    main_sync()

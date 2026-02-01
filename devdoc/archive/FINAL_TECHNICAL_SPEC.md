@@ -744,6 +744,124 @@ OSS_BUCKET=concord-ai-files
 | 幂等性 | 三层防护 | RequestID → Redis锁 → DB唯一约束 | - |
 | 权限管理 | 简单角色 | admin/user 两级 | Casbin（多租户） |
 
+#### 3.6.1 系统管理员后台
+
+系统管理员后台是一个**独立的管理界面**，仅供系统管理员使用。
+
+**设计原则：**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           系统架构                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────────┐          ┌─────────────────────┐                   │
+│  │    用户端 (Web)      │          │   管理员后台 (Admin)  │                   │
+│  │                     │          │                     │                   │
+│  │  • 普通用户使用      │          │  • 仅管理员可访问     │                   │
+│  │  • Chatbox 对话     │          │  • 系统配置管理       │                   │
+│  │  • 任务查看         │          │  • 用户管理          │                   │
+│  │  • 审批操作         │          │  • Agent 配置        │                   │
+│  │                     │          │  • 日志查看          │                   │
+│  └──────────┬──────────┘          └──────────┬──────────┘                   │
+│             │                                │                              │
+│             │      ┌─────────────────────────┤                              │
+│             │      │                         │                              │
+│             ▼      ▼                         ▼                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                        API Layer (FastAPI)                           │   │
+│  │  ┌───────────────────┐          ┌───────────────────┐               │   │
+│  │  │  /api/*           │          │  /admin/*          │               │   │
+│  │  │  (user/admin)     │          │  (admin only)      │               │   │
+│  │  │                   │          │                    │               │   │
+│  │  │  get_current_user │          │  get_current_admin │               │   │
+│  │  └───────────────────┘          └───────────────────┘               │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**角色定义：**
+
+| 角色 | 标识 | 权限 | 说明 |
+|------|------|------|------|
+| 系统管理员 | `admin` | 全部 | 可访问所有功能，包括管理员后台 |
+| 普通用户 | `user` | 基础 | 只能访问用户端功能 |
+
+**管理员后台功能：**
+
+| 模块 | 功能 | API 前缀 |
+|------|------|----------|
+| 用户管理 | 创建/禁用/删除用户，重置密码 | `/admin/users` |
+| Agent 配置 | 启用/禁用 Agent，配置参数 | `/admin/agents` |
+| 系统配置 | LLM 模型、邮件配置等 | `/admin/settings` |
+| 日志查看 | 系统日志、操作审计 | `/admin/logs` |
+| Workflow 管理 | 查看/取消 Workflow | `/admin/workflows` |
+
+**认证实现：**
+
+```python
+# core/security.py
+
+async def get_current_admin_user(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """
+    获取当前管理员用户
+
+    非管理员访问 /admin/* 接口时返回 403 Forbidden
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required"
+        )
+    return current_user
+
+
+# api/admin.py
+
+router = APIRouter(prefix="/admin", tags=["Admin"])
+
+@router.get("/users")
+async def list_users(
+    admin: User = Depends(get_current_admin_user),  # 仅管理员
+    db: AsyncSession = Depends(get_db)
+):
+    """获取所有用户列表"""
+    ...
+
+@router.post("/users/{user_id}/disable")
+async def disable_user(
+    user_id: str,
+    admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """禁用用户"""
+    ...
+```
+
+**初始管理员：**
+
+系统首次部署时，通过环境变量或命令行创建初始管理员：
+
+```bash
+# 方式一：环境变量
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=secure_password
+
+# 方式二：命令行（推荐）
+python -m app.scripts.create_admin --email admin@example.com --password xxx
+```
+
+**安全措施：**
+
+- 管理员后台独立路由前缀 `/admin/*`
+- 所有管理员接口强制要求 `role=admin`
+- 敏感操作记录审计日志
+- 管理员密码强度要求更高
+- 管理员 Token 过期时间更短（可选）
+
 ### 3.7 定时任务分层设计
 
 定时任务根据复杂度分为两层处理：

@@ -26,27 +26,34 @@ fi
 
 echo ""
 echo "[1/3] 停止容器..."
-docker-compose down
+docker compose down
 
 echo ""
 echo "[2/3] 删除数据库卷..."
 docker volume rm concord_ai_postgres_data 2>/dev/null || true
 
 echo ""
-echo "[3/3] 重启容器..."
-docker-compose up -d
+echo "[3/4] 重启容器..."
+docker compose up -d
 
 # 等待 PostgreSQL 就绪
 echo "等待 PostgreSQL 就绪..."
 sleep 5
 
 echo ""
+echo "[4/4] 执行数据库迁移..."
+cd backend
+if [ -d "venv" ]; then
+    source venv/bin/activate
+    alembic upgrade head
+    echo "  数据库迁移完成"
+else
+    echo "  警告: 未找到虚拟环境，跳过迁移"
+    echo "  请手动执行: ./scripts/migrate.sh"
+fi
+
+echo ""
 echo "=========================================="
 echo "  数据库重置完成！"
 echo "=========================================="
-echo ""
-echo "数据库已恢复到初始状态。"
-echo "如需运行迁移，请执行:"
-echo "  cd backend && source venv/bin/activate"
-echo "  alembic upgrade head"
 echo ""

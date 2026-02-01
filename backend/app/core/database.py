@@ -1,7 +1,8 @@
 # app/core/database.py
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy import create_engine
 from typing import AsyncGenerator
 
 from app.core.config import settings
@@ -12,6 +13,19 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,  # Log SQL queries in debug mode
     future=True,
+)
+
+# Create sync engine (用于同步操作，如 OSS 配置读取)
+# 将 async URL 转换为 sync URL
+_sync_url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+sync_engine = create_engine(_sync_url, echo=False)
+
+# Create sync session factory
+sync_session_maker = sessionmaker(
+    bind=sync_engine,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False,
 )
 
 # Create async session factory
@@ -51,3 +65,7 @@ async def init_db() -> None:
 async def close_db() -> None:
     """Close database connections"""
     await engine.dispose()
+
+
+# Alias for compatibility
+get_async_session = get_db

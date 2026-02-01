@@ -21,6 +21,8 @@
 |------|------|------|------|
 | PostgreSQL | postgres | 18-alpine | 5432 |
 | Redis | redis | 7-alpine | 6379 |
+| Temporal Server | temporalio/auto-setup | 1.24.2 | 7233 |
+| Temporal UI | temporalio/ui | 2.26.2 | 8080 |
 
 ---
 
@@ -54,6 +56,19 @@
 | 包名 | 版本 | 用途 |
 |------|------|------|
 | litellm | >=1.23.0 | LLM 统一接口 |
+| langgraph | >=0.0.26 | Agent 框架 |
+
+### SSE
+
+| 包名 | 版本 | 用途 |
+|------|------|------|
+| sse-starlette | >=1.6.0 | Server-Sent Events 支持 |
+
+### 飞书集成
+
+| 包名 | 版本 | 用途 |
+|------|------|------|
+| lark-oapi | >=1.3.0 | 飞书官方 SDK |
 
 ### 调度
 
@@ -61,12 +76,25 @@
 |------|------|------|
 | apscheduler | >=3.10.0 | 定时任务 |
 
+### 工作流引擎
+
+| 包名 | 版本 | 用途 |
+|------|------|------|
+| temporalio | >=1.4.0 | Temporal Python SDK |
+
 ### 认证
 
 | 包名 | 版本 | 用途 |
 |------|------|------|
 | python-jose[cryptography] | >=3.3.0 | JWT 处理 |
 | passlib[bcrypt] | >=1.7.4 | 密码哈希 |
+| bcrypt | ==4.0.1 | 密码加密（锁定版本，5.x 与 passlib 不兼容） |
+
+### 存储
+
+| 包名 | 版本 | 用途 |
+|------|------|------|
+| oss2 | >=2.18.0 | 阿里云 OSS 文件存储 |
 
 ### 邮件
 
@@ -79,6 +107,12 @@
 | 包名 | 版本 | 用途 |
 |------|------|------|
 | httpx | >=0.26.0 | 异步 HTTP 客户端 |
+
+### 异步支持
+
+| 包名 | 版本 | 用途 |
+|------|------|------|
+| greenlet | >=3.0.0 | SQLAlchemy 异步模式必需 |
 
 ### 工具
 
@@ -96,29 +130,43 @@
 
 ---
 
-## 四、未来依赖（Phase 2+）
+## 四、未来依赖（Phase 5+）
 
 | 包名 | 版本 | 用途 | 阶段 |
 |------|------|------|------|
-| langgraph | >=0.0.26 | Agent 框架 | M5 |
-| temporalio | >=1.4.0 | 工作流引擎 | Phase 2 |
-| pgvector | >=0.2.0 | 向量搜索 | Phase 2 |
-| oss2 | >=2.18.0 | 阿里云 OSS | Phase 2 |
-| PyMuPDF | >=1.23.0 | PDF 解析 | Phase 2 |
-| python-docx | >=1.1.0 | Word 解析 | Phase 2 |
-| beautifulsoup4 | >=4.12.0 | HTML 解析 | Phase 2 |
-| openpyxl | >=3.1.0 | Excel 解析 | Phase 2 |
+| pgvector | >=0.2.0 | 向量搜索 | Phase 5 |
+| PyMuPDF | >=1.23.0 | PDF 解析 | Phase 5 |
+| python-docx | >=1.1.0 | Word 解析 | Phase 5 |
+| beautifulsoup4 | >=4.12.0 | HTML 解析 | Phase 5 |
+| openpyxl | >=3.1.0 | Excel 解析 | Phase 5 |
 
 ---
 
-## 五、前端依赖（未来）
+## 五、前端依赖
+
+### 核心框架
 
 | 包名 | 版本 | 用途 |
 |------|------|------|
-| next | >=14.0.0 | React 框架 |
-| react | >=18.2.0 | UI 库 |
-| typescript | >=5.0.0 | 类型支持 |
-| tailwindcss | >=3.4.0 | CSS 框架 |
+| next | 16.1.6 | React 框架 |
+| react | 19.2.3 | UI 库 |
+| react-dom | 19.2.3 | React DOM |
+| typescript | ^5 | 类型支持 |
+| tailwindcss | ^4 | CSS 框架 |
+
+### 开发工具
+
+| 包名 | 版本 | 用途 |
+|------|------|------|
+| @types/node | ^20 | Node.js 类型 |
+| @types/react | ^19 | React 类型 |
+| eslint | ^9 | 代码检查 |
+| eslint-config-next | 16.1.6 | Next.js ESLint 配置 |
+
+### 未来添加
+
+| 包名 | 版本 | 用途 |
+|------|------|------|
 | zustand | >=4.5.0 | 状态管理 |
 | @tanstack/react-query | >=5.0.0 | 数据请求 |
 
@@ -129,7 +177,7 @@
 | 文件 | 位置 | 说明 |
 |------|------|------|
 | requirements.txt | backend/ | Python 依赖 |
-| package.json | frontend/ | Node.js 依赖（未来） |
+| package.json | frontend/ | Node.js 依赖 |
 | docker-compose.yml | 根目录 | 容器版本 |
 
 ---
@@ -154,4 +202,15 @@
 
 ---
 
-*最后更新: 2026-01-29*
+## 八、Phase 4 新增依赖
+
+Phase 4 (Chatbox + 飞书集成) 新增了以下依赖：
+
+| 包名 | 版本 | 用途 |
+|------|------|------|
+| sse-starlette | >=1.6.0 | SSE 流式输出支持 |
+| lark-oapi | >=1.3.0 | 飞书官方 SDK（长连接 WebSocket）|
+
+---
+
+*最后更新: 2026-01-30*

@@ -1,7 +1,25 @@
-version: '3.8'
+# docker-compose.yml
+# Concord AI 开发环境容器编排
+#
+# 服务列表：
+# - postgres: PostgreSQL 数据库（业务数据）
+# - redis: Redis 缓存/消息队列
+# - temporal: Temporal Server（工作流引擎）
+# - temporal-ui: Temporal Web UI（工作流可视化）
+#
+# 启动命令：
+#   docker-compose up -d
+#
+# 访问地址：
+#   - PostgreSQL: localhost:5432
+#   - Redis: localhost:6379
+#   - Temporal: localhost:7233 (gRPC)
+#   - Temporal UI: http://localhost:8080
 
 services:
-  # PostgreSQL Database
+  # ==================== PostgreSQL Database ====================
+  # 主数据库，存储业务数据（用户、订单、报价等）
+  # 同时也作为 Temporal 的后端存储
   postgres:
     image: postgres:18-alpine
     container_name: concord-postgres
@@ -13,13 +31,16 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # 初始化脚本：创建 Temporal 数据库
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # Redis
+  # ==================== Redis ====================
+  # 缓存、Session、消息队列
   redis:
     image: redis:7-alpine
     container_name: concord-redis
@@ -33,6 +54,136 @@ services:
       timeout: 5s
       retries: 5
 
+  # ==================== Temporal Server ====================
+  # 工作流引擎，负责流程编排、状态持久化、失败重试
+  #
+  # auto-setup 镜像说明：
+  # - 自动创建所需的数据库表
+  # - 使用 PostgreSQL 作为后端存储
+  #
+  # 端口说明：
+  # - 7233: gRPC 端口，Worker 和客户端连接用
+  temporal:
+    image: temporalio/auto-setup:1.24.2
+    container_name: concord-temporal
+    ports:
+      - "7233:7233"
+    environment:
+      # 使用 PostgreSQL 作为存储后端
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+      - POSTGRES_SEEDS=postgres
+      # 默认命名空间
+      - DEFAULT_NAMESPACE=default
+      # 默认命名空间保留时间（7天）
+      - DEFAULT_NAMESPACE_RETENTION=168h
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # 使用 temporal-server 自身暴露的 gRPC 端口检查
+      # 注意: Temporal 绑定到容器 IP，不是 localhost
+      test: ["CMD-SHELL", "temporal operator cluster health --address $(hostname -i):7233 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  # ==================== Temporal UI ====================
+  # Temporal Web 界面，用于查看和管理工作流
+  #
+  # 功能：
+  # - 查看运行中/已完成的工作流
+  # - 查看工作流执行历史
+  # - 手动终止/重启工作流
+  # - 查看任务队列状态
+  temporal-ui:
+    image: temporalio/ui:2.26.2
+    container_name: concord-temporal-ui
+    ports:
+      - "8080:8080"
+    environment:
+      # 连接 Temporal Server
+      - TEMPORAL_ADDRESS=temporal:7233
+      # 启用 Codec Server（用于解码 Payload）
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    depends_on:
+      - temporal
+
+# ==================== Celery Beat（定时调度器） ====================
+  # 定时触发邮件轮询任务
+  #
+  # 启动后会自动为每个邮箱账户创建定时任务
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: concord-celery-beat
+    command: celery -A app.celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/concord
+      - REDIS_URL=redis://redis:6379/0
+      - TEMPORAL_HOST=temporal:7233
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+      - celerybeat_schedule:/app/celerybeat-schedule
+
+  # ==================== Celery Worker（任务执行器） ====================
+  # 执行邮件拉取和处理任务
+  #
+  # 可以启动多个 Worker 实例以提高并发能力
+  # 通过 docker-compose up -d --scale celery-worker=3 扩展到 3 个实例
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: concord-celery-worker
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=10 --queues=email,default
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/concord
+      - REDIS_URL=redis://redis:6379/0
+      - TEMPORAL_HOST=temporal:7233
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+    deploy:
+      replicas: 2  # 默认启动 2 个 Worker 实例
+
+  # ==================== Flower（Celery 监控，可选） ====================
+  # Celery 任务监控面板
+  #
+  # 访问地址: http://localhost:5555
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: concord-flower
+    command: celery -A app.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    profiles:
+      - monitoring
+    restart: unless-stopped
+
+# ==================== 数据卷 ====================
 volumes:
-  postgres_data:
-  redis_data:
+  postgres_data:        # PostgreSQL 数据持久化
+  redis_data:           # Redis 数据持久化
+  celerybeat_schedule:  # Celery Beat 调度状态

@@ -1,0 +1,307 @@
+# app/tasks/email.py
+# 邮件相关的 Celery 任务
+#
+# 功能说明：
+# 1. poll_email_account - 定时拉取邮箱的新邮件
+# 2. process_email - 处理单封邮件（持久化、分发、启动 Workflow）
+#
+# 任务特点：
+# - 自动重试（失败后自动重试 3 次）
+# - 分布式锁（防止重复处理）
+# - 任务队列隔离（email 队列）
+
+import asyncio
+from datetime import datetime, timedelta
+from typing import Optional
+
+from celery import Task
+
+from app.celery_app import celery_app
+from app.core.logging import get_logger
+from app.core.redis import redis_client
+
+logger = get_logger(__name__)
+
+
+# ==================== 异步任务包装器 ====================
+
+class AsyncTask(Task):
+    """
+    支持异步函数的 Celery Task 基类
+
+    用法：
+        @celery_app.task(base=AsyncTask)
+        async def my_task():
+            await some_async_operation()
+    """
+
+    def __call__(self, *args, **kwargs):
+        """执行任务时自动创建 asyncio event loop"""
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(self.run(*args, **kwargs))
+
+    async def run(self, *args, **kwargs):
+        """子类需要实现这个方法"""
+        raise NotImplementedError()
+
+
+# ==================== 邮件拉取任务 ====================
+
+@celery_app.task(
+    bind=True,
+    base=AsyncTask,
+    name="app.tasks.email.poll_email_account",
+    max_retries=3,
+    default_retry_delay=60,  # 失败后 60 秒重试
+    queue="email",
+)
+async def poll_email_account(self, account_id: int):
+    """
+    拉取指定邮箱的新邮件
+
+    Args:
+        account_id: 邮箱账户 ID
+
+    Returns:
+        dict: 处理统计
+            - account_id: 账户 ID
+            - emails_found: 发现的新邮件数
+            - emails_queued: 已加入处理队列的邮件数
+            - skipped: 被跳过的邮件数（已处理或其他实例正在处理）
+
+    Raises:
+        Exception: IMAP 连接失败或其他错误（会自动重试）
+    """
+    from app.storage.email import get_active_imap_accounts, imap_fetch
+
+    logger.info(f"[Celery:PollEmail] 开始轮询邮箱: account_id={account_id}")
+
+    # 获取分布式锁
+    lock_key = f"email_worker:{account_id}:lock"
+    lock_acquired = await redis_client.set(
+        lock_key,
+        f"celery-{self.request.id}",  # 使用任务 ID 作为锁值
+        ex=300,  # 锁过期时间 5 分钟
+        nx=True,
+    )
+
+    if not lock_acquired:
+        logger.debug(f"[Celery:PollEmail] 其他实例正在处理 account_id={account_id}，跳过")
+        return {
+            "account_id": account_id,
+            "emails_found": 0,
+            "emails_queued": 0,
+            "skipped": True,
+            "reason": "locked_by_another_instance",
+        }
+
+    try:
+        # 获取账户信息
+        accounts = await get_active_imap_accounts()
+        account = next((acc for acc in accounts if acc.id == account_id), None)
+
+        if not account:
+            logger.warning(f"[Celery:PollEmail] 账户不存在或已禁用: {account_id}")
+            return {
+                "account_id": account_id,
+                "emails_found": 0,
+                "emails_queued": 0,
+                "error": "account_not_found_or_disabled",
+            }
+
+        # 获取上次检查点
+        last_check = await _get_checkpoint(account_id)
+        logger.debug(f"[Celery:PollEmail] 上次检查时间: {last_check}")
+
+        # 拉取新邮件
+        emails = await imap_fetch(
+            folder=account.imap_folder,
+            limit=50,  # 每次最多拉取 50 封
+            since=last_check,
+            unseen_only=True,
+            account_id=account_id,
+        )
+
+        if not emails:
+            logger.debug(f"[Celery:PollEmail] 没有新邮件: {account.name}")
+            await _save_checkpoint(account_id)
+            return {
+                "account_id": account_id,
+                "emails_found": 0,
+                "emails_queued": 0,
+            }
+
+        logger.info(f"[Celery:PollEmail] 发现 {len(emails)} 封新邮件: {account.name}")
+
+        # 将每封邮件作为独立任务加入队列
+        queued = 0
+        for email in emails:
+            try:
+                # 异步调用 process_email 任务
+                process_email.delay(
+                    email_data=email.to_dict(),
+                    account_id=account_id,
+                )
+                queued += 1
+            except Exception as e:
+                logger.error(f"[Celery:PollEmail] 加入队列失败: {email.message_id}, {e}")
+
+        # 更新检查点
+        await _save_checkpoint(account_id)
+
+        logger.info(f"[Celery:PollEmail] 完成轮询: {account.name}, 发现 {len(emails)} 封，已加入队列 {queued} 封")
+
+        return {
+            "account_id": account_id,
+            "emails_found": len(emails),
+            "emails_queued": queued,
+        }
+
+    except Exception as exc:
+        logger.error(f"[Celery:PollEmail] 轮询失败: account_id={account_id}, {exc}")
+        # 自动重试
+        raise self.retry(exc=exc)
+
+    finally:
+        # 释放锁
+        await redis_client.delete(lock_key)
+
+
+# ==================== 邮件处理任务 ====================
+
+@celery_app.task(
+    bind=True,
+    base=AsyncTask,
+    name="app.tasks.email.process_email",
+    max_retries=3,
+    default_retry_delay=120,  # 失败后 2 分钟重试
+    queue="email",
+)
+async def process_email(self, email_data: dict, account_id: int):
+    """
+    处理单封邮件
+
+    流程：
+    1. 持久化邮件和附件到 OSS/本地存储
+    2. 转换为 UnifiedEvent
+    3. 添加到 Redis Streams
+    4. 分发到 Dispatcher（意图分类 + 启动 Workflow）
+    5. 标记邮件已读（可选）
+
+    Args:
+        email_data: 邮件数据字典（EmailMessage.to_dict() 的结果）
+        account_id: 邮箱账户 ID
+
+    Returns:
+        dict: 处理结果
+            - message_id: 邮件 Message-ID
+            - raw_record_id: 持久化记录 ID
+            - event_id: UnifiedEvent ID
+            - workflow_id: 启动的 Workflow ID
+
+    Raises:
+        Exception: 处理失败（会自动重试）
+    """
+    from app.storage.email import EmailMessage, get_active_imap_accounts, imap_mark_as_read
+    from app.storage.email_persistence import persistence_service
+    from app.adapters.email import email_adapter
+    from app.messaging.streams import redis_streams
+    from app.messaging.dispatcher import event_dispatcher
+
+    # 反序列化邮件数据
+    email = EmailMessage.from_dict(email_data)
+
+    logger.info(
+        f"[Celery:ProcessEmail] 处理邮件: "
+        f"message_id={email.message_id[:50]}..., "
+        f"from={email.sender}, "
+        f"subject={email.subject[:30] if email.subject else ''}"
+    )
+
+    try:
+        # 1. 持久化原始邮件和附件
+        raw_record = None
+        if email.raw_bytes:
+            try:
+                raw_record = await persistence_service.persist(email, account_id)
+                logger.info(f"[Celery:ProcessEmail] 已持久化: {raw_record.id}")
+            except Exception as e:
+                logger.error(f"[Celery:ProcessEmail] 持久化失败: {e}")
+                # 持久化失败不阻断流程（可能是重复邮件）
+
+        # 2. 转换为 UnifiedEvent
+        event = await email_adapter.to_unified_event(email)
+
+        # 3. 添加元数据
+        accounts = await get_active_imap_accounts()
+        account = next((acc for acc in accounts if acc.id == account_id), None)
+
+        if account:
+            event.metadata["email_account_id"] = account_id
+            event.metadata["email_account_name"] = account.name
+
+        if raw_record:
+            event.metadata["email_raw_id"] = raw_record.id
+
+        # 4. 添加到 Redis Streams
+        stream_id = await redis_streams.add_event(event)
+        logger.debug(f"[Celery:ProcessEmail] 添加到 Stream: {stream_id}")
+
+        # 5. 分发到 Dispatcher（意图分类 + 启动 Workflow）
+        workflow_id = await event_dispatcher.dispatch(event)
+        if workflow_id:
+            logger.info(f"[Celery:ProcessEmail] 启动 Workflow: {workflow_id}")
+
+        # 6. 更新持久化记录状态
+        if raw_record:
+            try:
+                await persistence_service.mark_processed(raw_record.id, event.event_id)
+            except Exception as e:
+                logger.warning(f"[Celery:ProcessEmail] 更新持久化状态失败: {e}")
+
+        # 7. 标记邮件为已读（根据账户配置）
+        if account and account.imap_mark_as_read:
+            await imap_mark_as_read(
+                email.message_id,
+                folder=account.imap_folder,
+                account_id=account_id,
+            )
+
+        logger.info(f"[Celery:ProcessEmail] 处理完成: {email.message_id[:50]}...")
+
+        return {
+            "message_id": email.message_id,
+            "raw_record_id": raw_record.id if raw_record else None,
+            "event_id": event.event_id,
+            "workflow_id": workflow_id,
+            "status": "success",
+        }
+
+    except Exception as exc:
+        logger.error(f"[Celery:ProcessEmail] 处理失败: {email.message_id}, {exc}")
+        # 自动重试
+        raise self.retry(exc=exc)
+
+
+# ==================== 辅助函数 ====================
+
+async def _get_checkpoint(account_id: int) -> Optional[datetime]:
+    """获取邮箱的上次检查时间"""
+    checkpoint_key = f"email_worker:{account_id}:last_check"
+    timestamp = await redis_client.get(checkpoint_key)
+
+    if timestamp:
+        try:
+            return datetime.fromisoformat(timestamp)
+        except ValueError:
+            pass
+
+    # 默认返回 1 天前
+    return datetime.now() - timedelta(days=1)
+
+
+async def _save_checkpoint(account_id: int) -> None:
+    """保存邮箱的检查时间"""
+    checkpoint_key = f"email_worker:{account_id}:last_check"
+    timestamp = datetime.now().isoformat()
+    await redis_client.set(checkpoint_key, timestamp, ex=86400 * 7)  # 保存 7 天

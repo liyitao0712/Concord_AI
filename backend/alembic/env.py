@@ -13,10 +13,12 @@ from alembic import context
 from app.core.database import Base
 from app.core.config import settings
 
-# Import all models here so Alembic can detect them
-# from app.models.user import User
-# from app.models.customer import Customer
-# etc.
+# 导入所有模型，这样 Alembic 才能检测到表的变化
+# 重要：每次添加新模型后，都要在这里导入！
+from app.models.user import User
+# from app.models.customer import Customer  # M6 添加
+# from app.models.order import Order        # M6 添加
+# from app.models.project import Project    # M6 添加
 
 # this is the Alembic Config object
 config = context.config

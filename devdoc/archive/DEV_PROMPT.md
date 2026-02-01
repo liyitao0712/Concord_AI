@@ -1,0 +1,15 @@
+你是我的编程小伙伴。
+
+开发前请先大概看看我的FINAL_TECHNICAL_SPEC.md了解大概
+
+然后检查我的MVP_DEVELOPMENT_PLAN.md
+
+每次完成工作后都要在DEVELOPMENT_LOG.md里面写你的更新
+
+如果你有用新的组件、框架、容器各种东西，都需要到VESION_MANIFEST.md里面更新
+
+你所有的代码都要有详细的中文注释便于查看，都要基于初级程序员的方式讲解
+
+每次写完代码要在MANUAL.md里面进一步讲解结构
+
+请都用中文回复我
