@@ -275,7 +275,9 @@ async def get_llm_config(
     db_volcengine_key = await get_setting(db, "llm.volcengine_api_key")
 
     # 优先使用数据库设置，否则使用环境变量
-    default_model = db_model or app_settings.DEFAULT_LLM_MODEL
+    # 注意：默认模型现在从 llm_model_config 表加载，已在启动时设置到环境变量
+    import os
+    default_model = db_model or os.environ.get("DEFAULT_LLM_MODEL") or "未配置"
     anthropic_key = db_anthropic_key or app_settings.ANTHROPIC_API_KEY
     openai_key = db_openai_key or app_settings.OPENAI_API_KEY
     volcengine_key = db_volcengine_key or getattr(app_settings, 'VOLCENGINE_API_KEY', '')
@@ -408,7 +410,8 @@ async def test_llm_connection(
     db_volcengine_key = await get_setting(db, "llm.volcengine_api_key")
 
     # 确定要测试的模型
-    test_model = (request.model_id if request and request.model_id else None) or db_model or app_settings.DEFAULT_LLM_MODEL
+    import os
+    test_model = (request.model_id if request and request.model_id else None) or db_model or os.environ.get("DEFAULT_LLM_MODEL")
 
     anthropic_key = db_anthropic_key or app_settings.ANTHROPIC_API_KEY
     openai_key = db_openai_key or app_settings.OPENAI_API_KEY
@@ -944,19 +947,40 @@ async def test_oss_connection(
         }
 
     except oss2.exceptions.AccessDenied as e:
-        logger.error(f"[Settings] OSS 访问被拒绝: {e}")
+        error_details = {
+            "status": getattr(e, 'status', None),
+            "request_id": getattr(e, 'request_id', None),
+            "code": getattr(e, 'code', None),
+            "message": getattr(e, 'message', None),
+            "details": str(e),
+        }
+        logger.error(f"[Settings] OSS 访问被拒绝: {error_details}")
+
+        # 根据错误代码提供更具体的提示
+        error_message = "访问被拒绝，请检查 Access Key 权限"
+        if hasattr(e, 'code'):
+            if e.code == 'InvalidAccessKeyId':
+                error_message = "Access Key ID 无效，请检查是否正确"
+            elif e.code == 'SignatureDoesNotMatch':
+                error_message = "Access Key Secret 错误，请检查密钥"
+            elif e.code == 'AccessDenied':
+                error_message = f"权限不足。该 Access Key 没有访问 Bucket '{bucket}' 的权限，请在 RAM 控制台添加 oss:GetObject 和 oss:ListObjects 权限"
+
         return {
             "success": False,
-            "error": "访问被拒绝，请检查 Access Key 权限",
+            "error": error_message,
+            "details": error_details,
         }
     except oss2.exceptions.NoSuchBucket as e:
         logger.error(f"[Settings] OSS Bucket 不存在: {e}")
         return {
             "success": False,
-            "error": f"Bucket '{bucket}' 不存在",
+            "error": f"Bucket '{bucket}' 不存在，请先在 OSS 控制台创建",
         }
     except Exception as e:
-        logger.error(f"[Settings] OSS 连接测试失败: {e}")
+        logger.error(f"[Settings] OSS 连接测试失败: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"[Settings] 错误堆栈: {traceback.format_exc()}")
         return {
             "success": False,
             "error": str(e),

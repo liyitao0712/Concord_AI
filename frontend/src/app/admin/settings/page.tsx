@@ -70,6 +70,7 @@ function OSSConfigTab() {
   const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [testResult, setTestResult] = useState<OSSTestResult | null>(null);
+  const [isEditing, setIsEditing] = useState(false);  // 编辑模式
 
   // 表单状态
   const [formData, setFormData] = useState<OSSConfigUpdate>({
@@ -95,6 +96,10 @@ function OSSConfigTab() {
         access_key_id: '',  // 密钥不回填
         access_key_secret: '',
       });
+      // 如果未配置，自动进入编辑模式
+      if (!data.configured) {
+        setIsEditing(true);
+      }
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || '加载配置失败' });
     } finally {
@@ -108,16 +113,33 @@ function OSSConfigTab() {
     try {
       // 只提交非空字段
       const updateData: OSSConfigUpdate = {};
-      if (formData.endpoint) updateData.endpoint = formData.endpoint;
-      if (formData.bucket) updateData.bucket = formData.bucket;
-      if (formData.access_key_id) updateData.access_key_id = formData.access_key_id;
-      if (formData.access_key_secret) updateData.access_key_secret = formData.access_key_secret;
+
+      // 清理 endpoint：移除 https:// 前缀，去除重复域名
+      if (formData.endpoint) {
+        let cleanedEndpoint = formData.endpoint
+          .replace(/^https?:\/\//, '')  // 移除 http:// 或 https://
+          .trim();
+
+        // 检测并修复重复的域名（如 oss-cn-hangzhou.aliyuncs.comoss-cn-guangzhou.aliyuncs.com）
+        const domainPattern = /^([a-z0-9-]+\.aliyuncs\.com)/;
+        const match = cleanedEndpoint.match(domainPattern);
+        if (match) {
+          cleanedEndpoint = match[1];
+        }
+
+        updateData.endpoint = cleanedEndpoint;
+      }
+
+      if (formData.bucket) updateData.bucket = formData.bucket.trim();
+      if (formData.access_key_id) updateData.access_key_id = formData.access_key_id.trim();
+      if (formData.access_key_secret) updateData.access_key_secret = formData.access_key_secret.trim();
 
       await ossApi.updateConfig(updateData);
       setMessage({ type: 'success', text: '配置已保存' });
       // 清空密钥输入
       setFormData(prev => ({ ...prev, access_key_id: '', access_key_secret: '' }));
       await loadConfig();
+      setIsEditing(false);  // 保存后退出编辑模式
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || '保存失败' });
     } finally {
@@ -131,10 +153,23 @@ function OSSConfigTab() {
     try {
       const result = await ossApi.testConnection();
       setTestResult(result);
+
+      // 如果测试失败，同时在消息区域显示错误（方便用户看到详细信息）
+      if (!result.success) {
+        setMessage({
+          type: 'error',
+          text: `连接失败: ${result.error}`,
+        });
+      }
     } catch (error: any) {
+      const errorMessage = error.message || '测试失败';
       setTestResult({
         success: false,
-        error: error.message || '测试失败',
+        error: errorMessage,
+      });
+      setMessage({
+        type: 'error',
+        text: errorMessage,
       });
     } finally {
       setTesting(false);
@@ -171,23 +206,42 @@ function OSSConfigTab() {
       {/* 配置状态 */}
       <div className="bg-white shadow rounded-lg p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-medium text-gray-900">当前状态</h2>
-          {config?.configured ? (
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-              ✓ 已配置
-            </span>
-          ) : (
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
-              ⚠ 未配置
-            </span>
-          )}
+          <h2 className="text-lg font-medium text-gray-900">配置信息</h2>
+          <div className="flex items-center space-x-3">
+            {config?.configured ? (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                ✓ 已配置
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
+                ⚠ 未配置
+              </span>
+            )}
+            {config?.configured && !isEditing && (
+              <>
+                <button
+                  onClick={handleTest}
+                  disabled={testing}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {testing ? '测试中...' : '测试连接'}
+                </button>
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
+                >
+                  编辑配置
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
-        {config?.configured && (
+        {config?.configured && !isEditing && (
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-gray-500">Endpoint:</span>
-              <span className="ml-2 text-gray-900">{config.endpoint}</span>
+              <span className="ml-2 text-gray-900 font-mono">{config.endpoint}</span>
             </div>
             <div>
               <span className="text-gray-500">Bucket:</span>
@@ -203,44 +257,46 @@ function OSSConfigTab() {
             </div>
           </div>
         )}
-      </div>
 
-      {/* 配置表单 */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">
-          {config?.configured ? '修改配置' : '新增配置'}
-        </h2>
-        <p className="text-sm text-gray-500 mb-6">
-          {config?.configured
-            ? '只需填写要修改的字段，留空的字段保持不变'
-            : '请填写阿里云 OSS 配置信息'}
-        </p>
-
-        <div className="grid grid-cols-2 gap-6">
+        {(!config?.configured || isEditing) && (
           <div>
+            <p className="text-sm text-gray-500 mb-6">
+              {config?.configured
+                ? '只需填写要修改的字段，留空的字段保持不变'
+                : '请填写阿里云 OSS 配置信息'}
+            </p>
+            <div className="grid grid-cols-2 gap-6">
+              <div>
             <label className="block text-sm font-medium text-gray-700">
-              Endpoint {!config?.configured && '*'}
+              Endpoint（区域节点） {!config?.configured && '*'}
             </label>
             <input
               type="text"
               value={formData.endpoint}
               onChange={(e) => setFormData({ ...formData, endpoint: e.target.value })}
-              placeholder="oss-cn-hangzhou.aliyuncs.com"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              placeholder="oss-cn-guangzhou.aliyuncs.com"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm font-mono text-xs"
             />
-            <p className="mt-1 text-xs text-gray-400">不需要包含 https:// 前缀</p>
+            <p className="mt-1 text-xs text-gray-500">
+              ⚠️ 只填写区域节点，<strong>不要</strong>包含 Bucket 名称<br/>
+              <span className="text-green-600">✓ 正确：oss-cn-guangzhou.aliyuncs.com</span><br/>
+              <span className="text-red-600">✗ 错误：concordai.oss-cn-guangzhou.aliyuncs.com</span>
+            </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              Bucket {!config?.configured && '*'}
+              Bucket（存储桶名称） {!config?.configured && '*'}
             </label>
             <input
               type="text"
               value={formData.bucket}
               onChange={(e) => setFormData({ ...formData, bucket: e.target.value })}
-              placeholder="your-bucket-name"
+              placeholder="concordai"
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
             />
+            <p className="mt-1 text-xs text-gray-500">
+              只填写 Bucket 名称，不要包含域名后缀
+            </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">
@@ -268,24 +324,36 @@ function OSSConfigTab() {
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
             />
           </div>
-        </div>
+            </div>
 
-        <div className="mt-6 flex items-center space-x-4">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? '保存中...' : '保存配置'}
-          </button>
-          <button
-            onClick={handleTest}
-            disabled={testing || !config?.configured}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-          >
-            {testing ? '测试中...' : '测试连接'}
-          </button>
-        </div>
+            <div className="mt-6 flex items-center space-x-4">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? '保存中...' : '保存配置'}
+              </button>
+              {config?.configured && (
+                <button
+                  onClick={() => {
+                    setIsEditing(false);
+                    // 重置表单
+                    setFormData({
+                      endpoint: config.endpoint || '',
+                      bucket: config.bucket || '',
+                      access_key_id: '',
+                      access_key_secret: '',
+                    });
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  取消
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 测试结果 */}
@@ -479,6 +547,35 @@ function EmailAccountsTab() {
     }
   };
 
+  // 立即拉取邮件
+  const [fetching, setFetching] = useState(false);
+  const handleFetchEmails = async (account: EmailAccount) => {
+    if (!account.imap_configured) {
+      setMessage({ type: 'error', text: '该邮箱未配置 IMAP，无法拉取邮件' });
+      return;
+    }
+
+    const confirmFetch = confirm(
+      `确定要立即拉取「${account.name}」的邮件吗？\n\n这将从邮箱服务器拉取最多 50 封邮件并保存到数据库。`
+    );
+
+    if (!confirmFetch) return;
+
+    setFetching(true);
+    setMessage(null);
+    try {
+      const result = await emailAccountsApi.fetch(account.id, 50);
+      setMessage({
+        type: 'success',
+        text: `✅ 拉取完成！发现 ${result.emails_found} 封邮件，成功保存 ${result.emails_saved} 封（耗时 ${result.duration_seconds}秒）`,
+      });
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || '拉取失败' });
+    } finally {
+      setFetching(false);
+    }
+  };
+
   // 获取用途标签
   const getPurposeLabel = (purpose: string) => {
     const option = PURPOSE_OPTIONS.find(o => o.value === purpose);
@@ -611,6 +708,16 @@ function EmailAccountsTab() {
                     >
                       测试
                     </button>
+                    {account.imap_configured && (
+                      <button
+                        onClick={() => handleFetchEmails(account)}
+                        disabled={fetching}
+                        className="text-purple-600 hover:text-purple-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="立即从邮箱服务器拉取邮件"
+                      >
+                        {fetching ? '拉取中...' : '📥 拉取'}
+                      </button>
+                    )}
                     <button
                       onClick={() => handleEdit(account)}
                       className="text-blue-600 hover:text-blue-900"

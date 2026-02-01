@@ -127,10 +127,9 @@ mkdir -p logs
 if [ "$RUN_MODE" = "celery" ]; then
     echo ""
     echo "重启 Celery 服务..."
-    docker compose restart celery-beat celery-worker
-    echo "  Celery 已重启"
+    ./scripts/celery.sh restart
     echo ""
-    echo "查看日志: ./scripts/logs.sh celery"
+    echo "查看日志: ./scripts/celery.sh logs"
     exit 0
 fi
 

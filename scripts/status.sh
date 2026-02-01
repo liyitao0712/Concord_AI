@@ -71,24 +71,29 @@ else
     echo "  Temporal UI:    [未运行]"
 fi
 
+# 检查 Celery 服务（本地运行）
+CELERY_STATUS=$(./scripts/celery.sh status 2>&1)
+
 # 检查 Celery Beat
-if docker compose ps celery-beat 2>/dev/null | grep -q "Up"; then
-    echo "  Celery Beat:    [运行中] (定时调度器)"
+if echo "$CELERY_STATUS" | grep -q "Celery Beat:.*运行中"; then
+    BEAT_PID=$(echo "$CELERY_STATUS" | grep "Celery Beat" | grep -o "PID: [0-9]*" | cut -d' ' -f2)
+    echo "  Celery Beat:    [运行中] (PID: $BEAT_PID)"
 else
-    echo "  Celery Beat:    [未运行]"
+    echo "  Celery Beat:    [未运行] (定时调度器)"
 fi
 
 # 检查 Celery Worker
-CELERY_WORKERS=$(docker compose ps celery-worker 2>/dev/null | grep "Up" | wc -l | tr -d ' ')
-if [ "$CELERY_WORKERS" -gt 0 ]; then
-    echo "  Celery Worker:  [运行中] ($CELERY_WORKERS 个实例)"
+if echo "$CELERY_STATUS" | grep -q "Celery Worker:.*运行中"; then
+    WORKER_PID=$(echo "$CELERY_STATUS" | grep "Celery Worker" | grep -o "PID: [0-9]*" | cut -d' ' -f2)
+    echo "  Celery Worker:  [运行中] (PID: $WORKER_PID)"
 else
-    echo "  Celery Worker:  [未运行]"
+    echo "  Celery Worker:  [未运行] (任务执行器)"
 fi
 
 # 检查 Flower（可选）
-if docker compose ps flower 2>/dev/null | grep -q "Up"; then
-    echo "  Flower:         [运行中] http://localhost:5555"
+if echo "$CELERY_STATUS" | grep -q "Flower:.*运行中"; then
+    FLOWER_PID=$(echo "$CELERY_STATUS" | grep "Flower" | grep -o "PID: [0-9]*" | cut -d' ' -f2)
+    echo "  Flower:         [运行中] http://localhost:5555 (PID: $FLOWER_PID)"
 elif curl -s http://localhost:5555 > /dev/null 2>&1; then
     echo "  Flower:         [运行中] http://localhost:5555"
 else

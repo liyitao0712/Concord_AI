@@ -36,10 +36,16 @@ def get_default_model() -> str:
     获取默认 LLM 模型
 
     优先级：
-    1. 环境变量 DEFAULT_LLM_MODEL（由 Worker 从数据库加载后设置）
-    2. config.py 中的默认值
+    1. 环境变量 DEFAULT_LLM_MODEL（由应用启动时从数据库加载）
+    2. 如果未设置，抛出错误提示用户配置模型
     """
-    return os.environ.get("DEFAULT_LLM_MODEL") or settings.DEFAULT_LLM_MODEL
+    model = os.environ.get("DEFAULT_LLM_MODEL")
+    if not model:
+        raise ValueError(
+            "未找到可用的 LLM 模型配置。"
+            "请在管理员后台的 LLM 配置页面添加至少一个模型配置并设置 API Key。"
+        )
+    return model
 
 # 配置 LiteLLM
 litellm.set_verbose = False  # 生产环境关闭详细日志
@@ -121,6 +127,43 @@ class LLMGateway:
             return self.default_model
         return self.MODEL_ALIASES.get(model, model)
 
+    def _check_api_key(self, model: str) -> None:
+        """
+        检查模型对应的 API Key 是否已配置
+
+        Args:
+            model: 模型名称
+
+        Raises:
+            ValueError: 如果 API Key 未配置
+        """
+        # 检查各个提供商的 API Key
+        if model.startswith("anthropic/") or model.startswith("claude"):
+            if not os.environ.get("ANTHROPIC_API_KEY"):
+                raise ValueError(
+                    "Anthropic API Key 未配置。请在管理员后台的 LLM 配置页面添加模型配置并设置 API Key。"
+                )
+        elif model.startswith("openai/") or model.startswith("gpt"):
+            if not os.environ.get("OPENAI_API_KEY"):
+                raise ValueError(
+                    "OpenAI API Key 未配置。请在管理员后台的 LLM 配置页面添加模型配置并设置 API Key。"
+                )
+        elif model.startswith("gemini/"):
+            if not os.environ.get("GEMINI_API_KEY"):
+                raise ValueError(
+                    "Gemini API Key 未配置。请在管理员后台的 LLM 配置页面添加模型配置并设置 API Key。"
+                )
+        elif model.startswith("dashscope/") or model.startswith("qwen"):
+            if not os.environ.get("DASHSCOPE_API_KEY"):
+                raise ValueError(
+                    "通义千问 API Key 未配置。请在管理员后台的 LLM 配置页面添加模型配置并设置 API Key。"
+                )
+        elif model.startswith("volcengine/"):
+            if not os.environ.get("VOLCENGINE_API_KEY"):
+                raise ValueError(
+                    "火山引擎 API Key 未配置。请在管理员后台的 LLM 配置页面添加模型配置并设置 API Key。"
+                )
+
     async def chat(
         self,
         message: str,
@@ -150,6 +193,9 @@ class LLMGateway:
             LLMResponse: 响应对象
         """
         model = self._resolve_model(model)
+
+        # 检查 API Key 是否已配置
+        self._check_api_key(model)
 
         # 构建消息列表
         messages = []

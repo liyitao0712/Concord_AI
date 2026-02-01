@@ -221,11 +221,12 @@ async def run_agent(
 
         # 保存失败记录
         try:
-            # 尝试获取实际使用的模型，失败则使用默认值
+            # 尝试获取实际使用的模型，失败则使用 unknown
             try:
                 model_used = agent._get_model()
             except:
-                model_used = app_settings.DEFAULT_LLM_MODEL
+                import os
+                model_used = os.environ.get("DEFAULT_LLM_MODEL") or "unknown"
 
             execution = AgentExecution(
                 agent_name=agent_name,

@@ -61,13 +61,36 @@ case "$SERVICE" in
             echo "logs 目录不存在"
         fi
         ;;
-    "celery-beat"|"celery-worker"|"flower")
-        echo "查看 $SERVICE 日志 (按 Ctrl+C 退出)..."
-        docker compose logs -f "$SERVICE"
+    "celery-beat")
+        echo "查看 Celery Beat 日志 (按 Ctrl+C 退出)..."
+        if [ -f "logs/celery-beat.log" ]; then
+            tail -f logs/celery-beat.log
+        else
+            echo "日志文件不存在: logs/celery-beat.log"
+            echo "请先启动 Celery: ./scripts/celery.sh start"
+        fi
+        ;;
+    "celery-worker")
+        echo "查看 Celery Worker 日志 (按 Ctrl+C 退出)..."
+        if [ -f "logs/celery-worker.log" ]; then
+            tail -f logs/celery-worker.log
+        else
+            echo "日志文件不存在: logs/celery-worker.log"
+            echo "请先启动 Celery: ./scripts/celery.sh start"
+        fi
+        ;;
+    "flower")
+        echo "查看 Flower 日志 (按 Ctrl+C 退出)..."
+        if [ -f "logs/celery-flower.log" ]; then
+            tail -f logs/celery-flower.log
+        else
+            echo "日志文件不存在: logs/celery-flower.log"
+            echo "请先启动 Flower: ./scripts/celery.sh flower"
+        fi
         ;;
     "celery")
         echo "查看所有 Celery 服务日志 (按 Ctrl+C 退出)..."
-        docker compose logs -f celery-beat celery-worker
+        ./scripts/celery.sh logs
         ;;
     "postgres"|"redis"|"temporal"|"temporal-ui")
         echo "查看 $SERVICE 日志 (按 Ctrl+C 退出)..."
@@ -86,6 +109,8 @@ case "$SERVICE" in
         echo "    redis         - Redis 缓存"
         echo "    temporal      - Temporal Server"
         echo "    temporal-ui   - Temporal Web UI"
+        echo ""
+        echo "  Celery 服务（本地）："
         echo "    celery-beat   - Celery Beat 定时调度器"
         echo "    celery-worker - Celery Worker 任务执行器"
         echo "    flower        - Celery 监控面板"

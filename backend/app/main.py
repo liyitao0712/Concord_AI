@@ -63,28 +63,59 @@ async def load_llm_settings_from_db():
 
     try:
         async with async_session_maker() as session:
-            result = await session.execute(
-                text("SELECT key, value FROM system_settings WHERE category = 'llm'")
-            )
-            rows = result.fetchall()
+            # 从 llm_model_config 表加载已配置且启用的模型
+            from app.models import LLMModelConfig
+            from sqlalchemy import select
 
-            for row in rows:
-                key, value = row[0], row[1]
-                if not value:
-                    continue
+            query = select(LLMModelConfig).where(
+                LLMModelConfig.is_enabled == True,
+                LLMModelConfig.is_configured == True
+            ).order_by(LLMModelConfig.created_at)
 
-                if key == "llm.anthropic_api_key":
-                    os.environ["ANTHROPIC_API_KEY"] = value
-                    logger.info("已从数据库加载 ANTHROPIC_API_KEY")
-                elif key == "llm.openai_api_key":
-                    os.environ["OPENAI_API_KEY"] = value
-                    logger.info("已从数据库加载 OPENAI_API_KEY")
-                elif key == "llm.default_model":
-                    os.environ["DEFAULT_LLM_MODEL"] = value
-                    logger.info(f"已从数据库加载 DEFAULT_LLM_MODEL: {value}")
+            result = await session.execute(query)
+            models = result.scalars().all()
+
+            if models:
+                # 使用第一个已配置的模型作为默认模型
+                default_model = models[0]
+                os.environ["DEFAULT_LLM_MODEL"] = default_model.model_id
+                logger.info(f"已设置默认模型: {default_model.model_id} ({default_model.model_name})")
+
+                # 加载所有模型的 API Key 到环境变量
+                api_keys_loaded = set()
+                for model in models:
+                    if model.api_key:
+                        # 根据提供商设置对应的环境变量
+                        if model.provider == "anthropic" and "ANTHROPIC_API_KEY" not in api_keys_loaded:
+                            os.environ["ANTHROPIC_API_KEY"] = model.api_key
+                            logger.info(f"已加载 Anthropic API Key (来自模型: {model.model_name})")
+                            api_keys_loaded.add("ANTHROPIC_API_KEY")
+                        elif model.provider == "openai" and "OPENAI_API_KEY" not in api_keys_loaded:
+                            os.environ["OPENAI_API_KEY"] = model.api_key
+                            logger.info(f"已加载 OpenAI API Key (来自模型: {model.model_name})")
+                            api_keys_loaded.add("OPENAI_API_KEY")
+                        elif model.provider == "gemini" and "GEMINI_API_KEY" not in api_keys_loaded:
+                            os.environ["GEMINI_API_KEY"] = model.api_key
+                            logger.info(f"已加载 Gemini API Key (来自模型: {model.model_name})")
+                            api_keys_loaded.add("GEMINI_API_KEY")
+                        elif model.provider == "qwen" and "DASHSCOPE_API_KEY" not in api_keys_loaded:
+                            os.environ["DASHSCOPE_API_KEY"] = model.api_key
+                            logger.info(f"已加载 DashScope API Key (来自模型: {model.model_name})")
+                            api_keys_loaded.add("DASHSCOPE_API_KEY")
+                        elif model.provider == "volcengine" and "VOLCENGINE_API_KEY" not in api_keys_loaded:
+                            os.environ["VOLCENGINE_API_KEY"] = model.api_key
+                            logger.info(f"已加载 VolcEngine API Key (来自模型: {model.model_name})")
+                            api_keys_loaded.add("VOLCENGINE_API_KEY")
+
+                logger.info(f"共加载 {len(models)} 个 LLM 模型配置")
+            else:
+                logger.warning(
+                    "数据库中没有已配置的 LLM 模型！"
+                    "请在管理员后台的 LLM 配置页面添加模型并设置 API Key。"
+                )
 
     except Exception as e:
-        logger.warning(f"从数据库加载 LLM 设置失败: {e}")
+        logger.warning(f"从数据库加载 LLM 模型配置失败: {e}")
 
 
 @asynccontextmanager
@@ -199,6 +230,60 @@ app.add_middleware(
 # 请求日志中间件
 # 记录每个请求的方法、路径、耗时、状态码
 app.add_middleware(RequestLoggingMiddleware)
+
+
+# ==================== 全局异常处理 ====================
+
+from fastapi import Request, status
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """处理 HTTP 异常，确保包含 CORS 头"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """处理请求验证错误"""
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": exc.errors()},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """处理未捕获的异常"""
+    logger.error(f"未处理的异常: {type(exc).__name__}: {str(exc)}")
+    import traceback
+    traceback.print_exc()
+
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": f"服务器内部错误: {str(exc)}"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
 
 
 # ==================== 注册路由 ====================

@@ -355,3 +355,123 @@ async def test_email_account(
             logger.warning(f"[EmailAccounts] IMAP 测试失败: id={account_id}, error={e}")
 
     return response
+
+
+@router.post("/{account_id}/fetch")
+async def fetch_emails_now(
+    account_id: int,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    """
+    立即拉取该邮箱的新邮件
+
+    不等待定时任务，立即触发一次邮件拉取并保存到数据库。
+    适用于：
+    - 新增邮箱后立即拉取历史邮件
+    - 手动同步邮件
+    - 测试邮件拉取功能
+
+    Args:
+        account_id: 邮箱账户 ID
+        limit: 最多拉取邮件数（默认 50）
+
+    Returns:
+        dict: 拉取结果
+            - account_id: 账户 ID
+            - emails_found: 发现的新邮件数
+            - emails_saved: 保存到数据库的邮件数
+            - duration_seconds: 拉取耗时（秒）
+    """
+    from app.storage.email import imap_fetch
+    from app.storage.email_persistence import persistence_service
+    from datetime import datetime
+    import time
+
+    # 验证账户存在
+    stmt = select(EmailAccount).where(EmailAccount.id == account_id)
+    result = await db.execute(stmt)
+    account = result.scalar_one_or_none()
+
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="邮箱账户不存在",
+        )
+
+    if not account.imap_configured:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该邮箱未配置 IMAP，无法拉取邮件",
+        )
+
+    if not account.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该邮箱已禁用，请先启用",
+        )
+
+    logger.info(f"[EmailAccounts] 手动拉取邮件: account_id={account_id}, limit={limit}")
+
+    start_time = time.time()
+
+    try:
+        # 拉取邮件（获取所有新邮件，不限制时间）
+        emails = await imap_fetch(
+            folder=account.imap_folder if account.imap_folder else "INBOX",
+            limit=limit,
+            since=None,  # 不限制时间，拉取所有
+            unseen_only=False,  # 拉取所有邮件（包括已读）
+            account_id=account_id,
+        )
+
+        if not emails:
+            logger.info(f"[EmailAccounts] 没有发现新邮件: account_id={account_id}")
+            return {
+                "account_id": account_id,
+                "emails_found": 0,
+                "emails_saved": 0,
+                "duration_seconds": round(time.time() - start_time, 2),
+            }
+
+        logger.info(f"[EmailAccounts] 发现 {len(emails)} 封邮件，开始保存...")
+
+        # 保存邮件到数据库
+        saved_count = 0
+        for email_msg in emails:
+            try:
+                # 使用持久化服务保存邮件
+                await persistence_service.save_email(
+                    email_message=email_msg,
+                    account_id=account_id,
+                )
+                saved_count += 1
+            except Exception as e:
+                # 记录错误但继续处理其他邮件
+                logger.warning(
+                    f"[EmailAccounts] 保存邮件失败: message_id={email_msg.message_id}, "
+                    f"error={e}"
+                )
+
+        duration = time.time() - start_time
+
+        logger.info(
+            f"[EmailAccounts] 邮件拉取完成: account_id={account_id}, "
+            f"found={len(emails)}, saved={saved_count}, "
+            f"duration={duration:.2f}s"
+        )
+
+        return {
+            "account_id": account_id,
+            "emails_found": len(emails),
+            "emails_saved": saved_count,
+            "duration_seconds": round(duration, 2),
+        }
+
+    except Exception as e:
+        logger.error(f"[EmailAccounts] 邮件拉取失败: account_id={account_id}, error={e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"邮件拉取失败: {str(e)}",
+        )

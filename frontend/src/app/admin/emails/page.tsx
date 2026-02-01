@@ -264,7 +264,24 @@ export default function EmailsPage() {
       const result = await emailsApi.aiAnalyze(emailId, force);
       setAiAnalysisResult(result);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'AI 分析失败');
+      const errorMessage = e instanceof Error ? e.message : 'AI 分析失败';
+
+      // 检查是否是 LLM 配置相关的错误
+      if (
+        errorMessage.includes('LLM 模型未配置') ||
+        errorMessage.includes('API Key 未配置') ||
+        errorMessage.includes('未找到可用的 LLM 模型配置')
+      ) {
+        const confirmGoToConfig = confirm(
+          `❌ ${errorMessage}\n\n点击「确定」前往 LLM 配置页面添加模型配置。`
+        );
+        if (confirmGoToConfig) {
+          window.location.href = '/admin/llm';
+        }
+      } else {
+        alert(`❌ ${errorMessage}`);
+      }
+
       setShowAiAnalysisModal(false);
     }
 

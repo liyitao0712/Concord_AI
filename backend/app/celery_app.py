@@ -21,6 +21,9 @@ from celery.schedules import crontab
 from kombu import Queue, Exchange
 
 from app.core.config import settings
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 # ==================== 创建 Celery 应用 ====================
 
@@ -96,6 +99,28 @@ def setup_periodic_tasks(sender, **kwargs):
     注意：邮件轮询任务是动态添加的，由 EmailWorkerService 管理
     这里只设置系统级别的定时任务
     """
+    # 同步邮件轮询任务
+    from app.services.email_worker_service import email_worker_service
+    import asyncio
+
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    # 同步邮件任务
+    stats = loop.run_until_complete(email_worker_service.sync_email_tasks())
+    logger.info(f"[Celery] 邮件任务同步完成: {stats}")
+
+    # 添加定期同步任务（每 5 分钟）
+    sender.add_periodic_task(
+        300.0,  # 每 5 分钟
+        sync_email_tasks_periodic.s(),
+        name="sync-email-tasks-periodic",
+    )
+    logger.info("[Celery] 已添加定期邮件任务同步 (每 5 分钟)")
+
     # 示例：每天凌晨 2 点清理过期数据
     sender.add_periodic_task(
         crontab(hour=2, minute=0),
@@ -122,3 +147,126 @@ def cleanup_expired_data():
 def health_check():
     """健康检查任务"""
     return {"status": "healthy", "message": "Celery is running"}
+
+
+@celery_app.task
+def sync_email_tasks_periodic():
+    """定期同步邮件任务"""
+    from app.services.email_worker_service import email_worker_service
+    import asyncio
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    try:
+        stats = loop.run_until_complete(email_worker_service.sync_email_tasks())
+        logger.info(f"[Celery] 定期邮件任务同步完成: {stats}")
+        return {"status": "success", "stats": stats}
+    finally:
+        loop.close()
+
+
+# ==================== Worker 生命周期钩子 ====================
+
+from celery.signals import worker_process_init, worker_process_shutdown
+import redis.asyncio as redis_async
+
+# 进程级全局变量（每个 Worker 子进程独立）
+_process_db_engine = None
+_process_redis_client = None
+_process_event_loop = None
+
+
+@worker_process_init.connect
+def init_worker_process(**kwargs):
+    """Worker 子进程初始化钩子"""
+    global _process_db_engine, _process_redis_client, _process_event_loop
+
+    from app.core.config import settings
+    from app.core.logging import get_logger
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from app.core import database
+    import os
+    import asyncio
+
+    logger = get_logger(__name__)
+    logger.info(f"[Celery Worker] 初始化子进程: PID={os.getpid()}")
+
+    # 创建并设置持久的 event loop（所有任务共享）
+    _process_event_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(_process_event_loop)
+    logger.info(f"[Celery Worker] 创建持久 event loop")
+
+    # 为子进程创建独立的数据库引擎
+    _process_db_engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=False,
+        pool_size=5,
+        max_overflow=10,
+        pool_timeout=30,
+        pool_recycle=3600,
+        pool_pre_ping=True,
+    )
+
+    # 替换全局 engine 和 session_maker
+    database.engine = _process_db_engine
+    database.async_session_maker = async_sessionmaker(
+        _process_db_engine,
+        class_=database.AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+
+    logger.info(f"[Celery Worker] 数据库连接池已初始化: pool_size=5, max_overflow=10")
+
+    # 为子进程创建独立的 Redis 连接
+    _process_redis_client = redis_async.from_url(
+        settings.REDIS_URL,
+        encoding="utf-8",
+        decode_responses=True,
+    )
+
+    logger.info(f"[Celery Worker] Redis 连接已创建")
+
+
+@worker_process_shutdown.connect
+def shutdown_worker_process(**kwargs):
+    """Worker 子进程关闭钩子"""
+    global _process_db_engine, _process_redis_client, _process_event_loop
+
+    import os
+    from app.core.logging import get_logger
+
+    logger = get_logger(__name__)
+    logger.info(f"[Celery Worker] 关闭子进程: PID={os.getpid()}")
+
+    if _process_event_loop:
+        try:
+            if _process_db_engine:
+                _process_event_loop.run_until_complete(_process_db_engine.dispose())
+                logger.info("[Celery Worker] 数据库连接池已关闭")
+
+            if _process_redis_client:
+                _process_event_loop.run_until_complete(_process_redis_client.close())
+                logger.info("[Celery Worker] Redis 连接已关闭")
+        finally:
+            _process_event_loop.close()
+            logger.info("[Celery Worker] Event loop 已关闭")
+
+    _process_db_engine = None
+    _process_redis_client = None
+    _process_event_loop = None
+
+
+def get_worker_redis_client() -> redis_async.Redis:
+    """获取 Worker 子进程的 Redis 客户端"""
+    global _process_redis_client
+
+    if _process_redis_client is None:
+        raise RuntimeError(
+            "Worker Redis client not initialized. "
+            "This function can only be called within Celery tasks."
+        )
+
+    return _process_redis_client

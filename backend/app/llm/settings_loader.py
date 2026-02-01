@@ -27,9 +27,18 @@ async def load_llm_settings(db: AsyncSession) -> dict:
         }
     """
     from app.models.settings import SystemSetting
+    from app.models import LLMModelConfig
+
+    # 从 llm_model_config 表获取第一个已配置的模型作为默认模型
+    model_query = select(LLMModelConfig).where(
+        LLMModelConfig.is_enabled == True,
+        LLMModelConfig.is_configured == True
+    ).order_by(LLMModelConfig.created_at).limit(1)
+    model_result = await db.execute(model_query)
+    first_model = model_result.scalar_one_or_none()
 
     result = {
-        "default_model": app_settings.DEFAULT_LLM_MODEL,
+        "default_model": first_model.model_id if first_model else None,
         "anthropic_api_key": app_settings.ANTHROPIC_API_KEY or None,
         "openai_api_key": app_settings.OPENAI_API_KEY or None,
     }

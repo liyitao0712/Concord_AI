@@ -117,16 +117,39 @@ class WorkerManager:
             if config.worker_type not in self._worker_types:
                 return False, f"不支持的 Worker 类型: {config.worker_type}"
 
-            # 启动子进程
-            success, message = await self._start_process(
-                worker_id=worker_id,
-                worker_type=config.worker_type,
-                name=config.name,
-                config_data=config.config,
-                agent_id=config.agent_id,
-            )
+            # 获取 Worker 类
+            worker_class = self._worker_types[config.worker_type]
 
-            return success, message
+            # 检查是否使用自定义启动逻辑
+            # 某些 Worker（如 EmailWorker）不需要启动独立进程，而是管理外部服务
+            if hasattr(worker_class, 'use_custom_start') and worker_class.use_custom_start:
+                # 使用 Worker 类的自定义启动逻辑
+                worker_instance = worker_class()
+                success, message = await worker_instance.start(config.config)
+
+                if success:
+                    # 记录信息（这些 Worker 没有 PID）
+                    self._worker_info[worker_id] = WorkerInfo(
+                        worker_id=worker_id,
+                        worker_type=config.worker_type,
+                        name=config.name,
+                        status=WorkerStatus.RUNNING,
+                        pid=None,
+                        started_at=datetime.now(),
+                    )
+
+                return success, message
+            else:
+                # 使用默认的子进程启动逻辑
+                success, message = await self._start_process(
+                    worker_id=worker_id,
+                    worker_type=config.worker_type,
+                    name=config.name,
+                    config_data=config.config,
+                    agent_id=config.agent_id,
+                )
+
+                return success, message
 
         except Exception as e:
             logger.error(f"[WorkerManager] 启动 Worker 失败: {e}")
@@ -227,6 +250,40 @@ class WorkerManager:
         Returns:
             tuple[bool, str]: (是否成功, 消息)
         """
+        # 检查是否是自定义启动的 Worker
+        if worker_id in self._worker_info and worker_id not in self._processes:
+            # 这是一个使用自定义启动逻辑的 Worker
+            from app.models.worker import WorkerConfig
+
+            try:
+                async with async_session_maker() as db:
+                    result = await db.execute(
+                        select(WorkerConfig).where(WorkerConfig.id == worker_id)
+                    )
+                    config = result.scalar_one_or_none()
+
+                    if not config:
+                        return False, "Worker 配置不存在"
+
+                    worker_class = self._worker_types.get(config.worker_type)
+                    if not worker_class:
+                        return False, f"不支持的 Worker 类型: {config.worker_type}"
+
+                    # 调用自定义停止逻辑
+                    worker_instance = worker_class()
+                    success, message = await worker_instance.stop()
+
+                    if success and worker_id in self._worker_info:
+                        self._worker_info[worker_id].status = WorkerStatus.STOPPED
+                        self._worker_info[worker_id].pid = None
+
+                    return success, message
+
+            except Exception as e:
+                logger.error(f"[WorkerManager] 停止 Worker 失败: {e}")
+                return False, str(e)
+
+        # 默认的子进程停止逻辑
         if worker_id not in self._processes:
             return False, "Worker 未在运行"
 

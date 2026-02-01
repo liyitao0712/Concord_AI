@@ -28,6 +28,11 @@ class RedisClient:
             await self._client.close()
 
     @property
+    def is_connected(self) -> bool:
+        """Check if Redis client is connected"""
+        return self._client is not None
+
+    @property
     def client(self) -> redis.Redis:
         """Get Redis client instance"""
         if self._client is None:

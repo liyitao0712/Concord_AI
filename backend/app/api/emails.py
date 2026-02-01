@@ -698,9 +698,9 @@ async def ai_analyze_email(
     if not force:
         analysis_query = select(EmailAnalysis).where(
             EmailAnalysis.email_id == email_id
-        ).order_by(EmailAnalysis.created_at.desc())
+        ).order_by(EmailAnalysis.created_at.desc()).limit(1)
         analysis_result = await session.execute(analysis_query)
-        existing = analysis_result.scalar_one_or_none()
+        existing = analysis_result.scalars().first()
 
         if existing:
             return EmailAnalysisResponse(
@@ -752,14 +752,36 @@ async def ai_analyze_email(
         )
 
     # 调用 AI 分析
-    analysis_result = await email_summarizer.analyze(
-        email_id=email.id,
-        sender=email.sender,
-        sender_name=email.sender_name,
-        subject=email.subject,
-        body_text=body_text,
-        received_at=email.received_at,
-    )
+    try:
+        analysis_result = await email_summarizer.analyze(
+            email_id=email.id,
+            sender=email.sender,
+            sender_name=email.sender_name,
+            subject=email.subject,
+            body_text=body_text,
+            received_at=email.received_at,
+        )
+    except ValueError as e:
+        # API Key 未配置或其他配置错误
+        error_msg = str(e)
+        # 如果是 LLM 配置缺失，返回更友好的错误信息
+        if "未找到可用的 LLM 模型配置" in error_msg or "API Key 未配置" in error_msg:
+            raise HTTPException(
+                status_code=400,
+                detail="LLM 模型未配置。请前往「管理后台 → LLM 配置」页面添加至少一个模型配置并设置 API Key。"
+            )
+        raise HTTPException(status_code=400, detail=error_msg)
+    except Exception as e:
+        # 记录详细错误日志
+        logger.error(f"[EmailAPI] AI 分析失败: {email_id}, {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"[EmailAPI] 错误堆栈: {traceback.format_exc()}")
+
+        # 返回用户友好的错误信息
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI 分析失败，请稍后重试或联系管理员。错误详情: {str(e)}"
+        )
 
     # 解析 deadline
     deadline_dt = None
@@ -844,10 +866,10 @@ async def get_email_analysis(
     """
     query = select(EmailAnalysis).where(
         EmailAnalysis.email_id == email_id
-    ).order_by(EmailAnalysis.created_at.desc())
+    ).order_by(EmailAnalysis.created_at.desc()).limit(1)
 
     result = await session.execute(query)
-    analysis = result.scalar_one_or_none()
+    analysis = result.scalars().first()
 
     if not analysis:
         return None

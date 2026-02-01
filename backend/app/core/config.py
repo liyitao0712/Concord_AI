@@ -69,9 +69,11 @@ class Settings(BaseSettings):
     # 获取方式：https://console.volcengine.com
     VOLCENGINE_API_KEY: str = ""
 
-    # 默认使用的 LLM 模型
-    # 支持：claude-3-opus-20240229, claude-3-sonnet-20240229, gpt-4, gpt-3.5-turbo 等
-    DEFAULT_LLM_MODEL: str = "claude-sonnet-4-20250514"
+    # LLM 默认模型
+    # 注意：默认模型现在从数据库的 llm_model_config 表动态加载
+    # 系统会在启动时自动选择第一个已配置且启用的模型
+    # 这个字段已废弃，保留仅为向后兼容
+    DEFAULT_LLM_MODEL: str = ""  # 已废弃，从数据库动态加载
 
     # ==================== 邮件配置 (IMAP) ====================
     # IMAP 服务器地址，常见的有：

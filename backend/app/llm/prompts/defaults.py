@@ -320,6 +320,315 @@ DEFAULT_PROMPTS = {
 
 请直接输出翻译结果。""",
     },
+
+    # ==================== 实体提取 ====================
+    "entity_extraction": {
+        "display_name": "通用实体提取",
+        "category": "tool",
+        "description": "从文本中提取结构化信息（客户、产品、订单等）",
+        "model_hint": "claude-3-sonnet-20240229",
+        "variables": {
+            "content": "需要提取信息的内容",
+        },
+        "content": """你是一个信息提取专家，专门从文本中提取结构化数据。
+
+请从以下内容中提取关键信息：
+
+<content>
+{{content}}
+</content>
+
+请提取以下类型的信息，返回 JSON 格式：
+
+{
+    "customer": {
+        "name": "客户姓名",
+        "company": "公司名称",
+        "email": "邮箱",
+        "phone": "电话"
+    },
+    "products": [
+        {
+            "name": "产品名称",
+            "model": "型号",
+            "specification": "规格",
+            "quantity": 数量,
+            "unit": "单位",
+            "price": 单价
+        }
+    ],
+    "requirements": {
+        "delivery_date": "交货日期",
+        "delivery_address": "收货地址",
+        "payment_terms": "付款方式",
+        "notes": "其他备注"
+    },
+    "dates": [
+        {
+            "date": "日期",
+            "type": "类型（交期/有效期/其他）",
+            "original_text": "原文"
+        }
+    ]
+}
+
+提取规则：
+1. 无法确定的字段填写 null
+2. products 和 dates 如果没有相关信息则为空数组 []
+3. 数量、价格保持数字格式，如果是范围则取较大值
+4. 日期如果是相对时间（如"下周一"），保留原文
+5. 不要猜测，不确定的信息标记为 null
+
+只输出 JSON，不要添加任何其他内容。""",
+    },
+
+    # ==================== 询价信息提取 ====================
+    "inquiry_extraction": {
+        "display_name": "询价信息提取",
+        "category": "tool",
+        "description": "从询价邮件中提取结构化信息",
+        "model_hint": "claude-3-sonnet-20240229",
+        "variables": {
+            "subject": "邮件主题",
+            "sender": "发件人",
+            "body": "邮件正文",
+        },
+        "content": """你是一个询价邮件分析专家。请从以下询价邮件中提取关键信息：
+
+<email>
+主题：{{subject}}
+发件人：{{sender}}
+内容：
+{{body}}
+</email>
+
+请提取询价相关信息，返回 JSON 格式：
+
+{
+    "customer": {
+        "name": "客户姓名（从邮件签名或内容推断）",
+        "company": "公司名称",
+        "email": "{{sender}}",
+        "phone": "电话（如有）",
+        "contact_preference": "首选联系方式"
+    },
+    "products": [
+        {
+            "name": "产品名称",
+            "model": "型号（如有）",
+            "specification": "规格要求",
+            "quantity": 数量,
+            "unit": "单位",
+            "target_price": "目标价格（如客户提及）"
+        }
+    ],
+    "requirements": {
+        "delivery_date": "期望交期",
+        "delivery_address": "收货地址",
+        "quality_requirements": "质量要求",
+        "packaging_requirements": "包装要求",
+        "other_requirements": "其他要求"
+    },
+    "urgency": "紧急程度（high/normal/low）",
+    "summary": "一句话总结询价内容"
+}
+
+提取规则：
+1. 尽可能推断客户姓名（从签名、称呼等）
+2. urgency 根据用词判断（"急"、"尽快"等为 high）
+3. 无法确定的字段填写 null
+
+只输出 JSON，不要添加任何其他内容。""",
+    },
+
+    # ==================== 订单信息提取 ====================
+    "order_extraction": {
+        "display_name": "订单信息提取",
+        "category": "tool",
+        "description": "从文本中提取订单相关信息",
+        "model_hint": "claude-3-sonnet-20240229",
+        "variables": {
+            "content": "包含订单信息的内容",
+        },
+        "content": """你是一个订单信息提取专家。请从以下内容中提取订单信息：
+
+<content>
+{{content}}
+</content>
+
+请提取订单相关信息，返回 JSON 格式：
+
+{
+    "order_info": {
+        "order_number": "订单号（如客户提供）",
+        "order_date": "下单日期",
+        "customer_po": "客户采购单号"
+    },
+    "customer": {
+        "name": "客户姓名",
+        "company": "公司名称",
+        "email": "邮箱",
+        "phone": "电话",
+        "shipping_address": "收货地址",
+        "billing_address": "账单地址"
+    },
+    "items": [
+        {
+            "product_name": "产品名称",
+            "model": "型号",
+            "specification": "规格",
+            "quantity": 数量,
+            "unit": "单位",
+            "unit_price": 单价,
+            "total_price": 总价,
+            "notes": "备注"
+        }
+    ],
+    "payment": {
+        "method": "付款方式",
+        "terms": "付款条款",
+        "currency": "币种"
+    },
+    "delivery": {
+        "requested_date": "要求交期",
+        "shipping_method": "运输方式",
+        "incoterms": "贸易条款"
+    },
+    "total_amount": 订单总金额,
+    "notes": "订单备注"
+}
+
+提取规则：
+1. 金额保持数字格式，并保留币种信息
+2. 日期尽量转换为 YYYY-MM-DD 格式
+3. 如果有多个收货地址，使用数组
+4. 无法确定的字段填写 null
+
+只输出 JSON，不要添加任何其他内容。""",
+    },
+
+    # ==================== 联系人信息提取 ====================
+    "contact_extraction": {
+        "display_name": "联系人信息提取",
+        "category": "tool",
+        "description": "从文本中提取联系人信息",
+        "model_hint": "claude-3-haiku-20240307",
+        "variables": {
+            "content": "包含联系人信息的内容",
+        },
+        "content": """你是一个联系人信息提取专家。请从以下内容中提取联系人信息：
+
+<content>
+{{content}}
+</content>
+
+请提取所有联系人信息，返回 JSON 格式：
+
+{
+    "contacts": [
+        {
+            "name": "姓名",
+            "title": "职位",
+            "company": "公司",
+            "department": "部门",
+            "email": "邮箱",
+            "phone": "电话",
+            "mobile": "手机",
+            "fax": "传真",
+            "address": "地址",
+            "social": {
+                "wechat": "微信",
+                "linkedin": "LinkedIn"
+            },
+            "role": "角色（决策者/联系人/技术对接人等）"
+        }
+    ]
+}
+
+提取规则：
+1. 如果内容中有多个联系人，全部提取
+2. 电话号码保持原始格式
+3. 尝试从签名、落款中提取信息
+4. 无法确定的字段填写 null
+
+只输出 JSON，不要添加任何其他内容。""",
+    },
+
+    # ==================== 邮件意图分类（带主题） ====================
+    "email_intent": {
+        "display_name": "邮件意图分类",
+        "category": "tool",
+        "description": "分析邮件意图（包含主题、发件人和正文）",
+        "model_hint": "claude-3-haiku-20240307",
+        "variables": {
+            "subject": "邮件主题",
+            "sender": "发件人",
+            "body": "邮件正文",
+        },
+        "content": """你是一个意图分类专家。请分析以下邮件的意图：
+
+<email>
+主题：{{subject}}
+发件人：{{sender}}
+内容：
+{{body}}
+</email>
+
+请判断这封邮件的意图类型，并返回 JSON 格式的结果。
+
+意图类型说明：
+- inquiry: 询价（询问价格、要求报价、产品咨询）
+- order: 订单（下单、采购、购买意向明确）
+- support: 支持（技术问题、售后服务、产品使用问题）
+- feedback: 反馈（投诉、建议、评价、意见）
+- general: 一般（问候、感谢、无特定业务意图）
+- unknown: 无法识别
+
+返回格式：
+{
+    "intent": "意图类型",
+    "confidence": 置信度,
+    "keywords": ["关键词1", "关键词2"],
+    "summary": "一句话总结邮件内容",
+    "priority": "high/normal/low"
+}
+
+优先级判断依据：
+- high: 紧急订单、重要客户、明确的采购意向
+- normal: 一般询价、常规问题
+- low: 闲聊、不紧急的反馈
+
+注意：
+1. confidence 是 0.0-1.0 之间的数字，表示判断的确信程度
+2. keywords 是支持判断的关键词列表
+3. 只输出 JSON，不要添加任何其他内容""",
+    },
+
+    # ==================== 批量意图分类 ====================
+    "batch_intent": {
+        "display_name": "批量意图分类",
+        "category": "tool",
+        "description": "对多条内容进行批量意图分类",
+        "model_hint": "claude-3-haiku-20240307",
+        "variables": {
+            "items": "需要分类的内容列表（JSON 或文本）",
+        },
+        "content": """你是一个意图分类专家。请分析以下多条内容的意图：
+
+<items>
+{{items}}
+</items>
+
+对每条内容进行意图分类，返回 JSON 数组格式的结果。
+
+返回格式：
+[
+    {"id": "item_id", "intent": "意图类型", "confidence": 置信度},
+    ...
+]
+
+只输出 JSON 数组，不要添加任何其他内容。""",
+    },
 }
 
 

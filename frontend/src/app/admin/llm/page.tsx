@@ -224,7 +224,9 @@ export default function LLMConfigPage() {
     try {
       await llmModelsApi.delete(modelId);
       setMessage({ type: 'success', text: '模型已删除' });
-      await loadModels();
+
+      // 立即从前端状态中移除该模型，确保 UI 立即更新
+      setModels(prevModels => prevModels.filter(m => m.model_id !== modelId));
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || '删除失败' });
     }
@@ -501,7 +503,7 @@ export default function LLMConfigPage() {
           <li>配置后可以点击"测试"按钮验证连接是否正常</li>
           <li>使用右上角的开关可以启用/禁用特定模型</li>
           <li>系统会自动记录每个模型的使用次数和 Token 消耗</li>
-          <li>点击右上角"新增模型"按钮可以添加自定义模型（支持任何 LiteLLM 兼容的模型）</li>
+          <li>点击右上角"新增模型"按钮可以添加自定义模型（支持 <a href="https://docs.litellm.ai/docs/providers" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">100+ LiteLLM 兼容模型</a>）</li>
         </ul>
       </div>
 
@@ -529,6 +531,34 @@ export default function LLMConfigPage() {
                 </button>
               </div>
 
+              {/* LiteLLM 配置说明 */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start">
+                  <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-semibold text-blue-900 mb-2">LiteLLM 模型配置说明</h4>
+                    <div className="text-xs text-blue-800 space-y-1">
+                      <p><strong>Model ID 格式：</strong><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono">provider/model-name</code></p>
+                      <p className="mt-2"><strong>常见示例：</strong></p>
+                      <ul className="list-disc list-inside ml-2 space-y-0.5">
+                        <li><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[11px]">anthropic/claude-3-opus-20240229</code></li>
+                        <li><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[11px]">openai/gpt-4-turbo-preview</code></li>
+                        <li><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[11px]">gemini/gemini-1.5-pro</code></li>
+                        <li><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[11px]">qwen/qwen-turbo</code></li>
+                      </ul>
+                      <p className="mt-2">
+                        💡 <strong>注意：</strong>系统会自动添加提供商前缀，您也可以输入完整格式
+                      </p>
+                      <p className="mt-1">
+                        📚 <a href="https://docs.litellm.ai/docs/providers" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline font-medium">查看完整的模型列表 →</a>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-4">
                 {/* Model ID */}
                 <div>
@@ -539,11 +569,24 @@ export default function LLMConfigPage() {
                     type="text"
                     value={createFormData.model_id}
                     onChange={(e) => setCreateFormData({ ...createFormData, model_id: e.target.value })}
-                    placeholder="如：anthropic/claude-opus-4-5-20251101"
+                    placeholder={
+                      createFormData.provider === 'anthropic' ? 'claude-3-opus-20240229 或 anthropic/claude-3-opus-20240229' :
+                      createFormData.provider === 'openai' ? 'gpt-4-turbo-preview 或 openai/gpt-4-turbo-preview' :
+                      createFormData.provider === 'gemini' ? 'gemini-1.5-pro 或 gemini/gemini-1.5-pro' :
+                      createFormData.provider === 'qwen' ? 'qwen-turbo 或 qwen/qwen-turbo' :
+                      createFormData.provider === 'volcengine' ? 'doubao-pro-4k 或 volcengine/doubao-pro-4k' :
+                      'provider/model-name 格式'
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    LiteLLM 格式的模型 ID，参考：<a href="https://docs.litellm.ai/docs/providers" target="_blank" className="text-blue-600 hover:underline">LiteLLM 文档</a>
+                    {createFormData.provider === 'anthropic' && '例如：claude-3-opus-20240229、claude-3-sonnet-20240229、claude-3-haiku-20240307'}
+                    {createFormData.provider === 'openai' && '例如：gpt-4-turbo-preview、gpt-4、gpt-3.5-turbo'}
+                    {createFormData.provider === 'gemini' && '例如：gemini-1.5-pro、gemini-1.5-flash、gemini-pro'}
+                    {createFormData.provider === 'qwen' && '例如：qwen-turbo、qwen-plus、qwen-max'}
+                    {createFormData.provider === 'volcengine' && '例如：doubao-pro-4k、doubao-lite-4k'}
+                    {!['anthropic', 'openai', 'gemini', 'qwen', 'volcengine'].includes(createFormData.provider) &&
+                      '模型 ID 应为 LiteLLM 格式，如 provider/model-name'}
                   </p>
                 </div>
 

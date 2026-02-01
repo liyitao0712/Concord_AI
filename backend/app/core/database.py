@@ -13,6 +13,12 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,  # Log SQL queries in debug mode
     future=True,
+    # 生产就绪配置
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=30,
+    pool_recycle=3600,
+    pool_pre_ping=True,
 )
 
 # Create sync engine (用于同步操作，如 OSS 配置读取)

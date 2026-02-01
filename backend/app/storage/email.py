@@ -93,13 +93,16 @@ class EmailMessage:
         self.headers = headers or {}
         self.raw_bytes = raw_bytes  # 原始邮件内容（RFC822 格式）
 
-    def to_dict(self) -> dict:
+    def to_dict(self, include_raw_bytes: bool = False) -> dict:
         """
         转换为字典（用于 Celery 任务序列化）
 
-        注意：raw_bytes 不包含在字典中（太大且不需要传递）
+        Args:
+            include_raw_bytes: 是否包含原始邮件字节（默认 False 以优化传输）
+
+        注意：raw_bytes 默认不包含（太大），但持久化时需要包含
         """
-        return {
+        data = {
             "message_id": self.message_id,
             "subject": self.subject,
             "sender": self.sender,
@@ -112,6 +115,13 @@ class EmailMessage:
             "headers": self.headers,
         }
 
+        # 可选包含 raw_bytes（用于持久化）
+        if include_raw_bytes and self.raw_bytes:
+            import base64
+            data["raw_bytes"] = base64.b64encode(self.raw_bytes).decode('utf-8')
+
+        return data
+
     @classmethod
     def from_dict(cls, data: dict) -> "EmailMessage":
         """从字典创建 EmailMessage 实例"""
@@ -119,6 +129,12 @@ class EmailMessage:
 
         date_str = data.get("date")
         date = datetime.fromisoformat(date_str) if date_str else None
+
+        # 解码 raw_bytes（如果存在）
+        raw_bytes = None
+        if "raw_bytes" in data and data["raw_bytes"]:
+            import base64
+            raw_bytes = base64.b64decode(data["raw_bytes"])
 
         return cls(
             message_id=data["message_id"],
@@ -131,7 +147,7 @@ class EmailMessage:
             body_html=data.get("body_html"),
             attachments=data.get("attachments", []),
             headers=data.get("headers", {}),
-            raw_bytes=None,  # raw_bytes 不在序列化中传递
+            raw_bytes=raw_bytes,  # 从 base64 解码（如果提供）
         )
 
 

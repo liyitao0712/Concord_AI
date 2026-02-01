@@ -9,7 +9,8 @@
 # - FastAPI 后端（端口 8000）
 # - Temporal Worker
 # - Next.js 前端（端口 3000）
-# - Docker 容器（包括 Celery Beat、Celery Worker、Flower）
+# - Celery Beat/Worker
+# - Docker 容器
 
 set -e
 
@@ -69,9 +70,14 @@ else
     echo "  前端未运行"
 fi
 
-# 4. 停止 Docker 容器（包括 Celery）
+# 4. 停止 Celery 服务
 echo ""
-echo "[4/4] 停止 Docker 容器（包括 Celery Beat/Worker）..."
+echo "[4/5] 停止 Celery 服务..."
+./scripts/celery.sh stop > /dev/null 2>&1 || echo "  Celery 未运行"
+
+# 5. 停止 Docker 容器
+echo ""
+echo "[5/5] 停止 Docker 容器..."
 
 if [ "$KEEP_DOCKER" = true ]; then
     echo "  跳过（使用了 --keep 参数）"

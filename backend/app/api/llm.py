@@ -25,11 +25,7 @@ from app.core.security import get_current_user
 from app.core.logging import get_logger
 from app.models.user import User
 from app.llm.gateway import llm_gateway
-from app.prompts import (
-    ASSISTANT_SYSTEM,
-    INTENT_SYSTEM,
-    INTENT_CLASSIFIER_PROMPT,
-)
+from app.llm.prompts import render_prompt
 
 
 # 获取当前模块的 logger
@@ -167,7 +163,10 @@ async def chat(
 
     try:
         # 使用默认系统提示词（如果没有指定）
-        system = request.system_prompt or ASSISTANT_SYSTEM.render()
+        if request.system_prompt:
+            system = request.system_prompt
+        else:
+            system = await render_prompt("chat_agent")
 
         # 调用 LLM Gateway
         response = await llm_gateway.chat(
@@ -255,7 +254,10 @@ async def chat_stream(
         """
         try:
             # 使用默认系统提示词
-            system = request.system_prompt or ASSISTANT_SYSTEM.render()
+            if request.system_prompt:
+                system = request.system_prompt
+            else:
+                system = await render_prompt("chat_agent")
 
             # 调用 LLM Gateway 流式接口
             async for chunk in llm_gateway.chat_stream(
@@ -336,13 +338,14 @@ async def classify_intent(
     logger.info(f"用户 {current_user.email} 请求意图分类")
 
     try:
-        # 构建分类 Prompt
-        prompt = INTENT_CLASSIFIER_PROMPT.render(content=request.content)
+        # 使用新的 Prompt 系统
+        # intent_classifier Prompt 已经包含了系统提示和用户消息
+        prompt = await render_prompt("intent_classifier", content=request.content)
 
         # 调用 LLM Gateway（使用较低的 temperature 以获得更稳定的输出）
         response = await llm_gateway.chat(
             message=prompt,
-            system=INTENT_SYSTEM.render(),
+            system=None,  # Prompt 中已包含指令
             temperature=0.2,  # 降低温度以获得更确定的结果
         )
 

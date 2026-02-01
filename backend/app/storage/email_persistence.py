@@ -31,7 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.core.database import async_session_maker
+from app.core import database  # 导入模块而不是直接导入 async_session_maker
 from app.storage.oss import oss_client
 from app.storage.local_file import local_storage
 from app.storage.email import EmailMessage
@@ -200,7 +200,7 @@ class EmailPersistenceService:
         if not email_msg.raw_bytes:
             raise ValueError("EmailMessage 没有 raw_bytes，无法持久化")
 
-        async with async_session_maker() as session:
+        async with database.async_session_maker() as session:
             # 1. 幂等检查
             existing = await self._get_by_message_id(session, email_msg.message_id)
             if existing:
@@ -386,7 +386,7 @@ class EmailPersistenceService:
             email_id: 邮件记录 ID
             event_id: 关联的 UnifiedEvent ID
         """
-        async with async_session_maker() as session:
+        async with database.async_session_maker() as session:
             stmt = select(EmailRawMessage).where(EmailRawMessage.id == email_id)
             result = await session.execute(stmt)
             record = result.scalar_one_or_none()
@@ -413,7 +413,7 @@ class EmailPersistenceService:
         Returns:
             List[EmailAttachment]: 附件列表
         """
-        async with async_session_maker() as session:
+        async with database.async_session_maker() as session:
             stmt = select(EmailAttachment).where(
                 EmailAttachment.email_id == email_id
             )
@@ -438,7 +438,7 @@ class EmailPersistenceService:
         Returns:
             str: 签名 URL，如果附件不存在返回 None
         """
-        async with async_session_maker() as session:
+        async with database.async_session_maker() as session:
             stmt = select(EmailAttachment).where(
                 EmailAttachment.id == attachment_id
             )
@@ -472,7 +472,7 @@ class EmailPersistenceService:
         Returns:
             str: 签名 URL
         """
-        async with async_session_maker() as session:
+        async with database.async_session_maker() as session:
             stmt = select(EmailRawMessage).where(EmailRawMessage.id == email_id)
             result = await session.execute(stmt)
             record = result.scalar_one_or_none()

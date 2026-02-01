@@ -145,10 +145,15 @@ async def create_model(
             detail=f"模型 {data.model_id} 已存在"
         )
 
+    # 确保 model_id 包含提供商前缀（LiteLLM 要求）
+    model_id = data.model_id
+    if '/' not in model_id:
+        model_id = f"{data.provider}/{model_id}"
+
     # 创建新模型
     new_model = LLMModelConfig(
         id=str(uuid.uuid4()),
-        model_id=data.model_id,
+        model_id=model_id,
         provider=data.provider,
         model_name=data.model_name,
         description=data.description,
@@ -169,7 +174,7 @@ async def create_model(
     return new_model.to_dict(include_api_key=False)
 
 
-@router.get("/{model_id}", response_model=LLMModelConfigResponse)
+@router.get("/{model_id:path}", response_model=LLMModelConfigResponse)
 async def get_model(
     model_id: str,
     db: AsyncSession = Depends(get_db),
@@ -186,7 +191,7 @@ async def get_model(
     return model.to_dict(include_api_key=False)
 
 
-@router.put("/{model_id}", response_model=LLMModelConfigResponse)
+@router.put("/{model_id:path}", response_model=LLMModelConfigResponse)
 async def update_model(
     model_id: str,
     data: LLMModelConfigUpdate,
@@ -240,7 +245,7 @@ async def update_model(
     return model.to_dict(include_api_key=False)
 
 
-@router.post("/{model_id}/test", response_model=LLMModelTestResponse)
+@router.post("/{model_id:path}/test", response_model=LLMModelTestResponse)
 async def test_model(
     model_id: str,
     data: LLMModelTestRequest,
@@ -372,7 +377,7 @@ async def get_usage_stats(
     }
 
 
-@router.delete("/{model_id}")
+@router.delete("/{model_id:path}")
 async def delete_model(
     model_id: str,
     db: AsyncSession = Depends(get_db),

@@ -63,8 +63,9 @@ class RedisStreams:
     # 消息处理超时时间（毫秒）
     CLAIM_TIMEOUT_MS = 60000  # 1 分钟
 
-    def __init__(self):
+    def __init__(self, redis_client_override=None):
         self._initialized = False
+        self._redis_client = redis_client_override  # 允许传入自定义 Redis 连接
 
     async def initialize(self) -> None:
         """
@@ -102,11 +103,12 @@ class RedisStreams:
             bool: 是否创建成功
         """
         stream = stream or self.EVENTS_STREAM
+        client = self._redis_client or redis_client.client
 
         try:
             # XGROUP CREATE 命令
             # MKSTREAM: 如果 Stream 不存在则创建
-            await redis_client.client.xgroup_create(
+            await client.xgroup_create(
                 stream,
                 group_name,
                 id=start_id,
@@ -141,6 +143,7 @@ class RedisStreams:
             str: Stream 消息 ID（如 "1234567890123-0"）
         """
         stream = stream or self.EVENTS_STREAM
+        client = self._redis_client or redis_client.client
 
         # 将事件转换为字典
         event_data = {
@@ -166,7 +169,7 @@ class RedisStreams:
         try:
             # XADD 命令添加消息
             # MAXLEN ~: 近似裁剪，性能更好
-            stream_id = await redis_client.client.xadd(
+            stream_id = await client.xadd(
                 stream,
                 event_data,
                 maxlen=max_len,
@@ -205,11 +208,12 @@ class RedisStreams:
             list[tuple[str, UnifiedEvent]]: (stream_id, event) 列表
         """
         stream = stream or self.EVENTS_STREAM
+        client = self._redis_client or redis_client.client
 
         try:
             # XREADGROUP 命令
             # ">": 只读取新消息（未被其他消费者处理的）
-            result = await redis_client.client.xreadgroup(
+            result = await client.xreadgroup(
                 group_name,
                 consumer_name,
                 {stream: ">"},
@@ -262,10 +266,11 @@ class RedisStreams:
             list[tuple[str, UnifiedEvent]]: (stream_id, event) 列表
         """
         stream = stream or self.EVENTS_STREAM
+        client = self._redis_client or redis_client.client
 
         try:
             # XREADGROUP 使用 "0" 读取 pending 消息
-            result = await redis_client.client.xreadgroup(
+            result = await client.xreadgroup(
                 group_name,
                 consumer_name,
                 {stream: "0"},
@@ -309,9 +314,10 @@ class RedisStreams:
             bool: 是否确认成功
         """
         stream = stream or self.EVENTS_STREAM
+        client = self._redis_client or redis_client.client
 
         try:
-            result = await redis_client.client.xack(
+            result = await client.xack(
                 stream,
                 group_name,
                 stream_id
@@ -331,9 +337,10 @@ class RedisStreams:
             dict: 包含 length, groups, first_entry, last_entry 等信息
         """
         stream = stream or self.EVENTS_STREAM
+        client = self._redis_client or redis_client.client
 
         try:
-            info = await redis_client.client.xinfo_stream(stream)
+            info = await client.xinfo_stream(stream)
             return {
                 "length": info.get("length", 0),
                 "first_entry": info.get("first-entry"),
@@ -356,9 +363,10 @@ class RedisStreams:
             dict: 包含 pending, consumers, last_delivered_id 等信息
         """
         stream = stream or self.EVENTS_STREAM
+        client = self._redis_client or redis_client.client
 
         try:
-            groups = await redis_client.client.xinfo_groups(stream)
+            groups = await client.xinfo_groups(stream)
             for group in groups:
                 if group.get("name") == group_name:
                     return {

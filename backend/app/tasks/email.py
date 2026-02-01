@@ -36,7 +36,9 @@ class AsyncTask(Task):
     """
 
     def __call__(self, *args, **kwargs):
-        """执行任务时自动创建 asyncio event loop"""
+        """执行任务时使用 Worker 进程的持久 event loop"""
+        # 使用 Worker 进程初始化时创建的持久 event loop
+        # 所有任务共享同一个 loop，避免 loop 反复创建/销毁导致的问题
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(self.run(*args, **kwargs))
 
@@ -73,29 +75,32 @@ async def poll_email_account(self, account_id: int):
         Exception: IMAP 连接失败或其他错误（会自动重试）
     """
     from app.storage.email import get_active_imap_accounts, imap_fetch
+    from app.celery_app import get_worker_redis_client
 
     logger.info(f"[Celery:PollEmail] 开始轮询邮箱: account_id={account_id}")
 
-    # 获取分布式锁
-    lock_key = f"email_worker:{account_id}:lock"
-    lock_acquired = await redis_client.set(
-        lock_key,
-        f"celery-{self.request.id}",  # 使用任务 ID 作为锁值
-        ex=300,  # 锁过期时间 5 分钟
-        nx=True,
-    )
-
-    if not lock_acquired:
-        logger.debug(f"[Celery:PollEmail] 其他实例正在处理 account_id={account_id}，跳过")
-        return {
-            "account_id": account_id,
-            "emails_found": 0,
-            "emails_queued": 0,
-            "skipped": True,
-            "reason": "locked_by_another_instance",
-        }
+    # 使用 Worker Redis 连接
+    redis_conn = get_worker_redis_client()
 
     try:
+        # 获取分布式锁
+        lock_key = f"email_worker:{account_id}:lock"
+        lock_acquired = await redis_conn.set(
+            lock_key,
+            f"celery-{self.request.id}",  # 使用任务 ID 作为锁值
+            ex=300,  # 锁过期时间 5 分钟
+            nx=True,
+        )
+
+        if not lock_acquired:
+            logger.debug(f"[Celery:PollEmail] 其他实例正在处理 account_id={account_id}，跳过")
+            return {
+                "account_id": account_id,
+                "emails_found": 0,
+                "emails_queued": 0,
+                "skipped": True,
+                "reason": "locked_by_another_instance",
+            }
         # 获取账户信息
         accounts = await get_active_imap_accounts()
         account = next((acc for acc in accounts if acc.id == account_id), None)
@@ -110,7 +115,7 @@ async def poll_email_account(self, account_id: int):
             }
 
         # 获取上次检查点
-        last_check = await _get_checkpoint(account_id)
+        last_check = await _get_checkpoint(redis_conn, account_id)
         logger.debug(f"[Celery:PollEmail] 上次检查时间: {last_check}")
 
         # 拉取新邮件
@@ -124,7 +129,7 @@ async def poll_email_account(self, account_id: int):
 
         if not emails:
             logger.debug(f"[Celery:PollEmail] 没有新邮件: {account.name}")
-            await _save_checkpoint(account_id)
+            await _save_checkpoint(redis_conn, account_id)
             return {
                 "account_id": account_id,
                 "emails_found": 0,
@@ -137,9 +142,9 @@ async def poll_email_account(self, account_id: int):
         queued = 0
         for email in emails:
             try:
-                # 异步调用 process_email 任务
+                # 异步调用 process_email 任务（包含 raw_bytes 以便持久化）
                 process_email.delay(
-                    email_data=email.to_dict(),
+                    email_data=email.to_dict(include_raw_bytes=True),
                     account_id=account_id,
                 )
                 queued += 1
@@ -147,7 +152,7 @@ async def poll_email_account(self, account_id: int):
                 logger.error(f"[Celery:PollEmail] 加入队列失败: {email.message_id}, {e}")
 
         # 更新检查点
-        await _save_checkpoint(account_id)
+        await _save_checkpoint(redis_conn, account_id)
 
         logger.info(f"[Celery:PollEmail] 完成轮询: {account.name}, 发现 {len(emails)} 封，已加入队列 {queued} 封")
 
@@ -164,7 +169,8 @@ async def poll_email_account(self, account_id: int):
 
     finally:
         # 释放锁
-        await redis_client.delete(lock_key)
+        await redis_conn.delete(lock_key)
+        # 注意：不要关闭 Worker Redis 连接，它是共享的
 
 
 # ==================== 邮件处理任务 ====================
@@ -205,8 +211,9 @@ async def process_email(self, email_data: dict, account_id: int):
     from app.storage.email import EmailMessage, get_active_imap_accounts, imap_mark_as_read
     from app.storage.email_persistence import persistence_service
     from app.adapters.email import email_adapter
-    from app.messaging.streams import redis_streams
+    from app.messaging.streams import RedisStreams
     from app.messaging.dispatcher import event_dispatcher
+    from app.celery_app import get_worker_redis_client
 
     # 反序列化邮件数据
     email = EmailMessage.from_dict(email_data)
@@ -219,7 +226,15 @@ async def process_email(self, email_data: dict, account_id: int):
     )
 
     try:
-        # 1. 持久化原始邮件和附件
+        # 1. 获取并缓存账户信息（避免重复查询）
+        accounts = await get_active_imap_accounts()
+        account = next((acc for acc in accounts if acc.id == account_id), None)
+
+        if not account:
+            logger.warning(f"[Celery:ProcessEmail] 账户不存在: {account_id}")
+            return {"status": "error", "error": "account_not_found"}
+
+        # 2. 持久化原始邮件和附件
         raw_record = None
         if email.raw_bytes:
             try:
@@ -229,38 +244,35 @@ async def process_email(self, email_data: dict, account_id: int):
                 logger.error(f"[Celery:ProcessEmail] 持久化失败: {e}")
                 # 持久化失败不阻断流程（可能是重复邮件）
 
-        # 2. 转换为 UnifiedEvent
+        # 3. 转换为 UnifiedEvent
         event = await email_adapter.to_unified_event(email)
 
-        # 3. 添加元数据
-        accounts = await get_active_imap_accounts()
-        account = next((acc for acc in accounts if acc.id == account_id), None)
-
-        if account:
-            event.metadata["email_account_id"] = account_id
-            event.metadata["email_account_name"] = account.name
+        # 4. 添加元数据（使用缓存的 account）
+        event.metadata["email_account_id"] = account_id
+        event.metadata["email_account_name"] = account.name
 
         if raw_record:
             event.metadata["email_raw_id"] = raw_record.id
 
-        # 4. 添加到 Redis Streams
-        stream_id = await redis_streams.add_event(event)
+        # 5. 添加到 Redis Streams（使用 Worker Redis 连接）
+        worker_redis_streams = RedisStreams(redis_client_override=get_worker_redis_client())
+        stream_id = await worker_redis_streams.add_event(event)
         logger.debug(f"[Celery:ProcessEmail] 添加到 Stream: {stream_id}")
 
-        # 5. 分发到 Dispatcher（意图分类 + 启动 Workflow）
+        # 6. 分发到 Dispatcher（意图分类 + 启动 Workflow）
         workflow_id = await event_dispatcher.dispatch(event)
         if workflow_id:
             logger.info(f"[Celery:ProcessEmail] 启动 Workflow: {workflow_id}")
 
-        # 6. 更新持久化记录状态
+        # 7. 更新持久化记录状态
         if raw_record:
             try:
                 await persistence_service.mark_processed(raw_record.id, event.event_id)
             except Exception as e:
                 logger.warning(f"[Celery:ProcessEmail] 更新持久化状态失败: {e}")
 
-        # 7. 标记邮件为已读（根据账户配置）
-        if account and account.imap_mark_as_read:
+        # 8. 标记邮件为已读（使用缓存的 account）
+        if account.imap_mark_as_read:
             await imap_mark_as_read(
                 email.message_id,
                 folder=account.imap_folder,
@@ -285,10 +297,10 @@ async def process_email(self, email_data: dict, account_id: int):
 
 # ==================== 辅助函数 ====================
 
-async def _get_checkpoint(account_id: int) -> Optional[datetime]:
+async def _get_checkpoint(redis_conn, account_id: int) -> Optional[datetime]:
     """获取邮箱的上次检查时间"""
     checkpoint_key = f"email_worker:{account_id}:last_check"
-    timestamp = await redis_client.get(checkpoint_key)
+    timestamp = await redis_conn.get(checkpoint_key)
 
     if timestamp:
         try:
@@ -300,8 +312,8 @@ async def _get_checkpoint(account_id: int) -> Optional[datetime]:
     return datetime.now() - timedelta(days=1)
 
 
-async def _save_checkpoint(account_id: int) -> None:
+async def _save_checkpoint(redis_conn, account_id: int) -> None:
     """保存邮箱的检查时间"""
     checkpoint_key = f"email_worker:{account_id}:last_check"
     timestamp = datetime.now().isoformat()
-    await redis_client.set(checkpoint_key, timestamp, ex=86400 * 7)  # 保存 7 天
+    await redis_conn.set(checkpoint_key, timestamp, ex=86400 * 7)  # 保存 7 天

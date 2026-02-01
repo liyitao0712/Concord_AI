@@ -112,78 +112,16 @@ services:
     depends_on:
       - temporal
 
-# ==================== Celery Beat（定时调度器） ====================
-  # 定时触发邮件轮询任务
-  #
-  # 启动后会自动为每个邮箱账户创建定时任务
-  celery-beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: concord-celery-beat
-    command: celery -A app.celery_app beat --loglevel=info
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/concord
-      - REDIS_URL=redis://redis:6379/0
-      - TEMPORAL_HOST=temporal:7233
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-    volumes:
-      - ./backend:/app
-      - celerybeat_schedule:/app/celerybeat-schedule
-
-  # ==================== Celery Worker（任务执行器） ====================
-  # 执行邮件拉取和处理任务
-  #
-  # 可以启动多个 Worker 实例以提高并发能力
-  # 通过 docker-compose up -d --scale celery-worker=3 扩展到 3 个实例
-  celery-worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: concord-celery-worker
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=10 --queues=email,default
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/concord
-      - REDIS_URL=redis://redis:6379/0
-      - TEMPORAL_HOST=temporal:7233
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-    volumes:
-      - ./backend:/app
-    deploy:
-      replicas: 2  # 默认启动 2 个 Worker 实例
-
-  # ==================== Flower（Celery 监控，可选） ====================
-  # Celery 任务监控面板
-  #
-  # 访问地址: http://localhost:5555
-  flower:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: concord-flower
-    command: celery -A app.celery_app flower --port=5555
-    ports:
-      - "5555:5555"
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      - redis
-    profiles:
-      - monitoring
-    restart: unless-stopped
+  # ==================== Celery 服务说明 ====================
+  # Celery Beat、Worker 和 Flower 服务已移除，因为：
+  # 1. 项目没有提供 Dockerfile
+  # 2. 这些服务设计为本地运行（非 Docker 化）
+  # 3. 如需启动 Celery，请手动运行：
+  #    - Beat:   celery -A app.celery_app beat
+  #    - Worker: celery -A app.celery_app worker
+  #    - Flower: celery -A app.celery_app flower
 
 # ==================== 数据卷 ====================
 volumes:
   postgres_data:        # PostgreSQL 数据持久化
   redis_data:           # Redis 数据持久化
-  celerybeat_schedule:  # Celery Beat 调度状态

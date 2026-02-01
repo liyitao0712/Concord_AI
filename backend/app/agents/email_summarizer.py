@@ -196,7 +196,14 @@ class EmailSummarizerAgent(BaseAgent):
             )
 
             # 4. 解析结果
+            # DEBUG: 打印 LLM 原始返回（前 500 字符）
+            logger.info(f"[EmailSummarizer] LLM 原始返回: {response.content[:500]}")
+
             result = self._parse_response(response.content)
+
+            # DEBUG: 打印解析后的结果
+            logger.info(f"[EmailSummarizer] 解析结果: intent={result.get('intent')}, summary={result.get('summary', '')[:50]}")
+
             result["email_id"] = email_id
             result["cleaned_content"] = cleaned_content
             result["llm_model"] = model

@@ -9,7 +9,8 @@
 #   ./scripts/start.sh --frontend # 只启动前端
 #
 # 服务列表：
-# - Docker 容器（PostgreSQL、Redis、Temporal、Temporal UI、Celery Beat/Worker）
+# - Docker 容器（PostgreSQL、Redis、Temporal、Temporal UI）
+# - Celery Beat/Worker（邮件轮询、定时任务）
 # - FastAPI 后端（端口 8000）
 # - Temporal Worker（处理工作流）
 # - Next.js 前端（端口 3000）
@@ -90,6 +91,15 @@ else
     echo "  数据库迁移完成"
 fi
 cd "$PROJECT_ROOT"
+
+# 2.7 启动 Celery 服务
+if [ "$RUN_MODE" = "all" ]; then
+    echo ""
+    echo "[2.7/5] 启动 Celery 服务..."
+    ./scripts/celery.sh start > /dev/null 2>&1 || {
+        echo "  Celery 启动失败，请查看日志: logs/celery-*.log"
+    }
+fi
 
 # 3. 启动服务
 if [ "$RUN_MODE" = "all" ] || [ "$RUN_MODE" = "worker" ]; then
