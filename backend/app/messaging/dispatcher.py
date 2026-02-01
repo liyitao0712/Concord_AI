@@ -25,7 +25,6 @@ from app.core.database import async_session_maker
 from app.models.event import Event, EventStatus
 from app.schemas.event import UnifiedEvent
 from app.agents.registry import agent_registry
-from app.workflows.client import start_workflow
 
 logger = get_logger(__name__)
 
@@ -38,30 +37,9 @@ class EventDispatcher:
     1. 接收统一事件
     2. 幂等性检查
     3. 保存事件到数据库
-    4. 意图分类
-    5. 启动对应的 Workflow
-
-    意图 -> Workflow 映射：
-    - inquiry: 询价流程
-    - order: 订单流程
-    - complaint: 投诉流程
-    - follow_up: 跟进流程
-    - greeting: 直接回复（不启动 Workflow）
-    - other: 人工处理
+    4. 意图分类（使用 email_summarizer Agent）
+    5. 记录日志（不再启动 Workflow，改为人工处理）
     """
-
-    # 意图到 Workflow 的映射
-    INTENT_WORKFLOW_MAP = {
-        "inquiry": "EmailProcessWorkflow",      # 询价 -> 邮件处理流程
-        "order": "EmailProcessWorkflow",        # 订单 -> 邮件处理流程
-        "complaint": "EmailProcessWorkflow",    # 投诉 -> 邮件处理流程
-        "follow_up": "EmailProcessWorkflow",    # 跟进 -> 邮件处理流程
-        "greeting": None,                       # 问候 -> 直接回复
-        "other": "EmailProcessWorkflow",        # 其他 -> 邮件处理流程（人工处理）
-    }
-
-    # 默认 Workflow
-    DEFAULT_WORKFLOW = "EmailProcessWorkflow"
 
     async def dispatch(self, event: UnifiedEvent) -> Optional[str]:
         """
@@ -71,7 +49,7 @@ class EventDispatcher:
             event: 统一事件
 
         Returns:
-            Optional[str]: Workflow ID（如果启动了 Workflow）
+            None（不再启动 Workflow）
         """
         logger.info(
             f"[Dispatcher] 接收事件: {event.event_id} "
@@ -89,7 +67,7 @@ class EventDispatcher:
                         logger.info(
                             f"[Dispatcher] 事件已处理，跳过: {event.idempotency_key}"
                         )
-                        return existing.workflow_id
+                        return None
 
                 # 2. 保存事件到数据库
                 db_event = await self._save_event(session, event)
@@ -99,25 +77,17 @@ class EventDispatcher:
                 db_event.intent = intent
                 logger.info(f"[Dispatcher] 意图分类: {intent}")
 
-                # 4. 根据意图启动 Workflow
-                workflow_id = await self._start_workflow(event, intent)
-
-                # 5. 更新事件状态
-                if workflow_id:
-                    db_event.workflow_id = workflow_id
-                    db_event.mark_processing()
-                else:
-                    # 无需启动 Workflow（如 greeting）
-                    db_event.mark_completed()
+                # 4. 标记为已完成（不再启动 Workflow）
+                db_event.mark_completed()
 
                 await session.commit()
 
                 logger.info(
-                    f"[Dispatcher] 分发完成: event={event.event_id} "
-                    f"intent={intent} workflow={workflow_id}"
+                    f"[Dispatcher] 事件已分类并保存: event_id={event.event_id}, "
+                    f"intent={intent}（待人工处理）"
                 )
 
-                return workflow_id
+                return None
 
             except Exception as e:
                 logger.error(f"[Dispatcher] 分发失败: {e}")
@@ -186,7 +156,7 @@ class EventDispatcher:
 
     async def _classify_intent(self, event: UnifiedEvent, session) -> str:
         """
-        调用 Agent 进行意图分类
+        调用 email_summarizer Agent 进行意图分类
 
         Args:
             event: 统一事件
@@ -205,14 +175,15 @@ class EventDispatcher:
                 if subject:
                     input_text = f"主题: {subject}\n\n{input_text}"
 
-            # 调用意图分类 Agent（传递 db 参数以加载 Agent 配置）
+            # 使用 email_summarizer 进行意图提取
             result = await agent_registry.run(
-                "intent_classifier",
+                "email_summarizer",
                 input_text=input_text,
                 db=session,
             )
 
             if result.success and result.data:
+                # email_summarizer 返回的 intent 字段
                 intent = result.data.get("intent", "other")
                 return intent
 
@@ -221,73 +192,6 @@ class EventDispatcher:
         except Exception as e:
             logger.warning(f"[Dispatcher] 意图分类失败，使用默认: {e}")
             return "other"
-
-    async def _start_workflow(
-        self,
-        event: UnifiedEvent,
-        intent: str
-    ) -> Optional[str]:
-        """
-        根据意图启动对应的 Workflow
-
-        Args:
-            event: 统一事件
-            intent: 意图类型
-
-        Returns:
-            Optional[str]: Workflow ID
-        """
-        # 获取对应的 Workflow
-        workflow_name = self.INTENT_WORKFLOW_MAP.get(intent)
-
-        if not workflow_name:
-            logger.info(f"[Dispatcher] 意图 {intent} 无需启动 Workflow")
-            return None
-
-        # 准备 Workflow 参数
-        workflow_input = {
-            "event_id": event.event_id,
-            "event_type": event.event_type,
-            "source": event.source,
-            "source_id": event.source_id,
-            "content": event.content,
-            "content_type": event.content_type,
-            "user_external_id": event.user_external_id,
-            "user_name": event.user_name,
-            "session_id": event.session_id,
-            "thread_id": event.thread_id,
-            "intent": intent,
-            "metadata": event.metadata,
-        }
-
-        try:
-            # 生成 Workflow ID
-            workflow_id = f"{workflow_name.lower()}-{event.event_id}"
-
-            # 启动 Workflow
-            # 注意：这里假设 Workflow 已经在 worker 中注册
-            # 如果 Workflow 尚未实现，会报错
-            from app.workflows.definitions.email_process import EmailProcessWorkflow
-
-            handle = await start_workflow(
-                EmailProcessWorkflow.run,
-                args=(workflow_input, intent),
-                id=workflow_id,
-            )
-
-            logger.info(f"[Dispatcher] 启动 Workflow: {workflow_id}")
-            return workflow_id
-
-        except ImportError:
-            # Workflow 尚未实现，跳过
-            logger.warning(
-                f"[Dispatcher] Workflow {workflow_name} 尚未实现，跳过启动"
-            )
-            return None
-
-        except Exception as e:
-            logger.error(f"[Dispatcher] 启动 Workflow 失败: {e}")
-            raise
 
     async def update_event_status(
         self,

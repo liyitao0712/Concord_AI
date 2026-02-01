@@ -17,11 +17,9 @@ import { useAuth } from '@/contexts/AuthContext';
 const navigation = [
   { name: '仪表盘', href: '/admin', icon: '📊' },
   { name: '用户管理', href: '/admin/users', icon: '👥' },
-  { name: '审批管理', href: '/admin/approvals', icon: '✅' },
   { name: 'LLM 配置', href: '/admin/llm', icon: '🤖' },
   { name: 'Agent 管理', href: '/admin/agents', icon: '🧠' },
   { name: '意图管理', href: '/admin/intents', icon: '🎯' },
-  { name: '运行监控', href: '/admin/monitor', icon: '📈' },
   { name: '系统日志', href: '/admin/logs', icon: '📋' },
   { name: 'Worker 管理', href: '/admin/workers', icon: '🔌' },
   { name: '邮箱管理', href: '/admin/settings', icon: '📧' },

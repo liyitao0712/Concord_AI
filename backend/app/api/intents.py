@@ -31,7 +31,6 @@ from app.core.logging import get_logger
 from app.core.security import get_current_admin_user
 from app.models.user import User
 from app.models.intent import Intent, IntentSuggestion
-from app.agents.router_agent import router_agent
 
 logger = get_logger(__name__)
 
@@ -211,8 +210,6 @@ async def create_intent(
     await session.commit()
     await session.refresh(intent)
 
-    # 清除缓存
-    router_agent.clear_cache()
 
     logger.info(f"[IntentsAPI] 创建意图: {intent.name} by {admin.username}")
     return IntentResponse.model_validate(intent)
@@ -252,8 +249,6 @@ async def update_intent(
     await session.commit()
     await session.refresh(intent)
 
-    # 清除缓存
-    router_agent.clear_cache()
 
     logger.info(f"[IntentsAPI] 更新意图: {intent.name} by {admin.username}")
     return IntentResponse.model_validate(intent)
@@ -277,8 +272,6 @@ async def delete_intent(
     await session.delete(intent)
     await session.commit()
 
-    # 清除缓存
-    router_agent.clear_cache()
 
     logger.info(f"[IntentsAPI] 删除意图: {intent.name} by {admin.username}")
     return {"message": "删除成功"}
@@ -296,36 +289,37 @@ async def test_route(
 
     输入一段文本，返回路由结果
     """
-    metadata = {}
-    if data.subject:
-        metadata["subject"] = data.subject
+    from app.agents.registry import agent_registry
 
-    result = await router_agent.route_text(
-        content=data.content,
-        source=data.source,
-        metadata=metadata,
+    # 使用 email_summarizer 进行意图分类
+    input_text = f"Subject: {data.subject}\n\n{data.content}" if data.subject else data.content
+
+    result = await agent_registry.run(
+        "email_summarizer",
+        input_text=input_text,
     )
 
+    # 从 email_summarizer 结果中提取信息
+    intent = "other"
+    intent_label = "其他"
+    reasoning = ""
+
+    if result.success and result.data:
+        intent = result.data.get("intent", "other")
+        intent_label = result.data.get("summary", "未知意图")[:30]
+        reasoning = result.data.get("business_info", {}).get("notes", "")
+
     return RouteTestResponse(
-        intent=result.intent,
-        intent_label=result.intent_label,
-        confidence=result.confidence,
-        reasoning=result.reasoning,
-        action=result.action,
-        handler_config=result.handler_config,
-        workflow_name=result.workflow_name,
-        needs_escalation=result.needs_escalation,
-        escalation_reason=result.escalation_reason,
-        new_suggestion=(
-            {
-                "name": result.new_suggestion.name,
-                "label": result.new_suggestion.label,
-                "description": result.new_suggestion.description,
-                "suggested_handler": result.new_suggestion.suggested_handler,
-            }
-            if result.new_suggestion
-            else None
-        ),
+        intent=intent,
+        intent_label=intent_label,
+        confidence=0.8 if result.success else 0.0,
+        reasoning=reasoning,
+        action="agent",
+        handler_config={},
+        workflow_name=None,
+        needs_escalation=False,
+        escalation_reason=None,
+        new_suggestion=None,
     )
 
 
@@ -416,8 +410,6 @@ async def approve_suggestion(
     await session.commit()
     await session.refresh(intent)
 
-    # 清除缓存
-    router_agent.clear_cache()
 
     logger.info(
         f"[IntentsAPI] 批准建议: {suggestion.suggested_name} -> {intent.id} "

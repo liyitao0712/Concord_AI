@@ -31,6 +31,13 @@ class EmailAccountCreate(EmailAccountBase):
     imap_user: Optional[str] = Field(None, description="IMAP 用户名/邮箱")
     imap_password: Optional[str] = Field(None, description="IMAP 密码")
     imap_use_ssl: bool = Field(True, description="是否使用 SSL")
+    imap_folder: str = Field("INBOX", description="监控的邮件文件夹")
+    imap_mark_as_read: bool = Field(False, description="拉取后是否标记已读")
+
+    # IMAP 同步策略配置
+    imap_sync_days: Optional[int] = Field(None, ge=1, description="同步多少天的历史邮件（None=全部）")
+    imap_unseen_only: bool = Field(False, description="是否只同步未读邮件")
+    imap_fetch_limit: int = Field(50, ge=1, le=500, description="每次拉取的邮件数量上限")
 
     # 状态
     is_default: bool = Field(False, description="是否设为默认邮箱")
@@ -55,6 +62,13 @@ class EmailAccountUpdate(BaseModel):
     imap_user: Optional[str] = None
     imap_password: Optional[str] = None  # 留空表示不修改
     imap_use_ssl: Optional[bool] = None
+    imap_folder: Optional[str] = None
+    imap_mark_as_read: Optional[bool] = None
+
+    # IMAP 同步策略配置
+    imap_sync_days: Optional[int] = Field(None, ge=1)
+    imap_unseen_only: Optional[bool] = None
+    imap_fetch_limit: Optional[int] = Field(None, ge=1, le=500)
 
     # 状态
     is_active: Optional[bool] = None
@@ -80,6 +94,13 @@ class EmailAccountResponse(BaseModel):
     imap_user: Optional[str]
     imap_use_ssl: bool
     imap_configured: bool = Field(description="IMAP 是否已完整配置")
+    imap_folder: str
+    imap_mark_as_read: bool
+
+    # IMAP 同步策略配置
+    imap_sync_days: Optional[int] = Field(description="同步多少天的历史邮件（None=全部）")
+    imap_unseen_only: bool = Field(description="是否只同步未读邮件")
+    imap_fetch_limit: int = Field(description="每次拉取的邮件数量上限")
 
     # 状态
     is_default: bool

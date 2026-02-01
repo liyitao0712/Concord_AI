@@ -30,7 +30,6 @@ from app.api import health
 from app.api import auth
 from app.api import llm
 from app.api import admin
-from app.api import workflows
 from app.api import agents
 from app.api import settings as settings_router
 from app.api import admin_monitor
@@ -315,14 +314,6 @@ app.include_router(llm.router)
 # - POST /admin/users/{id}/toggle - 启用/禁用用户
 # - POST /admin/users/{id}/reset-password - 重置密码
 app.include_router(admin.router)
-
-# 工作流路由（Temporal Workflow 管理）
-# - POST /api/workflows/approval - 创建审批工作流
-# - GET /api/workflows/{id}/status - 查询工作流状态
-# - POST /api/workflows/{id}/approve - 审批通过
-# - POST /api/workflows/{id}/reject - 审批拒绝
-# - POST /api/workflows/{id}/cancel - 取消工作流
-app.include_router(workflows.router)
 
 # Agent 路由（AI Agent 调用）
 # - GET /api/agents - 列出所有 Agent

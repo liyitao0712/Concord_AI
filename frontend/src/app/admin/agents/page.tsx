@@ -22,34 +22,10 @@ const AGENTS: AgentConfig[] = [
     prompt_name: 'chat_agent',
   },
   {
-    name: 'email_analyzer',
-    display_name: '邮件分析器',
-    description: '分析邮件内容，提取关键信息',
-    prompt_name: 'email_analyzer',
-  },
-  {
     name: 'email_summarizer',
     display_name: '邮件摘要生成器',
     description: '生成邮件摘要和关键要点',
     prompt_name: 'email_summarizer',
-  },
-  {
-    name: 'intent_classifier',
-    display_name: '意图分类器',
-    description: '分类邮件意图和紧急程度',
-    prompt_name: 'intent_classifier',
-  },
-  {
-    name: 'quote_agent',
-    display_name: '报价助手',
-    description: '处理报价相关的邮件',
-    prompt_name: 'quote_agent',
-  },
-  {
-    name: 'router_agent',
-    display_name: '路由代理',
-    description: '根据意图路由到相应的处理流程',
-    prompt_name: 'router_agent',
   },
 ];
 

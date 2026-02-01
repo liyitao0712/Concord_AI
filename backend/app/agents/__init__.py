@@ -17,9 +17,6 @@ from app.agents.registry import AgentRegistry, agent_registry
 from app.agents.chat_agent import ChatAgent, chat_agent
 
 # 导入 Agent 实现以触发注册
-from app.agents import email_analyzer  # noqa: F401
-from app.agents import intent_classifier  # noqa: F401
-from app.agents import quote_agent  # noqa: F401
 from app.agents import email_summarizer  # noqa: F401
 
 __all__ = [

@@ -114,16 +114,16 @@ async def poll_email_account(self, account_id: int):
                 "error": "account_not_found_or_disabled",
             }
 
-        # 获取上次检查点
-        last_check = await _get_checkpoint(redis_conn, account_id)
+        # 获取上次检查点（使用账户配置的同步天数）
+        last_check = await _get_checkpoint(redis_conn, account_id, account.imap_sync_days)
         logger.debug(f"[Celery:PollEmail] 上次检查时间: {last_check}")
 
-        # 拉取新邮件
+        # 拉取新邮件（使用账户配置）
         emails = await imap_fetch(
             folder=account.imap_folder,
-            limit=50,  # 每次最多拉取 50 封
+            limit=account.imap_fetch_limit,  # 使用账户配置的拉取数量
             since=last_check,
-            unseen_only=True,
+            unseen_only=account.imap_unseen_only,  # 使用账户配置的未读策略
             account_id=account_id,
         )
 
@@ -297,8 +297,18 @@ async def process_email(self, email_data: dict, account_id: int):
 
 # ==================== 辅助函数 ====================
 
-async def _get_checkpoint(redis_conn, account_id: int) -> Optional[datetime]:
-    """获取邮箱的上次检查时间"""
+async def _get_checkpoint(redis_conn, account_id: int, sync_days: Optional[int] = None) -> Optional[datetime]:
+    """
+    获取邮箱的上次检查时间
+
+    Args:
+        redis_conn: Redis 连接
+        account_id: 账户 ID
+        sync_days: 同步天数配置（None=全部历史，1=1天前，30=30天前）
+
+    Returns:
+        上次检查时间或根据配置计算的起始时间
+    """
     checkpoint_key = f"email_worker:{account_id}:last_check"
     timestamp = await redis_conn.get(checkpoint_key)
 
@@ -308,8 +318,13 @@ async def _get_checkpoint(redis_conn, account_id: int) -> Optional[datetime]:
         except ValueError:
             pass
 
-    # 默认返回 1 天前
-    return datetime.now() - timedelta(days=1)
+    # 首次运行：根据配置决定同步范围
+    if sync_days is None:
+        # None 表示同步全部历史邮件（从很久以前开始）
+        return datetime(2000, 1, 1)  # 从 2000 年开始，基本覆盖所有邮件
+    else:
+        # 同步指定天数的邮件
+        return datetime.now() - timedelta(days=sync_days)
 
 
 async def _save_checkpoint(redis_conn, account_id: int) -> None:

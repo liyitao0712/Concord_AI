@@ -72,6 +72,23 @@ class EmailAccount(Base):
     imap_folder: Mapped[str] = mapped_column(String(100), default="INBOX", comment="监控的邮件文件夹")
     imap_mark_as_read: Mapped[bool] = mapped_column(Boolean, default=False, comment="拉取后是否标记已读")
 
+    # IMAP 同步策略配置
+    imap_sync_days: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="同步多少天的历史邮件（None=全部，1=1天前，30=30天前）"
+    )
+    imap_unseen_only: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        comment="是否只同步未读邮件（False=同步全部）"
+    )
+    imap_fetch_limit: Mapped[int] = mapped_column(
+        Integer,
+        default=50,
+        comment="每次拉取的邮件数量上限"
+    )
+
     # 状态
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否为默认邮箱")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, comment="是否启用")

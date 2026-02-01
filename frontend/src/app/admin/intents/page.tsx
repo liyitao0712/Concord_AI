@@ -412,11 +412,6 @@ export default function IntentsPage() {
                       <span className={`px-2 py-1 text-xs rounded ${getHandlerColor(intent.default_handler)}`}>
                         {intent.default_handler}
                       </span>
-                      {intent.escalation_workflow && (
-                        <span className="ml-1 text-xs text-gray-400">
-                          (可升级)
-                        </span>
-                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {intent.priority}
@@ -649,11 +644,6 @@ export default function IntentsPage() {
                     <span className={`px-2 py-1 text-sm rounded ${getHandlerColor(testResult.action)}`}>
                       {testResult.action}
                     </span>
-                    {testResult.workflow_name && (
-                      <span className="ml-2 text-sm text-gray-500">
-                        ({testResult.workflow_name})
-                      </span>
-                    )}
                   </div>
                 </div>
 
@@ -810,7 +800,6 @@ export default function IntentsPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="agent">Agent（直接处理）</option>
-                <option value="workflow">Workflow（需要审批）</option>
               </select>
             </div>
 
@@ -827,21 +816,6 @@ export default function IntentsPage() {
               />
               <p className="mt-1 text-xs text-gray-500">数字越大优先级越高</p>
             </div>
-          </div>
-
-          {/* 升级工作流 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              升级工作流（可选）
-            </label>
-            <input
-              type="text"
-              value={formData.escalation_workflow || ''}
-              onChange={(e) => setFormData({ ...formData, escalation_workflow: e.target.value || undefined })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="QuoteApprovalWorkflow"
-            />
-            <p className="mt-1 text-xs text-gray-500">当满足升级条件时，使用此工作流</p>
           </div>
 
           {/* 操作按钮 */}

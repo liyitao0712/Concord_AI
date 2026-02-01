@@ -123,20 +123,6 @@ class Settings(BaseSettings):
     # 本地文件是否启用（优先级低于 OSS，OSS 可用时不使用本地存储）
     LOCAL_STORAGE_ENABLED: bool = True
 
-    # ==================== Temporal 配置 ====================
-    # Temporal Server 地址
-    # 开发环境使用 docker-compose 启动的 Temporal：localhost:7233
-    # 生产环境使用 Temporal Cloud 或自建集群
-    TEMPORAL_HOST: str = "localhost:7233"
-
-    # Temporal 命名空间
-    # 用于隔离不同环境/租户的工作流
-    TEMPORAL_NAMESPACE: str = "default"
-
-    # 任务队列名称
-    # Worker 监听这个队列来执行 Workflow 和 Activity
-    TEMPORAL_TASK_QUEUE: str = "concord-main-queue"
-
     # ==================== 飞书机器人配置 ====================
     # 飞书应用 App ID 和 Secret
     # 获取方式：https://open.feishu.cn/app 创建应用

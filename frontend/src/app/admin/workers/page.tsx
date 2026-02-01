@@ -513,9 +513,7 @@ export default function WorkersPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="chat_agent">通用聊天助手</option>
-                  <option value="email_analyzer">邮件分析</option>
-                  <option value="intent_classifier">意图分类</option>
-                  <option value="quote_agent">报价助手</option>
+                  <option value="email_summarizer">邮件摘要</option>
                 </select>
               </div>
 

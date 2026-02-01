@@ -30,9 +30,6 @@ interface RouteAnalyzeResult {
   reasoning: string;
   action: string;
   handler_config: Record<string, unknown>;
-  workflow_name: string | null;
-  needs_escalation: boolean;
-  escalation_reason: string | null;
   new_suggestion: {
     name: string;
     label: string;
@@ -682,20 +679,10 @@ export default function EmailsPage() {
               <div className="space-y-2">
                 <div className="flex items-center">
                   <span className="w-20 text-xs text-gray-500">动作:</span>
-                  <span className={`px-2 py-0.5 text-xs rounded ${
-                    analyzeResult.action === 'workflow'
-                      ? 'bg-orange-100 text-orange-800'
-                      : 'bg-blue-100 text-blue-800'
-                  }`}>
-                    {analyzeResult.action === 'workflow' ? 'Temporal 工作流' : 'Agent 直接处理'}
+                  <span className="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-800">
+                    Agent 处理
                   </span>
                 </div>
-                {analyzeResult.workflow_name && (
-                  <div className="flex items-center">
-                    <span className="w-20 text-xs text-gray-500">工作流:</span>
-                    <span className="text-sm text-gray-900">{analyzeResult.workflow_name}</span>
-                  </div>
-                )}
                 {analyzeResult.handler_config && Object.keys(analyzeResult.handler_config).length > 0 && (
                   <div className="flex items-start">
                     <span className="w-20 text-xs text-gray-500">配置:</span>
@@ -706,21 +693,6 @@ export default function EmailsPage() {
                 )}
               </div>
             </div>
-
-            {/* 升级提示 */}
-            {analyzeResult.needs_escalation && (
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                <div className="flex items-start">
-                  <svg className="w-5 h-5 text-orange-500 mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <div>
-                    <h4 className="text-sm font-medium text-orange-800">需要人工审批</h4>
-                    <p className="text-sm text-orange-700 mt-1">{analyzeResult.escalation_reason}</p>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* 新意图建议 */}
             {analyzeResult.new_suggestion && (
