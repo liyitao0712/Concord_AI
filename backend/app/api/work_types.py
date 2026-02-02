@@ -104,27 +104,31 @@ async def get_work_type_tree(
 
     返回嵌套的树形数据，顶级节点包含其子节点
     """
-    # 查询所有工作类型（预加载 children）
-    query = select(WorkType).options(
-        selectinload(WorkType.children)
-    ).where(
-        WorkType.parent_id.is_(None)
-    ).order_by(WorkType.code)
+    # 查询所有工作类型（一次性加载，避免 lazy load 导致 greenlet 错误）
+    query = select(WorkType).order_by(WorkType.level, WorkType.code)
 
     if is_active is not None:
         query = query.where(WorkType.is_active == is_active)
 
     result = await session.execute(query)
-    roots = list(result.scalars().all())
+    all_items = list(result.scalars().all())
+
+    # 构建 id -> 节点 和 parent_id -> children 映射
+    id_to_item: dict[str, WorkType] = {item.id: item for item in all_items}
+    parent_to_children: dict[Optional[str], List[WorkType]] = {}
+
+    for item in all_items:
+        parent_id = item.parent_id
+        if parent_id not in parent_to_children:
+            parent_to_children[parent_id] = []
+        parent_to_children[parent_id].append(item)
 
     def build_tree(node: WorkType) -> WorkTypeTreeNode:
-        """递归构建树形节点"""
+        """递归构建树形节点（使用预先构建的映射，无需数据库访问）"""
         children = []
-        if node.children:
-            for child in node.children:
-                # 如果过滤 is_active，子节点也要过滤
-                if is_active is None or child.is_active == is_active:
-                    children.append(build_tree(child))
+        child_items = parent_to_children.get(node.id, [])
+        for child in child_items:
+            children.append(build_tree(child))
 
         return WorkTypeTreeNode(
             id=node.id,
@@ -139,6 +143,8 @@ async def get_work_type_tree(
             children=children,
         )
 
+    # 获取顶级节点（parent_id 为 None）
+    roots = parent_to_children.get(None, [])
     tree_items = [build_tree(r) for r in roots]
 
     return WorkTypeTreeResponse(

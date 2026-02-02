@@ -900,3 +900,93 @@ async def get_email_analysis(
         token_used=analysis.token_used,
         created_at=analysis.created_at.isoformat() if analysis.created_at else None,
     )
+
+
+# ==================== 工作类型分析 ====================
+
+class WorkTypeAnalyzeResponse(BaseModel):
+    """工作类型分析结果"""
+    email_id: str
+    matched_work_type: Optional[dict] = None  # {code, confidence, reason}
+    new_suggestion: Optional[dict] = None  # {should_suggest, suggested_code, ...}
+    suggestion_id: Optional[str] = None  # 如果创建了建议，返回建议 ID
+    llm_model: Optional[str] = None
+
+
+@router.post("/{email_id}/work-type-analyze", response_model=WorkTypeAnalyzeResponse)
+async def analyze_email_work_type(
+    email_id: str,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_admin_user),
+):
+    """
+    分析邮件工作类型
+
+    使用 WorkTypeAnalyzer Agent 分析邮件内容，判断工作类型：
+    - 匹配现有工作类型
+    - 识别并建议新的工作类型（置信度 >= 0.6 时）
+    - 如果建议新类型，自动创建 WorkTypeSuggestion 并启动 Temporal 审批流程
+
+    注意：此功能需要手动触发，不会在邮件接收时自动执行。
+    """
+    from app.agents.work_type_analyzer import work_type_analyzer
+
+    # 获取邮件
+    query = select(EmailRawMessage).where(EmailRawMessage.id == email_id)
+    result = await session.execute(query)
+    email = result.scalar_one_or_none()
+
+    if not email:
+        raise HTTPException(status_code=404, detail="邮件不存在")
+
+    # 获取邮件正文
+    body_text = await _get_email_body_text(email)
+    if not body_text or not body_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="邮件正文为空，无法进行工作类型分析"
+        )
+
+    # 调用 WorkTypeAnalyzer
+    try:
+        analysis_result = await work_type_analyzer.analyze(
+            email_id=email.id,
+            sender=email.sender,
+            subject=email.subject,
+            content=body_text,
+            received_at=email.received_at,
+            session=session,
+        )
+
+        # 如果建议新类型，创建 suggestion
+        suggestion_id = None
+        if analysis_result.get("new_suggestion", {}).get("should_suggest"):
+            suggestion_id = await work_type_analyzer.create_suggestion_if_needed(
+                result=analysis_result,
+                email_id=email.id,
+                trigger_content=f"主题: {email.subject}\n\n{body_text[:200]}",
+                session=session,
+            )
+
+        return WorkTypeAnalyzeResponse(
+            email_id=email.id,
+            matched_work_type=analysis_result.get("matched_work_type"),
+            new_suggestion=analysis_result.get("new_suggestion"),
+            suggestion_id=suggestion_id,
+            llm_model=analysis_result.get("llm_model"),
+        )
+
+    except ValueError as e:
+        error_msg = str(e)
+        if "未找到可用的 LLM 模型配置" in error_msg or "API Key 未配置" in error_msg:
+            raise HTTPException(
+                status_code=400,
+                detail="LLM 模型未配置。请前往「管理后台 → LLM 配置」页面添加模型配置。"
+            )
+        raise HTTPException(status_code=400, detail=error_msg)
+    except Exception as e:
+        logger.error(f"[EmailAPI] 工作类型分析失败: {email_id}, {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"工作类型分析失败: {str(e)}"
+        )

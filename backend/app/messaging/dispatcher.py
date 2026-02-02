@@ -5,8 +5,8 @@
 # 1. 接收 UnifiedEvent
 # 2. 幂等性检查（防止重复处理）
 # 3. 保存事件到数据库
-# 4. 并行调用 Agent 进行分析（EmailSummarizer + WorkTypeAnalyzer）
-# 5. 根据意图启动对应的 Temporal Workflow
+# 4. 调用 EmailSummarizer 进行意图分类
+# 5. WorkTypeAnalyzer 需要手动触发（通过 API）
 #
 # 使用方法：
 #   from app.messaging.dispatcher import EventDispatcher, event_dispatcher
@@ -38,7 +38,7 @@ class EventDispatcher:
     1. 接收统一事件
     2. 幂等性检查
     3. 保存事件到数据库
-    4. 并行分类（EmailSummarizer + WorkTypeAnalyzer）
+    4. 意图分类（仅 EmailSummarizer，WorkTypeAnalyzer 需手动触发）
     5. 记录日志（不再启动 Workflow，改为人工处理）
     """
 
@@ -73,16 +73,11 @@ class EventDispatcher:
                 # 2. 保存事件到数据库
                 db_event = await self._save_event(session, event)
 
-                # 3. 并行分类（EmailSummarizer + WorkTypeAnalyzer）
-                intent, work_type = await self._classify_parallel(event, session)
+                # 3. 意图分类（仅 EmailSummarizer）
+                # 注意：WorkTypeAnalyzer 需要通过 API 手动触发
+                intent = await self._classify_intent(event, session)
                 db_event.intent = intent
-                # 存储 work_type 到 metadata
-                if work_type:
-                    db_event.metadata = {
-                        **(db_event.metadata or {}),
-                        "work_type": work_type,
-                    }
-                logger.info(f"[Dispatcher] 分类完成: intent={intent}, work_type={work_type}")
+                logger.info(f"[Dispatcher] 意图分类完成: intent={intent}")
 
                 # 4. 标记为已完成（不再启动 Workflow）
                 db_event.mark_completed()
@@ -91,7 +86,7 @@ class EventDispatcher:
 
                 logger.info(
                     f"[Dispatcher] 事件已分类并保存: event_id={event.event_id}, "
-                    f"intent={intent}, work_type={work_type}（待人工处理）"
+                    f"intent={intent}（待人工处理）"
                 )
 
                 return None
@@ -241,7 +236,7 @@ class EventDispatcher:
 
     async def _classify_intent(self, event: UnifiedEvent, session) -> str:
         """
-        调用 email_summarizer Agent 进行意图分类（兼容方法）
+        调用 email_summarizer Agent 进行意图分类
 
         Args:
             event: 统一事件
@@ -250,8 +245,43 @@ class EventDispatcher:
         Returns:
             str: 意图类型
         """
-        intent, _ = await self._classify_parallel(event, session)
-        return intent
+        try:
+            # 构建分类输入
+            input_text = event.content
+            subject = ""
+
+            if event.event_type == "email":
+                subject = event.metadata.get("subject", "")
+                if subject:
+                    input_text = f"主题: {subject}\n\n{input_text}"
+
+            # 准备 input_data
+            input_data = {
+                "email_id": event.event_id,
+                "sender": event.metadata.get("sender", ""),
+                "sender_name": event.metadata.get("sender_name"),
+                "subject": subject,
+                "body_text": event.content,
+                "body_html": event.metadata.get("body_html"),
+                "received_at": event.metadata.get("received_at"),
+            }
+
+            # 只执行 EmailSummarizer
+            result = await agent_registry.run(
+                "email_summarizer",
+                input_text=input_text,
+                input_data=input_data,
+                db=session,
+            )
+
+            if result.success and result.data:
+                return result.data.get("intent", "other")
+
+            return "other"
+
+        except Exception as e:
+            logger.warning(f"[Dispatcher] 意图分类失败，使用默认: {e}")
+            return "other"
 
     async def update_event_status(
         self,

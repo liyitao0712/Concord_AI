@@ -17,7 +17,7 @@ from uuid import uuid4
 
 # revision identifiers, used by Alembic.
 revision = 'j9k0l1m2n3o4'
-down_revision = 'i8j9k0l1m2n3'
+down_revision = 'd0df431218d1'
 branch_labels = None
 depends_on = None
 

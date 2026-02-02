@@ -19,6 +19,7 @@ import {
   EmailDetail,
   EmailAccount,
   EmailAnalysisResult,
+  WorkTypeAnalyzeResult,
   getAccessToken,
 } from '@/lib/api';
 
@@ -136,6 +137,11 @@ export default function EmailsPage() {
   const [showAiAnalysisModal, setShowAiAnalysisModal] = useState(false);
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
   const [aiAnalysisResult, setAiAnalysisResult] = useState<EmailAnalysisResult | null>(null);
+
+  // 工作类型分析
+  const [showWorkTypeModal, setShowWorkTypeModal] = useState(false);
+  const [workTypeAnalyzing, setWorkTypeAnalyzing] = useState(false);
+  const [workTypeResult, setWorkTypeResult] = useState<WorkTypeAnalyzeResult | null>(null);
 
   // 加载邮箱账户列表
   useEffect(() => {
@@ -283,6 +289,39 @@ export default function EmailsPage() {
     }
 
     setAiAnalyzing(false);
+  };
+
+  // 工作类型分析
+  const handleWorkTypeAnalyze = async (emailId: string) => {
+    setAnalyzingEmailId(emailId);
+    setWorkTypeAnalyzing(true);
+    setWorkTypeResult(null);
+    setShowWorkTypeModal(true);
+
+    try {
+      const result = await emailsApi.workTypeAnalyze(emailId);
+      setWorkTypeResult(result);
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : '工作类型分析失败';
+
+      if (
+        errorMessage.includes('LLM 模型未配置') ||
+        errorMessage.includes('API Key 未配置')
+      ) {
+        const confirmGoToConfig = confirm(
+          `❌ ${errorMessage}\n\n点击「确定」前往 LLM 配置页面添加模型配置。`
+        );
+        if (confirmGoToConfig) {
+          window.location.href = '/admin/llm';
+        }
+      } else {
+        alert(`❌ ${errorMessage}`);
+      }
+
+      setShowWorkTypeModal(false);
+    }
+
+    setWorkTypeAnalyzing(false);
   };
 
   // 计算分页
@@ -436,6 +475,13 @@ export default function EmailsPage() {
                       title="AI 外贸邮件分析"
                     >
                       AI分析
+                    </button>
+                    <button
+                      onClick={() => handleWorkTypeAnalyze(email.id)}
+                      className="text-orange-600 hover:text-orange-900"
+                      title="工作类型分析"
+                    >
+                      类型
                     </button>
                     <button
                       onClick={() => handleAnalyze(email.id)}
@@ -988,6 +1034,144 @@ export default function EmailsPage() {
                   setAnalyzingEmailId(null);
                 }}
                 className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      {/* 工作类型分析弹窗 */}
+      <Modal
+        isOpen={showWorkTypeModal}
+        onClose={() => {
+          setShowWorkTypeModal(false);
+          setWorkTypeResult(null);
+          setAnalyzingEmailId(null);
+        }}
+        title="工作类型分析"
+        wide
+      >
+        {workTypeAnalyzing ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-orange-500 border-t-transparent mb-4"></div>
+            <p className="text-gray-600">正在分析工作类型...</p>
+            <p className="text-xs text-gray-400 mt-2">AI 正在匹配现有类型或识别新类型</p>
+          </div>
+        ) : workTypeResult ? (
+          <div className="space-y-4">
+            {/* 匹配结果 */}
+            {workTypeResult.matched_work_type ? (
+              <div className="bg-green-50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium text-gray-700">匹配到的工作类型</h4>
+                  <span
+                    className={`px-2 py-1 text-xs font-medium rounded ${
+                      workTypeResult.matched_work_type.confidence >= 0.8
+                        ? 'bg-green-100 text-green-800'
+                        : workTypeResult.matched_work_type.confidence >= 0.5
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    置信度: {(workTypeResult.matched_work_type.confidence * 100).toFixed(0)}%
+                  </span>
+                </div>
+                <div className="flex items-center space-x-3 mb-2">
+                  <span className="px-3 py-1.5 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                    {workTypeResult.matched_work_type.code}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600">{workTypeResult.matched_work_type.reason}</p>
+              </div>
+            ) : (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-sm text-gray-500">未匹配到现有工作类型</p>
+              </div>
+            )}
+
+            {/* 新类型建议 */}
+            {workTypeResult.new_suggestion?.should_suggest && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <svg className="w-5 h-5 text-orange-500 mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-medium text-orange-800">AI 建议创建新工作类型</h4>
+                    <div className="mt-2 space-y-1 text-sm">
+                      <p>
+                        <span className="text-gray-500">代码:</span>{' '}
+                        <span className="font-medium">{workTypeResult.new_suggestion.suggested_code}</span>
+                      </p>
+                      <p>
+                        <span className="text-gray-500">名称:</span>{' '}
+                        <span className="font-medium">{workTypeResult.new_suggestion.suggested_name}</span>
+                      </p>
+                      {workTypeResult.new_suggestion.suggested_parent_code && (
+                        <p>
+                          <span className="text-gray-500">父级:</span>{' '}
+                          {workTypeResult.new_suggestion.suggested_parent_code}
+                        </p>
+                      )}
+                      <p>
+                        <span className="text-gray-500">描述:</span>{' '}
+                        {workTypeResult.new_suggestion.suggested_description}
+                      </p>
+                      <p>
+                        <span className="text-gray-500">置信度:</span>{' '}
+                        <span className={`px-2 py-0.5 rounded text-xs ${
+                          (workTypeResult.new_suggestion.confidence || 0) >= 0.8
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {((workTypeResult.new_suggestion.confidence || 0) * 100).toFixed(0)}%
+                        </span>
+                      </p>
+                      {workTypeResult.new_suggestion.reasoning && (
+                        <p>
+                          <span className="text-gray-500">推理:</span>{' '}
+                          <span className="text-gray-600">{workTypeResult.new_suggestion.reasoning}</span>
+                        </p>
+                      )}
+                    </div>
+                    {workTypeResult.suggestion_id ? (
+                      <div className="mt-3 p-2 bg-green-100 rounded text-sm text-green-800">
+                        ✅ 已创建审批请求，请前往「工作类型管理」页面审批
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-orange-600">
+                        此建议将自动进入审批流程，管理员确认后生效
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 元数据 */}
+            <div className="text-xs text-gray-400 pt-2 border-t">
+              <span>模型: {workTypeResult.llm_model || '-'}</span>
+            </div>
+
+            {/* 操作按钮 */}
+            <div className="flex justify-end space-x-3 pt-4 border-t">
+              {workTypeResult.suggestion_id && (
+                <a
+                  href="/admin/work-types"
+                  className="px-4 py-2 border border-orange-300 text-orange-700 rounded-md text-sm hover:bg-orange-50"
+                >
+                  前往审批
+                </a>
+              )}
+              <button
+                onClick={() => {
+                  setShowWorkTypeModal(false);
+                  setWorkTypeResult(null);
+                  setAnalyzingEmailId(null);
+                }}
+                className="px-4 py-2 bg-orange-600 text-white rounded-md text-sm hover:bg-orange-700"
               >
                 关闭
               </button>
