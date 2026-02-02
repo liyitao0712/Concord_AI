@@ -70,7 +70,7 @@ if [ "$RUN_MODE" = "all" ] || [ "$RUN_MODE" = "worker" ]; then
     echo ""
     echo "[2/6] 停止 Temporal Worker..."
 
-    WORKER_PID=$(pgrep -f "app.workflows.worker" 2>/dev/null || true)
+    WORKER_PID=$(pgrep -f "app.temporal.worker" 2>/dev/null || true)
     if [ -n "$WORKER_PID" ]; then
         kill $WORKER_PID 2>/dev/null || true
         echo "  Temporal Worker 已停止 (PID: $WORKER_PID)"
@@ -162,7 +162,7 @@ if [ "$RUN_MODE" = "all" ] || [ "$RUN_MODE" = "worker" ]; then
 
     cd backend
     source venv/bin/activate
-    nohup python -m app.workflows.worker > ../logs/worker.log 2>&1 &
+    nohup python -m app.temporal.worker > ../logs/worker.log 2>&1 &
     WORKER_PID=$!
     echo "  Temporal Worker 已启动 (PID: $WORKER_PID)"
     cd "$PROJECT_ROOT"

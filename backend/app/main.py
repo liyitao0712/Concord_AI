@@ -40,6 +40,7 @@ from app.api import emails as emails_router
 from app.api import intents as intents_router
 from app.api import prompts as prompts_router
 from app.api import llm_models
+from app.api import work_types as work_types_router
 
 
 # 初始化日志系统（在应用启动前）
@@ -388,6 +389,15 @@ app.include_router(emails_router.router)
 # - POST /admin/intent-suggestions/{id}/reject - 拒绝建议
 app.include_router(intents_router.router)
 app.include_router(intents_router.suggestions_router)
+
+# 工作类型管理路由（仅管理员）
+# - GET/POST /admin/work-types - 工作类型 CRUD
+# - GET /admin/work-types/tree - 树形结构
+# - GET /admin/work-type-suggestions - 建议列表
+# - POST /admin/work-type-suggestions/{id}/approve - 批准建议
+# - POST /admin/work-type-suggestions/{id}/reject - 拒绝建议
+app.include_router(work_types_router.router)
+app.include_router(work_types_router.suggestions_router)
 
 # Prompt 模板管理路由（仅管理员）
 # - GET /admin/prompts - Prompt 列表

@@ -18,6 +18,7 @@ from app.agents.chat_agent import ChatAgent, chat_agent
 
 # 导入 Agent 实现以触发注册
 from app.agents import email_summarizer  # noqa: F401
+from app.agents import work_type_analyzer  # noqa: F401
 
 __all__ = [
     "BaseAgent",

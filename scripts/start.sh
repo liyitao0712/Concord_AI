@@ -107,7 +107,7 @@ if [ "$RUN_MODE" = "all" ] || [ "$RUN_MODE" = "worker" ]; then
     echo "[2/4] 启动 Temporal Worker..."
 
     # 停止已有的 Worker
-    WORKER_PID=$(pgrep -f "app.workflows.worker" 2>/dev/null || true)
+    WORKER_PID=$(pgrep -f "app.temporal.worker" 2>/dev/null || true)
     if [ -n "$WORKER_PID" ]; then
         kill $WORKER_PID 2>/dev/null || true
         sleep 1
@@ -116,7 +116,7 @@ if [ "$RUN_MODE" = "all" ] || [ "$RUN_MODE" = "worker" ]; then
     # 启动 Worker（后台运行）
     cd backend
     source venv/bin/activate
-    nohup python -m app.workflows.worker > ../logs/worker.log 2>&1 &
+    nohup python -m app.temporal.worker > ../logs/worker.log 2>&1 &
     WORKER_PID=$!
     echo "  Temporal Worker 已启动 (PID: $WORKER_PID)"
     echo "  日志: logs/worker.log"

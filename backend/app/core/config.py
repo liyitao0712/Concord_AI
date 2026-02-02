@@ -130,6 +130,20 @@ class Settings(BaseSettings):
     FEISHU_APP_ID: str = ""
     FEISHU_APP_SECRET: str = ""
 
+    # ==================== Temporal 工作流引擎配置 ====================
+    # Temporal 服务地址
+    # 本地开发：localhost:7233
+    # 生产环境：temporal.your-domain.com:7233
+    TEMPORAL_HOST: str = "localhost:7233"
+
+    # Temporal 命名空间
+    # 用于隔离不同环境的工作流（dev/staging/prod）
+    TEMPORAL_NAMESPACE: str = "default"
+
+    # Temporal 任务队列名称
+    # Worker 从这个队列获取任务执行
+    TEMPORAL_TASK_QUEUE: str = "concord-main-queue"
+
     # ==================== JWT 认证配置 ====================
     # JWT 密钥，用于签名和验证 Token
     # 重要：生产环境必须更换为随机生成的强密钥！

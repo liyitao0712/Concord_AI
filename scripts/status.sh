@@ -113,7 +113,7 @@ else
 fi
 
 # 检查 Temporal Worker
-WORKER_PID=$(pgrep -f "app.workflows.worker" 2>/dev/null || true)
+WORKER_PID=$(pgrep -f "app.temporal.worker" 2>/dev/null || true)
 if [ -n "$WORKER_PID" ]; then
     echo "  Temporal Worker:[运行中] (PID: $WORKER_PID)"
 else

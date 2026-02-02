@@ -50,7 +50,7 @@ fi
 echo ""
 echo "[2/4] 停止 Temporal Worker..."
 
-WORKER_PID=$(pgrep -f "app.workflows.worker" 2>/dev/null || true)
+WORKER_PID=$(pgrep -f "app.temporal.worker" 2>/dev/null || true)
 if [ -n "$WORKER_PID" ]; then
     kill $WORKER_PID 2>/dev/null || true
     echo "  Temporal Worker 已停止 (PID: $WORKER_PID)"

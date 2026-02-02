@@ -20,6 +20,7 @@ const navigation = [
   { name: 'LLM 配置', href: '/admin/llm', icon: '🤖' },
   { name: 'Agent 管理', href: '/admin/agents', icon: '🧠' },
   { name: '意图管理', href: '/admin/intents', icon: '🎯' },
+  { name: '工作类型', href: '/admin/work-types', icon: '🏷️' },
   { name: '系统日志', href: '/admin/logs', icon: '📋' },
   { name: 'Worker 管理', href: '/admin/workers', icon: '🔌' },
   { name: '邮箱管理', href: '/admin/settings', icon: '📧' },
