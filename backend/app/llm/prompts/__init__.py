@@ -9,6 +9,7 @@ from app.llm.prompts.manager import (
     prompt_manager,
     get_prompt,
     render_prompt,
+    get_system_variables,
 )
 from app.llm.prompts.defaults import DEFAULT_PROMPTS
 
@@ -17,5 +18,6 @@ __all__ = [
     "prompt_manager",
     "get_prompt",
     "render_prompt",
+    "get_system_variables",
     "DEFAULT_PROMPTS",
 ]

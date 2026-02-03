@@ -379,9 +379,9 @@ class LLMGateway:
         """
         # 在系统提示中强调返回 JSON
         if system:
-            system = f"{system}\n\n重要：请只返回有效的 JSON 格式，不要包含其他文本。"
+            system = f"{system}\n\nImportant: Return only valid JSON format. Do not include any other text."
         else:
-            system = "请只返回有效的 JSON 格式，不要包含其他文本。"
+            system = "Important: Return only valid JSON format. Do not include any other text."
 
         response = await self.chat(
             message,

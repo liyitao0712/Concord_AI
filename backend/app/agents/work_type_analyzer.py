@@ -20,56 +20,9 @@ from app.core.database import async_session_maker
 from app.agents.base import BaseAgent, AgentState, AgentResult
 from app.agents.registry import register_agent
 from app.models.work_type import WorkType, WorkTypeSuggestion
+from app.llm.prompts import render_prompt, get_prompt
 
 logger = get_logger(__name__)
-
-
-# 分析 Prompt 模板
-WORK_TYPE_ANALYZER_PROMPT = """你是一个工作类型分类专家。请根据邮件内容判断其工作类型。
-
-## 当前系统支持的工作类型
-
-{work_types_list}
-
-## 邮件信息
-- 发件人: {sender}
-- 主题: {subject}
-- 收件时间: {received_at}
-
-## 邮件正文
-{content}
-
-## 分析要求
-
-请以 JSON 格式返回分析结果：
-
-```json
-{{
-    "matched_work_type": {{
-        "code": "匹配的工作类型代码，如 ORDER_NEW，如果无法匹配则为 null",
-        "confidence": 0.0-1.0,
-        "reason": "匹配原因说明"
-    }},
-
-    "new_suggestion": {{
-        "should_suggest": false,
-        "suggested_code": "建议的新类型代码（全大写英文+下划线），如果不建议则为 null",
-        "suggested_name": "建议的中文名称",
-        "suggested_description": "建议的描述",
-        "suggested_parent_code": "建议的父级代码，如 ORDER，如果是顶级则为 null",
-        "suggested_keywords": ["关键词1", "关键词2"],
-        "confidence": 0.0-1.0,
-        "reasoning": "建议添加新类型的原因"
-    }}
-}}
-```
-
-## 注意事项
-1. 优先匹配现有类型，只有在确实无法匹配且内容有明显特征时才建议新类型
-2. 新类型代码必须全大写英文，如果有父级则以父级代码开头（如 ORDER_URGENT）
-3. 建议新类型的置信度门槛是 0.6，低于此值不要建议
-4. 只返回 JSON，不要有其他内容
-"""
 
 
 @register_agent
@@ -92,8 +45,8 @@ class WorkTypeAnalyzerAgent(BaseAgent):
     tools = []
     max_iterations = 3
 
-    # 建议新类型的置信度门槛
-    SUGGESTION_CONFIDENCE_THRESHOLD = 0.6
+    # 建议新类型的置信度门槛（设为 0 不过滤，让 LLM 自由建议）
+    SUGGESTION_CONFIDENCE_THRESHOLD = 0.0
 
     async def _get_work_types_list(self, session: Optional[AsyncSession] = None) -> str:
         """
@@ -160,21 +113,34 @@ class WorkTypeAnalyzerAgent(BaseAgent):
         # 1. 获取工作类型列表
         work_types_list = await self._get_work_types_list(session)
 
-        # 2. 构建 Prompt
-        prompt = WORK_TYPE_ANALYZER_PROMPT.format(
+        # 2. 加载 system prompt（优先从数据库，fallback 到 defaults.py）
+        system_prompt = await get_prompt("work_type_analyzer_system")
+        if not system_prompt:
+            system_prompt = (
+                "You are a work type classification expert. "
+                "Return results strictly in the requested JSON format."
+            )
+
+        # 3. 构建 user prompt（优先从数据库加载，fallback 到 defaults.py）
+        prompt = await render_prompt(
+            "work_type_analyzer",
             work_types_list=work_types_list,
             sender=sender,
-            subject=subject or "(无主题)",
-            received_at=received_at.strftime("%Y-%m-%d %H:%M") if received_at else "未知",
+            subject=subject or "(No subject)",
+            received_at=received_at.strftime("%Y-%m-%d %H:%M") if received_at else "Unknown",
             content=content[:5000],  # 限制长度
         )
 
-        # 3. 调用 LLM
+        if not prompt:
+            logger.error("[WorkTypeAnalyzer] Failed to load prompt, aborting analysis")
+            return self._empty_result(email_id, "Prompt loading failed")
+
+        # 4. 调用 LLM
         try:
             model = self._get_model()
             response = await self.llm.chat(
                 message=prompt,
-                system="你是一个工作类型分类专家。请严格按照要求的 JSON 格式返回分析结果。",
+                system=system_prompt,
                 model=model,
             )
 

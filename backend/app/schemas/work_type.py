@@ -85,6 +85,12 @@ class WorkTypeUpdate(BaseModel):
     用于 PUT /admin/work-types/{id} 接口
     所有字段都是可选的
     """
+    code: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=100,
+        description="唯一标识码（全大写英文+下划线）",
+    )
     name: Optional[str] = Field(
         None,
         min_length=1,
@@ -107,6 +113,14 @@ class WorkTypeUpdate(BaseModel):
         None,
         description="是否启用",
     )
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: Optional[str]) -> Optional[str]:
+        """验证 code 格式：全大写英文+下划线"""
+        if v is not None and not re.match(r'^[A-Z][A-Z0-9_]*$', v):
+            raise ValueError("code 必须是全大写英文，可包含数字和下划线，不能以数字开头")
+        return v
 
 
 class WorkTypeResponse(BaseModel):

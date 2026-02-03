@@ -7,7 +7,7 @@
 # 3. 缓存机制
 # 4. 变量渲染
 
-from typing import Optional
+from typing import Optional, Dict
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.core.database import get_db
 from app.models.prompt import Prompt
+from app.models.settings import SystemSetting
 from app.llm.prompts.defaults import DEFAULT_PROMPTS, get_default_prompt
 
 logger = get_logger(__name__)
@@ -42,6 +43,9 @@ class PromptManager:
 
     # 缓存过期时间（秒）
     CACHE_TTL = 300  # 5 分钟
+
+    # 系统变量缓存 key
+    _SYSTEM_VARS_CACHE_KEY = "__system_variables__"
 
     def __init__(self):
         self._cache: dict[str, dict] = {}
@@ -137,6 +141,8 @@ class PromptManager:
         """
         渲染 Prompt 模板
 
+        自动注入系统变量（company.* 等），调用方传入的变量优先级更高。
+
         Args:
             name: Prompt 名称
             **variables: 模板变量
@@ -148,13 +154,61 @@ class PromptManager:
         if not content:
             return None
 
+        # 先加载系统变量作为 base，再用调用方的变量覆盖
+        system_vars = await self.get_system_variables()
+        merged = {**system_vars, **variables}
+
         # 简单的模板替换
         result = content
-        for key, value in variables.items():
+        for key, value in merged.items():
             placeholder = "{{" + key + "}}"
             result = result.replace(placeholder, str(value))
 
         return result
+
+    async def get_system_variables(self) -> Dict[str, str]:
+        """
+        从 system_settings 表加载 category="company" 的系统变量
+
+        key 转换规则：company.name → company_name（点号变下划线）
+        带 5 分钟缓存。
+
+        Returns:
+            dict: 系统变量字典，如 {"company_name": "Concord", ...}
+        """
+        cache_key = self._SYSTEM_VARS_CACHE_KEY
+
+        # 检查缓存
+        if self._is_cache_valid(cache_key):
+            return self._cache[cache_key]
+
+        # 从数据库加载
+        variables = {}
+        try:
+            async for session in get_db():
+                result = await session.execute(
+                    select(SystemSetting).where(
+                        SystemSetting.category == "company"
+                    )
+                )
+                settings = result.scalars().all()
+
+                for s in settings:
+                    # company.name → company_name
+                    var_name = s.key.replace(".", "_")
+                    variables[var_name] = s.value
+
+        except Exception as e:
+            logger.debug(f"[Prompt] 加载系统变量失败: {e}")
+
+        # 写入缓存
+        self._cache[cache_key] = variables
+        self._cache_time[cache_key] = datetime.utcnow()
+
+        if variables:
+            logger.debug(f"[Prompt] 加载了 {len(variables)} 个系统变量")
+
+        return variables
 
     async def _load_from_db(self, name: str) -> Optional[dict]:
         """从数据库加载 Prompt"""
@@ -243,3 +297,8 @@ async def get_prompt(name: str, **kwargs) -> Optional[str]:
 async def render_prompt(name: str, **variables) -> Optional[str]:
     """渲染 Prompt 模板"""
     return await prompt_manager.render(name, **variables)
+
+
+async def get_system_variables() -> Dict[str, str]:
+    """获取系统变量（公司信息等）"""
+    return await prompt_manager.get_system_variables()

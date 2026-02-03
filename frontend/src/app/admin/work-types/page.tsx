@@ -196,14 +196,12 @@ function TreeNode({
           >
             {node.is_active ? '禁用' : '启用'}
           </button>
-          {!node.is_system && (
-            <button
-              onClick={() => onDelete(node.id)}
-              className="text-red-600 hover:text-red-800 text-sm"
-            >
-              删除
-            </button>
-          )}
+          <button
+            onClick={() => onDelete(node.id)}
+            className="text-red-600 hover:text-red-800 text-sm"
+          >
+            删除
+          </button>
         </div>
       </div>
 
@@ -312,12 +310,15 @@ export default function WorkTypesPage() {
 
   // 打开编辑弹窗
   const handleEdit = (item: WorkType | WorkTypeTreeNode) => {
+    // 从 flatList 获取完整数据（TreeNode 不含 examples/keywords）
+    const fullItem = flatList.find((i) => i.id === item.id);
     setEditingItem(item);
     setFormData({
+      code: item.code,
       name: item.name,
       description: item.description,
-      examples: [],
-      keywords: [],
+      examples: fullItem?.examples || [],
+      keywords: fullItem?.keywords || [],
       is_active: item.is_active,
     });
     setFormError('');
@@ -545,22 +546,20 @@ export default function WorkTypesPage() {
             </div>
           )}
 
-          {/* Code（仅创建时可编辑） */}
-          {!editingItem && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                标识码 <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.code || ''}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                placeholder="如 ORDER、ORDER_NEW"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">全大写英文，可包含数字和下划线</p>
-            </div>
-          )}
+          {/* Code */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              标识码 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.code || ''}
+              onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+              placeholder="如 ORDER、ORDER_NEW"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">全大写英文，可包含数字和下划线</p>
+          </div>
 
           {/* 名称 */}
           <div>
@@ -611,6 +610,42 @@ export default function WorkTypesPage() {
               <p className="text-xs text-gray-500 mt-1">如选择父级，标识码需以父级标识码开头加下划线</p>
             </div>
           )}
+
+          {/* 关键词 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              关键词
+            </label>
+            <input
+              type="text"
+              value={(formData.keywords || []).join(', ')}
+              onChange={(e) => setFormData({
+                ...formData,
+                keywords: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+              })}
+              placeholder="用逗号分隔，如: 订单, order, PO"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">辅助 AI 匹配的关键词，逗号分隔</p>
+          </div>
+
+          {/* 示例 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              示例文本
+            </label>
+            <input
+              type="text"
+              value={(formData.examples || []).join(', ')}
+              onChange={(e) => setFormData({
+                ...formData,
+                examples: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+              })}
+              placeholder="用逗号分隔，如: 我想下单, 订单确认, PO"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">帮助 AI 识别此类型的示例短语，逗号分隔</p>
+          </div>
 
           {/* 是否启用 */}
           <div className="flex items-center">

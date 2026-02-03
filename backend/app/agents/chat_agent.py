@@ -32,6 +32,7 @@ from app.core.redis import redis_client
 from app.llm.gateway import LLMGateway, llm_gateway
 from app.agents.base import BaseAgent, AgentState, AgentResult
 from app.agents.registry import register_agent
+from app.llm.prompts import get_prompt
 
 logger = get_logger(__name__)
 
@@ -107,19 +108,36 @@ class ChatAgent(BaseAgent):
             self.tools = ["search_customers", "search_products"]
 
     def _default_system_prompt(self) -> str:
-        """默认系统提示"""
+        """默认系统提示（同步 fallback）"""
         if self._custom_system_prompt:
             return self._custom_system_prompt
 
-        return """你是 Concord AI 智能助手，一个友好、专业的 AI 对话伙伴。
+        return (
+            "You are Concord AI Assistant, a friendly and professional AI conversation partner.\n\n"
+            "Your characteristics:\n"
+            "- Provide accurate, concise, and helpful answers\n"
+            "- Communicate clearly in Chinese\n"
+            "- Maintain a friendly and professional tone\n"
+            "- Use Markdown formatting when appropriate\n\n"
+            "Please provide valuable answers based on the user's questions."
+        )
 
-你的特点：
-- 回答准确、简洁、有帮助
-- 使用清晰的中文表达
-- 保持友好和专业的语调
-- 适时使用 Markdown 格式化输出
+    async def _get_system_prompt(self) -> str:
+        """获取系统提示：custom > DB chat_agent_system > DB chat_agent > hardcoded fallback"""
+        if self._custom_system_prompt:
+            return self._custom_system_prompt
 
-请根据用户的问题提供有价值的回答。"""
+        # 优先加载 chat_agent_system
+        system_prompt = await get_prompt("chat_agent_system")
+        if system_prompt:
+            return system_prompt
+
+        # 兼容旧的 chat_agent 条目
+        system_prompt = await get_prompt("chat_agent")
+        if system_prompt:
+            return system_prompt
+
+        return self._default_system_prompt()
 
     async def process_output(self, state: AgentState) -> dict:
         """
@@ -227,7 +245,7 @@ class ChatAgent(BaseAgent):
         context_messages.append({"role": "user", "content": message})
 
         # 确定系统提示和模型
-        system = system_prompt or self._default_system_prompt()
+        system = system_prompt or await self._get_system_prompt()
         use_model = model or self._get_model()
 
         try:
@@ -293,7 +311,7 @@ class ChatAgent(BaseAgent):
         context_messages.append({"role": "user", "content": message})
 
         # 确定系统提示和模型
-        system = system_prompt or self._default_system_prompt()
+        system = system_prompt or await self._get_system_prompt()
         use_model = model or self._get_model()
 
         # 收集完整响应
@@ -343,7 +361,7 @@ class ChatAgent(BaseAgent):
         Yields:
             str: 文本片段
         """
-        system = self._default_system_prompt()
+        system = await self._get_system_prompt()
         model = self._get_model()
 
         try:
@@ -389,7 +407,7 @@ class ChatAgent(BaseAgent):
                 error="消息列表为空",
             )
 
-        system = system_prompt or self._default_system_prompt()
+        system = system_prompt or await self._get_system_prompt()
         use_model = model or self._get_model()
 
         # 获取最后一条用户消息
@@ -453,7 +471,7 @@ class ChatAgent(BaseAgent):
         if not messages:
             raise ValueError("消息列表为空")
 
-        system = system_prompt or self._default_system_prompt()
+        system = system_prompt or await self._get_system_prompt()
         use_model = model or self._get_model()
 
         # 获取最后一条用户消息

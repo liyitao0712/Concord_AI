@@ -1,506 +1,626 @@
 # app/llm/prompts/defaults.py
-# 默认 Prompt 模板
+# Default Prompt Templates
 #
-# 这些是代码内置的默认值，作为 fallback 使用
-# 运行时优先从数据库加载，如果数据库中不存在则使用这里的默认值
+# These are built-in defaults used as fallback.
+# At runtime, prompts are loaded from the database first.
+# If a prompt doesn't exist in the database, these defaults are used.
 #
-# Prompt 命名规范：
-# - 使用下划线分隔
-# - 格式：{用途}_{类型}，如 intent_classifier, email_analyzer
+# Naming convention:
+#   - {agent_name}_system  → system prompt for the agent
+#   - {agent_name}         → user prompt template for the agent
+#   - {tool_name}          → tool prompt template
 
 from typing import Optional
 
 DEFAULT_PROMPTS = {
-    # ==================== 聊天助手 ====================
-    "chat_agent": {
-        "display_name": "聊天助手",
+    # ==================== Chat Agent ====================
+    "chat_agent_system": {
+        "display_name": "Chat Agent - System Prompt",
         "category": "agent",
-        "description": "通用对话助手的系统提示",
+        "description": "System prompt for the general chat assistant",
         "model_hint": "claude-3-sonnet-20240229",
         "variables": {},
-        "content": """你是 Concord AI 智能助手，一个友好、专业的 AI 对话伙伴。
+        "content": """You are Concord AI Assistant, a friendly and professional AI conversation partner.
 
-你的特点：
-- 回答准确、简洁、有帮助
-- 使用清晰的中文表达
-- 保持友好和专业的语调
-- 适时使用 Markdown 格式化输出
+Your characteristics:
+- Provide accurate, concise, and helpful answers
+- Communicate clearly in Chinese
+- Maintain a friendly and professional tone
+- Use Markdown formatting when appropriate
 
-请根据用户的问题提供有价值的回答。""",
+Please provide valuable answers based on the user's questions.""",
     },
 
-    # ==================== 邮件摘要分析 ====================
-    "email_summarizer": {
-        "display_name": "邮件摘要分析器",
+    "chat_agent": {
+        "display_name": "Chat Agent",
         "category": "agent",
-        "description": "分析外贸邮件，提取意图、产品、金额等业务信息",
+        "description": "Legacy system prompt for chat agent (use chat_agent_system instead)",
+        "model_hint": "claude-3-sonnet-20240229",
+        "variables": {},
+        "content": """You are Concord AI Assistant, a friendly and professional AI conversation partner.
+
+Your characteristics:
+- Provide accurate, concise, and helpful answers
+- Communicate clearly in Chinese
+- Maintain a friendly and professional tone
+- Use Markdown formatting when appropriate
+
+Please provide valuable answers based on the user's questions.""",
+    },
+
+    # ==================== Email Summarizer ====================
+    "email_summarizer_system": {
+        "display_name": "Email Summarizer - System Prompt",
+        "category": "agent",
+        "description": "System prompt for the email summarizer agent",
+        "model_hint": "claude-3-sonnet-20240229",
+        "variables": {},
+        "content": """You are a professional foreign trade email analysis assistant.
+
+Your role:
+- Analyze incoming business emails related to international trade
+- Extract structured information including intent, products, amounts, and trade terms
+- Return analysis results strictly in the requested JSON format
+- Output the "summary" field in Chinese
+- Output the "suggested_reply" field in the same language as the original email
+- Be precise with product names, quantities, prices, and trade terminology
+- Identify sender type (customer, supplier, freight forwarder, bank, etc.)
+
+Important:
+- Only return valid JSON, no additional text or explanation
+- Fill all fields; use null or empty array [] for unrecognizable information""",
+    },
+
+    "email_summarizer": {
+        "display_name": "Email Summarizer",
+        "category": "agent",
+        "description": "Analyzes trade emails, extracting intent, products, amounts, and business information",
         "model_hint": "claude-3-sonnet-20240229",
         "variables": {
-            "sender": "发件人邮箱",
-            "sender_name": "发件人名称",
-            "subject": "邮件主题",
-            "received_at": "收件时间",
-            "content": "邮件正文",
+            "sender": "Sender email address",
+            "sender_name": "Sender display name",
+            "subject": "Email subject",
+            "received_at": "Time received",
+            "content": "Email body text",
         },
-        "content": """你是一个专业的外贸邮件分析助手。请分析以下邮件内容，提取关键信息。
+        "content": """Analyze the following email and extract key information.
 
-## 邮件信息
-- 发件人: {{sender}} ({{sender_name}})
-- 主题: {{subject}}
-- 收件时间: {{received_at}}
+## Email Information
+- Sender: {{sender}} ({{sender_name}})
+- Subject: {{subject}}
+- Received at: {{received_at}}
 
-## 邮件正文
+## Email Body
 {{content}}
 
-## 分析要求
+## Analysis Requirements
 
-请以 JSON 格式返回分析结果，包含以下字段：
+Return analysis results in JSON format with the following fields:
 
 ```json
 {
-    "summary": "一句话总结邮件核心内容（中文，不超过100字）",
+    "summary": "One-sentence summary of the email core content (in Chinese, max 100 characters)",
 
-    "key_points": ["关键要点1", "关键要点2", "关键要点3"],
+    "key_points": ["Key point 1", "Key point 2", "Key point 3"],
 
-    "original_language": "邮件原文语言代码，如 en/zh/es/ar/ru/de/fr/ja/ko 等",
+    "original_language": "Original language code of the email: en/zh/es/ar/ru/de/fr/ja/ko etc.",
 
-    "sender_type": "发件方类型: customer(客户)/supplier(供应商)/freight(货代)/bank(银行)/other(其他)",
+    "sender_type": "Sender type: customer/supplier/freight/bank/other",
 
-    "sender_company": "发件方公司名称，如无法识别则为 null",
+    "sender_company": "Sender company name, null if unidentifiable",
 
-    "sender_country": "发件方国家/地区，如无法识别则为 null",
+    "sender_country": "Sender country/region, null if unidentifiable",
 
-    "is_new_contact": "是否像是新联系人（首次询盘/自我介绍）: true/false/null",
+    "is_new_contact": "Whether this appears to be a new contact (first inquiry/self-introduction): true/false/null",
 
-    "intent": "主要意图，选择最匹配的一项:
-        - inquiry: 询价/询盘
-        - quotation: 报价/还价
-        - order: 下单/订单确认
-        - order_change: 订单修改/取消
-        - payment: 付款/汇款通知
-        - shipment: 发货/物流跟踪
-        - sample: 样品请求
-        - complaint: 投诉/质量问题
-        - after_sales: 售后服务
-        - negotiation: 价格谈判
-        - follow_up: 跟进/催促
-        - introduction: 公司/产品介绍
-        - general: 一般沟通
-        - spam: 垃圾邮件/营销
-        - other: 其他",
+    "intent": "Primary intent, choose the best match:
+        - inquiry: Price inquiry / RFQ
+        - quotation: Quotation / counter-offer
+        - order: Place order / order confirmation
+        - order_change: Order modification / cancellation
+        - payment: Payment / remittance notification
+        - shipment: Shipping / logistics tracking
+        - sample: Sample request
+        - complaint: Complaint / quality issue
+        - after_sales: After-sales service
+        - negotiation: Price negotiation
+        - follow_up: Follow-up / reminder
+        - introduction: Company / product introduction
+        - general: General communication
+        - spam: Spam / marketing
+        - other: Other",
 
-    "intent_confidence": "意图判断的置信度 0.0-1.0",
+    "intent_confidence": "Intent confidence score 0.0-1.0",
 
-    "urgency": "紧急程度: urgent(紧急)/high(较高)/medium(一般)/low(较低)",
+    "urgency": "Urgency level: urgent/high/medium/low",
 
-    "sentiment": "情感倾向: positive(积极)/neutral(中性)/negative(消极)",
+    "sentiment": "Sentiment: positive/neutral/negative",
 
     "products": [
         {
-            "name": "产品名称",
-            "specs": "规格描述",
-            "quantity": 数量(数字),
-            "unit": "单位",
-            "target_price": 目标价格(数字，可选)
+            "name": "Product name",
+            "specs": "Specifications",
+            "quantity": numeric_quantity,
+            "unit": "Unit",
+            "target_price": target_price_number_optional
         }
     ],
 
     "amounts": [
         {
-            "value": 金额数值,
-            "currency": "货币代码 USD/EUR/CNY 等",
-            "context": "金额上下文说明"
+            "value": numeric_amount,
+            "currency": "Currency code USD/EUR/CNY etc.",
+            "context": "Context description for this amount"
         }
     ],
 
     "trade_terms": {
-        "incoterm": "贸易术语 FOB/CIF/EXW/DDP 等，如未提及则为 null",
-        "payment_terms": "付款方式 T/T/L/C/D/P 等，如未提及则为 null",
-        "destination": "目的地/目的港，如未提及则为 null"
+        "incoterm": "Trade term FOB/CIF/EXW/DDP etc., null if not mentioned",
+        "payment_terms": "Payment method T/T, L/C, D/P etc., null if not mentioned",
+        "destination": "Destination / destination port, null if not mentioned"
     },
 
-    "deadline": "截止日期或交期要求，ISO 格式如 2024-03-15，如无则为 null",
+    "deadline": "Deadline or delivery requirement in ISO format e.g. 2024-03-15, null if none",
 
-    "questions": ["对方提出的问题1", "对方提出的问题2"],
+    "questions": ["Question raised by sender 1", "Question raised by sender 2"],
 
-    "action_required": ["需要我方做的事情1", "需要我方做的事情2"],
+    "action_required": ["Action required from us 1", "Action required from us 2"],
 
-    "suggested_reply": "建议的回复要点（简洁的中文说明）",
+    "suggested_reply": "Suggested reply points (concise, in the same language as the original email)",
 
-    "priority": "处理优先级: p0(立即处理)/p1(今日处理)/p2(本周处理)/p3(可延后)"
+    "priority": "Processing priority: p0(immediate)/p1(today)/p2(this week)/p3(can defer)"
 }
 ```
 
-## 注意事项
-1. 所有字段都要填写，无法识别的填 null 或空数组 []
-2. summary 必须用中文，简洁明了
-3. 仔细识别产品信息、金额、贸易条款
-4. 根据邮件内容判断紧急程度和优先级
-5. 只返回 JSON，不要有其他内容""",
+## Important Notes
+1. Fill all fields; use null or empty array [] for unrecognizable information
+2. The "summary" field must be in Chinese; the "suggested_reply" field must follow the original email language
+3. Carefully identify product information, amounts, and trade terms
+4. Assess urgency and priority based on email content
+5. Return only JSON, no other content""",
     },
 
-    # ==================== 摘要生成 ====================
-    "summarizer": {
-        "display_name": "摘要生成器",
-        "category": "tool",
-        "description": "生成文本摘要",
-        "model_hint": "claude-3-haiku-20240307",
-        "variables": {
-            "content": "需要摘要的内容",
-            "max_length": "最大长度（可选）",
-        },
-        "content": """请为以下内容生成简洁的摘要。
+    # ==================== Work Type Analyzer ====================
+    "work_type_analyzer_system": {
+        "display_name": "Work Type Analyzer - System Prompt",
+        "category": "agent",
+        "description": "System prompt for the work type analyzer agent",
+        "model_hint": "claude-3-sonnet-20240229",
+        "variables": {},
+        "content": """You are a work type classification expert.
 
-## 内容：
-{{content}}
+Your role:
+- Analyze email content and classify it into the appropriate work type
+- Match against existing work types when possible
+- Always suggest a potential new sub-type or more specific classification, even if an existing type already matches
+- Return results strictly in the requested JSON format
 
-## 要求：
-- 保留关键信息
-- 语言简洁
-- 最大长度：{{max_length}}字
-
-请直接输出摘要，不需要额外说明。""",
+Important:
+- Always provide both a matched existing type AND a new type suggestion
+- New type codes must be uppercase English with underscores (e.g., ORDER_URGENT)
+- Only return valid JSON, no additional text""",
     },
 
-    # ==================== 翻译 ====================
-    "translator": {
-        "display_name": "翻译器",
-        "category": "tool",
-        "description": "翻译文本",
-        "model_hint": "claude-3-haiku-20240307",
-        "variables": {
-            "content": "需要翻译的内容",
-            "target_language": "目标语言",
-        },
-        "content": """请将以下内容翻译成{{target_language}}。
-
-## 原文：
-{{content}}
-
-## 要求：
-- 保持原意
-- 语言自然流畅
-- 专业术语翻译准确
-
-请直接输出翻译结果。""",
-    },
-
-    # ==================== 实体提取 ====================
-    "entity_extraction": {
-        "display_name": "通用实体提取",
-        "category": "tool",
-        "description": "从文本中提取结构化信息（客户、产品、订单等）",
+    "work_type_analyzer": {
+        "display_name": "Work Type Analyzer",
+        "category": "agent",
+        "description": "Analyzes email content to classify work type, matches existing types or suggests new ones",
         "model_hint": "claude-3-sonnet-20240229",
         "variables": {
-            "content": "需要提取信息的内容",
+            "work_types_list": "Formatted list of current work types",
+            "sender": "Sender email address",
+            "subject": "Email subject",
+            "received_at": "Time received",
+            "content": "Email body text",
         },
-        "content": """你是一个信息提取专家，专门从文本中提取结构化数据。
+        "content": """Classify the work type of the following email based on its content.
 
-请从以下内容中提取关键信息：
+## Currently Supported Work Types
+
+{{work_types_list}}
+
+## Email Information
+- Sender: {{sender}}
+- Subject: {{subject}}
+- Received at: {{received_at}}
+
+## Email Body
+{{content}}
+
+## Analysis Requirements
+
+Return analysis results in JSON format:
+
+```json
+{
+    "matched_work_type": {
+        "code": "Matched work type code e.g. ORDER_NEW, null if no match",
+        "confidence": 0.0-1.0,
+        "reason": "Explanation for the match (in Chinese)"
+    },
+
+    "new_suggestion": {
+        "should_suggest": true,
+        "suggested_code": "Suggested new type code (UPPER_CASE_ENGLISH), null if not suggesting",
+        "suggested_name": "Suggested Chinese name for the type",
+        "suggested_description": "Suggested description (in Chinese)",
+        "suggested_parent_code": "Suggested parent code e.g. ORDER, null if top-level",
+        "suggested_keywords": ["keyword1", "keyword2"],
+        "confidence": 0.0-1.0,
+        "reasoning": "Reason for suggesting a new type (in Chinese)"
+    }
+}
+```
+
+## Important Notes
+1. Always suggest a potential new sub-type or more specific classification, even if an existing type matches well
+2. New type codes must be uppercase English with underscores; prefix with parent code if applicable (e.g. ORDER_URGENT)
+3. The new suggestion should represent a more granular or specific category that could be useful for workflow routing
+4. Return only JSON, no other content""",
+    },
+
+    # ==================== Summarizer (Tool) ====================
+    "summarizer": {
+        "display_name": "Summarizer",
+        "category": "tool",
+        "description": "Generate text summaries",
+        "model_hint": "claude-3-haiku-20240307",
+        "variables": {
+            "content": "Content to summarize",
+            "max_length": "Maximum length (optional)",
+        },
+        "content": """Generate a concise summary of the following content.
+
+## Content:
+{{content}}
+
+## Requirements:
+- Preserve key information
+- Be concise
+- Maximum length: {{max_length}} characters
+
+Output the summary directly, no additional explanation needed.""",
+    },
+
+    # ==================== Translator (Tool) ====================
+    "translator": {
+        "display_name": "Translator",
+        "category": "tool",
+        "description": "Translate text to target language",
+        "model_hint": "claude-3-haiku-20240307",
+        "variables": {
+            "content": "Content to translate",
+            "target_language": "Target language",
+        },
+        "content": """Translate the following content into {{target_language}}.
+
+## Original text:
+{{content}}
+
+## Requirements:
+- Preserve the original meaning
+- Use natural and fluent language
+- Translate professional terminology accurately
+
+Output the translation directly.""",
+    },
+
+    # ==================== Entity Extraction (Tool) ====================
+    "entity_extraction": {
+        "display_name": "Entity Extraction",
+        "category": "tool",
+        "description": "Extract structured information from text (customers, products, orders, etc.)",
+        "model_hint": "claude-3-sonnet-20240229",
+        "variables": {
+            "content": "Content to extract information from",
+        },
+        "content": """You are an information extraction expert specializing in extracting structured data from text.
+
+Extract key information from the following content:
 
 <content>
 {{content}}
 </content>
 
-请提取以下类型的信息，返回 JSON 格式：
+Extract the following types of information and return in JSON format:
 
 {
     "customer": {
-        "name": "客户姓名",
-        "company": "公司名称",
-        "email": "邮箱",
-        "phone": "电话"
+        "name": "Customer name",
+        "company": "Company name",
+        "email": "Email",
+        "phone": "Phone"
     },
     "products": [
         {
-            "name": "产品名称",
-            "model": "型号",
-            "specification": "规格",
-            "quantity": 数量,
-            "unit": "单位",
-            "price": 单价
+            "name": "Product name",
+            "model": "Model number",
+            "specification": "Specification",
+            "quantity": numeric_quantity,
+            "unit": "Unit",
+            "price": unit_price
         }
     ],
     "requirements": {
-        "delivery_date": "交货日期",
-        "delivery_address": "收货地址",
-        "payment_terms": "付款方式",
-        "notes": "其他备注"
+        "delivery_date": "Delivery date",
+        "delivery_address": "Delivery address",
+        "payment_terms": "Payment terms",
+        "notes": "Other notes"
     },
     "dates": [
         {
-            "date": "日期",
-            "type": "类型（交期/有效期/其他）",
-            "original_text": "原文"
+            "date": "Date",
+            "type": "Type (delivery/expiry/other)",
+            "original_text": "Original text"
         }
     ]
 }
 
-提取规则：
-1. 无法确定的字段填写 null
-2. products 和 dates 如果没有相关信息则为空数组 []
-3. 数量、价格保持数字格式，如果是范围则取较大值
-4. 日期如果是相对时间（如"下周一"），保留原文
-5. 不要猜测，不确定的信息标记为 null
+Extraction rules:
+1. Use null for fields that cannot be determined
+2. Use empty array [] for products and dates if no relevant information exists
+3. Keep quantities and prices in numeric format; use the higher value for ranges
+4. For relative dates (e.g., "next Monday"), preserve the original text
+5. Do not guess; mark uncertain information as null
 
-只输出 JSON，不要添加任何其他内容。""",
+Return only JSON, no additional content.""",
     },
 
-    # ==================== 询价信息提取 ====================
+    # ==================== Inquiry Extraction (Tool) ====================
     "inquiry_extraction": {
-        "display_name": "询价信息提取",
+        "display_name": "Inquiry Extraction",
         "category": "tool",
-        "description": "从询价邮件中提取结构化信息",
+        "description": "Extract structured information from inquiry emails",
         "model_hint": "claude-3-sonnet-20240229",
         "variables": {
-            "subject": "邮件主题",
-            "sender": "发件人",
-            "body": "邮件正文",
+            "subject": "Email subject",
+            "sender": "Sender",
+            "body": "Email body",
         },
-        "content": """你是一个询价邮件分析专家。请从以下询价邮件中提取关键信息：
+        "content": """You are an inquiry email analysis expert. Extract key information from the following inquiry email:
 
 <email>
-主题：{{subject}}
-发件人：{{sender}}
-内容：
+Subject: {{subject}}
+Sender: {{sender}}
+Content:
 {{body}}
 </email>
 
-请提取询价相关信息，返回 JSON 格式：
+Extract inquiry-related information and return in JSON format:
 
 {
     "customer": {
-        "name": "客户姓名（从邮件签名或内容推断）",
-        "company": "公司名称",
+        "name": "Customer name (infer from email signature or content)",
+        "company": "Company name",
         "email": "{{sender}}",
-        "phone": "电话（如有）",
-        "contact_preference": "首选联系方式"
+        "phone": "Phone (if available)",
+        "contact_preference": "Preferred contact method"
     },
     "products": [
         {
-            "name": "产品名称",
-            "model": "型号（如有）",
-            "specification": "规格要求",
-            "quantity": 数量,
-            "unit": "单位",
-            "target_price": "目标价格（如客户提及）"
+            "name": "Product name",
+            "model": "Model (if available)",
+            "specification": "Specification requirements",
+            "quantity": numeric_quantity,
+            "unit": "Unit",
+            "target_price": "Target price (if mentioned by customer)"
         }
     ],
     "requirements": {
-        "delivery_date": "期望交期",
-        "delivery_address": "收货地址",
-        "quality_requirements": "质量要求",
-        "packaging_requirements": "包装要求",
-        "other_requirements": "其他要求"
+        "delivery_date": "Expected delivery date",
+        "delivery_address": "Delivery address",
+        "quality_requirements": "Quality requirements",
+        "packaging_requirements": "Packaging requirements",
+        "other_requirements": "Other requirements"
     },
-    "urgency": "紧急程度（high/normal/low）",
-    "summary": "一句话总结询价内容"
+    "urgency": "Urgency level (high/normal/low)",
+    "summary": "One-sentence summary of the inquiry"
 }
 
-提取规则：
-1. 尽可能推断客户姓名（从签名、称呼等）
-2. urgency 根据用词判断（"急"、"尽快"等为 high）
-3. 无法确定的字段填写 null
+Extraction rules:
+1. Try to infer customer name (from signature, salutation, etc.)
+2. Determine urgency based on wording ("urgent", "ASAP" = high)
+3. Use null for fields that cannot be determined
 
-只输出 JSON，不要添加任何其他内容。""",
+Return only JSON, no additional content.""",
     },
 
-    # ==================== 订单信息提取 ====================
+    # ==================== Order Extraction (Tool) ====================
     "order_extraction": {
-        "display_name": "订单信息提取",
+        "display_name": "Order Extraction",
         "category": "tool",
-        "description": "从文本中提取订单相关信息",
+        "description": "Extract order-related information from text",
         "model_hint": "claude-3-sonnet-20240229",
         "variables": {
-            "content": "包含订单信息的内容",
+            "content": "Content containing order information",
         },
-        "content": """你是一个订单信息提取专家。请从以下内容中提取订单信息：
+        "content": """You are an order information extraction expert. Extract order information from the following content:
 
 <content>
 {{content}}
 </content>
 
-请提取订单相关信息，返回 JSON 格式：
+Extract order-related information and return in JSON format:
 
 {
     "order_info": {
-        "order_number": "订单号（如客户提供）",
-        "order_date": "下单日期",
-        "customer_po": "客户采购单号"
+        "order_number": "Order number (if provided by customer)",
+        "order_date": "Order date",
+        "customer_po": "Customer PO number"
     },
     "customer": {
-        "name": "客户姓名",
-        "company": "公司名称",
-        "email": "邮箱",
-        "phone": "电话",
-        "shipping_address": "收货地址",
-        "billing_address": "账单地址"
+        "name": "Customer name",
+        "company": "Company name",
+        "email": "Email",
+        "phone": "Phone",
+        "shipping_address": "Shipping address",
+        "billing_address": "Billing address"
     },
     "items": [
         {
-            "product_name": "产品名称",
-            "model": "型号",
-            "specification": "规格",
-            "quantity": 数量,
-            "unit": "单位",
-            "unit_price": 单价,
-            "total_price": 总价,
-            "notes": "备注"
+            "product_name": "Product name",
+            "model": "Model",
+            "specification": "Specification",
+            "quantity": numeric_quantity,
+            "unit": "Unit",
+            "unit_price": unit_price,
+            "total_price": total_price,
+            "notes": "Notes"
         }
     ],
     "payment": {
-        "method": "付款方式",
-        "terms": "付款条款",
-        "currency": "币种"
+        "method": "Payment method",
+        "terms": "Payment terms",
+        "currency": "Currency"
     },
     "delivery": {
-        "requested_date": "要求交期",
-        "shipping_method": "运输方式",
-        "incoterms": "贸易条款"
+        "requested_date": "Requested delivery date",
+        "shipping_method": "Shipping method",
+        "incoterms": "Trade terms"
     },
-    "total_amount": 订单总金额,
-    "notes": "订单备注"
+    "total_amount": total_order_amount,
+    "notes": "Order notes"
 }
 
-提取规则：
-1. 金额保持数字格式，并保留币种信息
-2. 日期尽量转换为 YYYY-MM-DD 格式
-3. 如果有多个收货地址，使用数组
-4. 无法确定的字段填写 null
+Extraction rules:
+1. Keep amounts in numeric format and preserve currency information
+2. Convert dates to YYYY-MM-DD format where possible
+3. Use an array if there are multiple shipping addresses
+4. Use null for fields that cannot be determined
 
-只输出 JSON，不要添加任何其他内容。""",
+Return only JSON, no additional content.""",
     },
 
-    # ==================== 联系人信息提取 ====================
+    # ==================== Contact Extraction (Tool) ====================
     "contact_extraction": {
-        "display_name": "联系人信息提取",
+        "display_name": "Contact Extraction",
         "category": "tool",
-        "description": "从文本中提取联系人信息",
+        "description": "Extract contact information from text",
         "model_hint": "claude-3-haiku-20240307",
         "variables": {
-            "content": "包含联系人信息的内容",
+            "content": "Content containing contact information",
         },
-        "content": """你是一个联系人信息提取专家。请从以下内容中提取联系人信息：
+        "content": """You are a contact information extraction expert. Extract contact information from the following content:
 
 <content>
 {{content}}
 </content>
 
-请提取所有联系人信息，返回 JSON 格式：
+Extract all contact information and return in JSON format:
 
 {
     "contacts": [
         {
-            "name": "姓名",
-            "title": "职位",
-            "company": "公司",
-            "department": "部门",
-            "email": "邮箱",
-            "phone": "电话",
-            "mobile": "手机",
-            "fax": "传真",
-            "address": "地址",
+            "name": "Name",
+            "title": "Job title",
+            "company": "Company",
+            "department": "Department",
+            "email": "Email",
+            "phone": "Phone",
+            "mobile": "Mobile",
+            "fax": "Fax",
+            "address": "Address",
             "social": {
-                "wechat": "微信",
+                "wechat": "WeChat",
                 "linkedin": "LinkedIn"
             },
-            "role": "角色（决策者/联系人/技术对接人等）"
+            "role": "Role (decision maker/contact person/technical liaison/etc.)"
         }
     ]
 }
 
-提取规则：
-1. 如果内容中有多个联系人，全部提取
-2. 电话号码保持原始格式
-3. 尝试从签名、落款中提取信息
-4. 无法确定的字段填写 null
+Extraction rules:
+1. Extract all contacts if there are multiple
+2. Keep phone numbers in their original format
+3. Try to extract information from signatures and sign-offs
+4. Use null for fields that cannot be determined
 
-只输出 JSON，不要添加任何其他内容。""",
+Return only JSON, no additional content.""",
     },
 
-    # ==================== 邮件意图分类（带主题） ====================
+    # ==================== Email Intent Classification (Tool) ====================
     "email_intent": {
-        "display_name": "邮件意图分类",
+        "display_name": "Email Intent Classification",
         "category": "tool",
-        "description": "分析邮件意图（包含主题、发件人和正文）",
+        "description": "Analyze email intent (with subject, sender, and body)",
         "model_hint": "claude-3-haiku-20240307",
         "variables": {
-            "subject": "邮件主题",
-            "sender": "发件人",
-            "body": "邮件正文",
+            "subject": "Email subject",
+            "sender": "Sender",
+            "body": "Email body",
         },
-        "content": """你是一个意图分类专家。请分析以下邮件的意图：
+        "content": """You are an intent classification expert. Analyze the intent of the following email:
 
 <email>
-主题：{{subject}}
-发件人：{{sender}}
-内容：
+Subject: {{subject}}
+Sender: {{sender}}
+Content:
 {{body}}
 </email>
 
-请判断这封邮件的意图类型，并返回 JSON 格式的结果。
+Determine the intent type of this email and return the result in JSON format.
 
-意图类型说明：
-- inquiry: 询价（询问价格、要求报价、产品咨询）
-- order: 订单（下单、采购、购买意向明确）
-- support: 支持（技术问题、售后服务、产品使用问题）
-- feedback: 反馈（投诉、建议、评价、意见）
-- general: 一般（问候、感谢、无特定业务意图）
-- unknown: 无法识别
+Intent types:
+- inquiry: Price inquiry (asking for prices, requesting quotes, product consultation)
+- order: Order (placing order, purchasing, clear purchase intent)
+- support: Support (technical issues, after-sales service, product usage problems)
+- feedback: Feedback (complaints, suggestions, reviews, opinions)
+- general: General (greetings, thanks, no specific business intent)
+- unknown: Unidentifiable
 
-返回格式：
+Return format:
 {
-    "intent": "意图类型",
-    "confidence": 置信度,
-    "keywords": ["关键词1", "关键词2"],
-    "summary": "一句话总结邮件内容",
+    "intent": "Intent type",
+    "confidence": confidence_score,
+    "keywords": ["keyword1", "keyword2"],
+    "summary": "One-sentence summary of the email content",
     "priority": "high/normal/low"
 }
 
-优先级判断依据：
-- high: 紧急订单、重要客户、明确的采购意向
-- normal: 一般询价、常规问题
-- low: 闲聊、不紧急的反馈
+Priority criteria:
+- high: Urgent orders, important customers, clear purchase intent
+- normal: General inquiries, routine questions
+- low: Casual conversation, non-urgent feedback
 
-注意：
-1. confidence 是 0.0-1.0 之间的数字，表示判断的确信程度
-2. keywords 是支持判断的关键词列表
-3. 只输出 JSON，不要添加任何其他内容""",
+Notes:
+1. confidence is a number between 0.0-1.0 indicating certainty
+2. keywords is a list of supporting keywords for the classification
+3. Return only JSON, no additional content""",
     },
 
-    # ==================== 批量意图分类 ====================
+    # ==================== Batch Intent Classification (Tool) ====================
     "batch_intent": {
-        "display_name": "批量意图分类",
+        "display_name": "Batch Intent Classification",
         "category": "tool",
-        "description": "对多条内容进行批量意图分类",
+        "description": "Batch intent classification for multiple content items",
         "model_hint": "claude-3-haiku-20240307",
         "variables": {
-            "items": "需要分类的内容列表（JSON 或文本）",
+            "items": "List of content items to classify (JSON or text)",
         },
-        "content": """你是一个意图分类专家。请分析以下多条内容的意图：
+        "content": """You are an intent classification expert. Analyze the intent of the following multiple content items:
 
 <items>
 {{items}}
 </items>
 
-对每条内容进行意图分类，返回 JSON 数组格式的结果。
+Classify each content item and return results in JSON array format.
 
-返回格式：
+Return format:
 [
-    {"id": "item_id", "intent": "意图类型", "confidence": 置信度},
+    {"id": "item_id", "intent": "intent_type", "confidence": confidence_score},
     ...
 ]
 
-只输出 JSON 数组，不要添加任何其他内容。""",
+Return only the JSON array, no additional content.""",
     },
 }
 
 
 def get_default_prompt(name: str) -> Optional[dict]:
-    """获取默认 Prompt"""
+    """Get a default prompt by name"""
     return DEFAULT_PROMPTS.get(name)
 
 
 def list_default_prompts() -> list[str]:
-    """列出所有默认 Prompt 名称"""
+    """List all default prompt names"""
     return list(DEFAULT_PROMPTS.keys())

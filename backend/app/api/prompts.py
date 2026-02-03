@@ -11,6 +11,8 @@
 #   GET    /admin/prompts/{name}       详情
 #   PUT    /admin/prompts/{name}       更新
 #   POST   /admin/prompts/{name}/test  测试预览
+#   GET    /admin/prompts/{name}/default  获取默认值
+#   POST   /admin/prompts/{name}/reset   重置为默认值
 
 from datetime import datetime
 from typing import Optional, List
@@ -263,6 +265,116 @@ async def test_prompt(
         rendered=rendered,
         variables_used=list(data.variables.keys()),
         missing_variables=missing_vars,
+    )
+
+
+@router.get("/{prompt_name}/default")
+async def get_prompt_default(
+    prompt_name: str,
+    _: User = Depends(get_current_admin_user),
+):
+    """
+    获取 Prompt 的默认值（来自 defaults.py）
+
+    可用于前端对比当前值和默认值
+    """
+    from app.llm.prompts.defaults import get_default_prompt
+
+    default = get_default_prompt(prompt_name)
+    if not default:
+        raise HTTPException(status_code=404, detail=f"未找到默认 Prompt: {prompt_name}")
+
+    return {
+        "name": prompt_name,
+        "content": default["content"],
+        "variables": default.get("variables", {}),
+        "display_name": default.get("display_name"),
+        "description": default.get("description"),
+    }
+
+
+@router.post("/{prompt_name}/reset", response_model=PromptResponse)
+async def reset_prompt_to_default(
+    prompt_name: str,
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+):
+    """
+    重置 Prompt 为默认值
+
+    如果数据库中已存在，更新内容为默认值并保存历史版本。
+    如果不存在，从默认值创建新记录。
+    """
+    from app.llm.prompts.defaults import get_default_prompt
+    from app.models.prompt import PromptHistory
+
+    default = get_default_prompt(prompt_name)
+    if not default:
+        raise HTTPException(status_code=404, detail=f"未找到默认 Prompt: {prompt_name}")
+
+    result = await session.execute(
+        select(Prompt).where(Prompt.name == prompt_name)
+    )
+    prompt = result.scalar_one_or_none()
+
+    if prompt:
+        # 保存历史版本
+        history = PromptHistory(
+            prompt_id=prompt.id,
+            prompt_name=prompt.name,
+            content=prompt.content,
+            variables=prompt.variables,
+            version=prompt.version,
+            changed_by=admin.id,
+            change_reason="Reset to default",
+        )
+        session.add(history)
+
+        # 重置为默认值
+        prompt.content = default["content"]
+        prompt.variables = default.get("variables", {})
+        prompt.display_name = default.get("display_name", prompt_name)
+        prompt.description = default.get("description")
+        prompt.version += 1
+        prompt.updated_at = datetime.utcnow()
+        prompt.updated_by = admin.id
+    else:
+        # 从默认值创建
+        prompt = Prompt(
+            name=prompt_name,
+            display_name=default.get("display_name", prompt_name),
+            category=default.get("category", "general"),
+            content=default["content"],
+            variables=default.get("variables", {}),
+            description=default.get("description"),
+            model_hint=default.get("model_hint"),
+        )
+        session.add(prompt)
+
+    await session.commit()
+    await session.refresh(prompt)
+
+    # 清除缓存
+    try:
+        from app.llm.prompts import prompt_manager
+        await prompt_manager.refresh_cache(prompt_name)
+    except Exception as e:
+        logger.warning(f"[PromptsAPI] 清除缓存失败: {e}")
+
+    logger.info(f"[PromptsAPI] 重置 Prompt 为默认值: {prompt_name} by {admin.email}")
+
+    return PromptResponse(
+        id=str(prompt.id),
+        name=prompt.name,
+        category=prompt.category,
+        display_name=prompt.display_name,
+        content=prompt.content,
+        variables=prompt.variables,
+        description=prompt.description,
+        is_active=prompt.is_active,
+        version=prompt.version,
+        created_at=prompt.created_at,
+        updated_at=prompt.updated_at,
     )
 
 

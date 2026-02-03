@@ -238,14 +238,42 @@ async def update_work_type(
     """
     更新工作类型
 
-    注意：不能修改 code 和 parent_id
+    支持修改 code（会同步更新 path 和子类型的 path）
     """
     work_type = await session.get(WorkType, work_type_id)
     if not work_type:
         raise HTTPException(status_code=404, detail="工作类型不存在")
 
-    # 更新字段
     update_data = data.model_dump(exclude_unset=True)
+    new_code = update_data.pop("code", None)
+
+    # 如果修改了 code，需要额外处理
+    if new_code and new_code != work_type.code:
+        # 检查新 code 唯一性
+        existing = await session.scalar(
+            select(WorkType).where(WorkType.code == new_code)
+        )
+        if existing:
+            raise HTTPException(status_code=400, detail=f"工作类型代码 '{new_code}' 已存在")
+
+        old_code = work_type.code
+        old_path = work_type.path
+
+        # 更新 code 和 path
+        work_type.code = new_code
+        new_path = old_path.rsplit(old_code, 1)
+        work_type.path = new_code.join(new_path)
+
+        # 更新所有子类型的 path（子类型 path 以父级 path 为前缀）
+        children_result = await session.execute(
+            select(WorkType).where(
+                WorkType.path.like(f"{old_path}/%")
+            )
+        )
+        for child in children_result.scalars().all():
+            child.path = child.path.replace(old_path, work_type.path, 1)
+
+    # 更新其他字段
     for key, value in update_data.items():
         setattr(work_type, key, value)
 
@@ -273,9 +301,6 @@ async def delete_work_type(
     work_type = await session.get(WorkType, work_type_id)
     if not work_type:
         raise HTTPException(status_code=404, detail="工作类型不存在")
-
-    if work_type.is_system:
-        raise HTTPException(status_code=400, detail="不能删除系统内置工作类型")
 
     # 检查是否有子类型
     children_count = await session.scalar(

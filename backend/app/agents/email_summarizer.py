@@ -15,107 +15,9 @@ from app.core.logging import get_logger
 from app.agents.base import BaseAgent, AgentState, AgentResult
 from app.agents.registry import register_agent
 from app.tools.email_cleaner import clean_email_content
+from app.llm.prompts import render_prompt, get_prompt
 
 logger = get_logger(__name__)
-
-
-# 分析 Prompt 模板
-SUMMARIZER_PROMPT = """你是一个专业的外贸邮件分析助手。请分析以下邮件内容，提取关键信息。
-
-## 邮件信息
-- 发件人: {sender} ({sender_name})
-- 主题: {subject}
-- 收件时间: {received_at}
-
-## 邮件正文
-{content}
-
-## 分析要求
-
-请以 JSON 格式返回分析结果，包含以下字段：
-
-```json
-{{
-    "summary": "一句话总结邮件核心内容（中文，不超过100字）",
-
-    "key_points": ["关键要点1", "关键要点2", "关键要点3"],
-
-    "original_language": "邮件原文语言代码，如 en/zh/es/ar/ru/de/fr/ja/ko 等",
-
-    "sender_type": "发件方类型: customer(客户)/supplier(供应商)/freight(货代)/bank(银行)/other(其他)",
-
-    "sender_company": "发件方公司名称，如无法识别则为 null",
-
-    "sender_country": "发件方国家/地区，如无法识别则为 null",
-
-    "is_new_contact": "是否像是新联系人（首次询盘/自我介绍）: true/false/null",
-
-    "intent": "主要意图，选择最匹配的一项:
-        - inquiry: 询价/询盘
-        - quotation: 报价/还价
-        - order: 下单/订单确认
-        - order_change: 订单修改/取消
-        - payment: 付款/汇款通知
-        - shipment: 发货/物流跟踪
-        - sample: 样品请求
-        - complaint: 投诉/质量问题
-        - after_sales: 售后服务
-        - negotiation: 价格谈判
-        - follow_up: 跟进/催促
-        - introduction: 公司/产品介绍
-        - general: 一般沟通
-        - spam: 垃圾邮件/营销
-        - other: 其他",
-
-    "intent_confidence": "意图判断的置信度 0.0-1.0",
-
-    "urgency": "紧急程度: urgent(紧急)/high(较高)/medium(一般)/low(较低)",
-
-    "sentiment": "情感倾向: positive(积极)/neutral(中性)/negative(消极)",
-
-    "products": [
-        {{
-            "name": "产品名称",
-            "specs": "规格描述",
-            "quantity": 数量(数字),
-            "unit": "单位",
-            "target_price": 目标价格(数字，可选)
-        }}
-    ],
-
-    "amounts": [
-        {{
-            "value": 金额数值,
-            "currency": "货币代码 USD/EUR/CNY 等",
-            "context": "金额上下文说明"
-        }}
-    ],
-
-    "trade_terms": {{
-        "incoterm": "贸易术语 FOB/CIF/EXW/DDP 等，如未提及则为 null",
-        "payment_terms": "付款方式 T/T/L/C/D/P 等，如未提及则为 null",
-        "destination": "目的地/目的港，如未提及则为 null"
-    }},
-
-    "deadline": "截止日期或交期要求，ISO 格式如 2024-03-15，如无则为 null",
-
-    "questions": ["对方提出的问题1", "对方提出的问题2"],
-
-    "action_required": ["需要我方做的事情1", "需要我方做的事情2"],
-
-    "suggested_reply": "建议的回复要点（简洁的中文说明）",
-
-    "priority": "处理优先级: p0(立即处理)/p1(今日处理)/p2(本周处理)/p3(可延后)"
-}}
-```
-
-## 注意事项
-1. 所有字段都要填写，无法识别的填 null 或空数组 []
-2. summary 必须用中文，简洁明了
-3. 仔细识别产品信息、金额、贸易条款
-4. 根据邮件内容判断紧急程度和优先级
-5. 只返回 JSON，不要有其他内容
-"""
 
 
 @register_agent
@@ -179,31 +81,42 @@ class EmailSummarizerAgent(BaseAgent):
             logger.warning(f"[EmailSummarizer] 邮件正文为空: {email_id}")
             return self._empty_result(email_id, "邮件正文为空")
 
-        # 2. 构建 prompt
-        prompt = SUMMARIZER_PROMPT.format(
+        # 2. 加载 system prompt（优先从数据库，fallback 到 defaults.py）
+        system_prompt = await get_prompt("email_summarizer_system")
+        if not system_prompt:
+            system_prompt = (
+                "You are a professional foreign trade email analysis assistant. "
+                "Return analysis results strictly in the requested JSON format."
+            )
+
+        # 3. 构建 user prompt（优先从数据库加载，fallback 到 defaults.py）
+        prompt = await render_prompt(
+            "email_summarizer",
             sender=sender,
             sender_name=sender_name or "",
-            subject=subject or "(无主题)",
-            received_at=received_at.strftime("%Y-%m-%d %H:%M") if received_at else "未知",
+            subject=subject or "(No subject)",
+            received_at=received_at.strftime("%Y-%m-%d %H:%M") if received_at else "Unknown",
             content=cleaned_content,
         )
 
-        # 3. 调用 LLM
+        if not prompt:
+            logger.error("[EmailSummarizer] Failed to load prompt, aborting analysis")
+            return self._empty_result(email_id, "Prompt loading failed")
+
+        # 4. 调用 LLM
         try:
             model = self._get_model()
             response = await self.llm.chat(
                 message=prompt,
-                system="你是一个专业的外贸邮件分析助手。请严格按照要求的 JSON 格式返回分析结果。",
+                system=system_prompt,
                 model=model,
             )
 
-            # 4. 解析结果
-            # DEBUG: 打印 LLM 原始返回（前 500 字符）
+            # 5. 解析结果
             logger.info(f"[EmailSummarizer] LLM 原始返回: {response.content[:500]}")
 
             result = self._parse_response(response.content)
 
-            # DEBUG: 打印解析后的结果
             logger.info(f"[EmailSummarizer] 解析结果: intent={result.get('intent')}, summary={result.get('summary', '')[:50]}")
 
             result["email_id"] = email_id

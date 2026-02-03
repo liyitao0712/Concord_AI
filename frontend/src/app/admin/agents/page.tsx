@@ -8,6 +8,7 @@ interface AgentConfig {
   display_name: string;
   description: string;
   prompt_name: string;
+  system_prompt_name: string;
   model?: string;
   temperature?: number;
   max_tokens?: number;
@@ -20,12 +21,21 @@ const AGENTS: AgentConfig[] = [
     display_name: '对话助手',
     description: '通用聊天助手，处理用户对话和查询',
     prompt_name: 'chat_agent',
+    system_prompt_name: 'chat_agent_system',
   },
   {
     name: 'email_summarizer',
     display_name: '邮件摘要生成器',
     description: '生成邮件摘要和关键要点',
     prompt_name: 'email_summarizer',
+    system_prompt_name: 'email_summarizer_system',
+  },
+  {
+    name: 'work_type_analyzer',
+    display_name: '工作类型分析器',
+    description: '分析邮件内容判断工作类型，匹配现有类型或建议新类型',
+    prompt_name: 'work_type_analyzer',
+    system_prompt_name: 'work_type_analyzer_system',
   },
 ];
 
@@ -41,11 +51,14 @@ export default function AgentsPage() {
   const [editTemperature, setEditTemperature] = useState(0.7);
   const [editMaxTokens, setEditMaxTokens] = useState(4096);
 
-  // Prompt 编辑
+  // System Prompt 编辑
+  const [editSystemPromptContent, setEditSystemPromptContent] = useState('');
+  // User Prompt 编辑
   const [editPromptContent, setEditPromptContent] = useState('');
   const [editPromptDisplayName, setEditPromptDisplayName] = useState('');
   const [editPromptDescription, setEditPromptDescription] = useState('');
   const [savingPrompt, setSavingPrompt] = useState(false);
+  const [resettingPrompt, setResettingPrompt] = useState(false);
 
   // 选项卡
   const [activeTab, setActiveTab] = useState<'config' | 'prompt'>('config');
@@ -82,18 +95,21 @@ export default function AgentsPage() {
       setEditMaxTokens(config.max_tokens || 4096);
     } catch (error) {
       console.error('加载 Agent 配置失败:', error);
-      // 使用默认值
       setEditModel('');
       setEditTemperature(0.7);
       setEditMaxTokens(4096);
     }
 
-    // 加载 Prompt 内容
-    const prompt = prompts.find(p => p.name === agent.prompt_name);
-    if (prompt) {
-      setEditPromptContent(prompt.content);
-      setEditPromptDisplayName(prompt.display_name || '');
-      setEditPromptDescription(prompt.description || '');
+    // 加载 System Prompt
+    const systemPrompt = prompts.find(p => p.name === agent.system_prompt_name);
+    setEditSystemPromptContent(systemPrompt?.content || '');
+
+    // 加载 User Prompt
+    const userPrompt = prompts.find(p => p.name === agent.prompt_name);
+    if (userPrompt) {
+      setEditPromptContent(userPrompt.content);
+      setEditPromptDisplayName(userPrompt.display_name || '');
+      setEditPromptDescription(userPrompt.description || '');
     } else {
       setEditPromptContent('');
       setEditPromptDisplayName('');
@@ -106,6 +122,7 @@ export default function AgentsPage() {
     setEditModel('');
     setEditTemperature(0.7);
     setEditMaxTokens(4096);
+    setEditSystemPromptContent('');
     setEditPromptContent('');
     setEditPromptDisplayName('');
     setEditPromptDescription('');
@@ -135,17 +152,48 @@ export default function AgentsPage() {
 
     setSavingPrompt(true);
     try {
+      // 保存 System Prompt
+      if (editSystemPromptContent) {
+        await promptsApi.update(agent.system_prompt_name, {
+          content: editSystemPromptContent,
+        });
+      }
+
+      // 保存 User Prompt
       await promptsApi.update(agent.prompt_name, {
         content: editPromptContent,
         display_name: editPromptDisplayName || undefined,
         description: editPromptDescription || undefined,
       });
+
       setMessage({ type: 'success', text: 'Prompt 已保存' });
-      await loadData(); // 重新加载数据
+      await loadData();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || '保存失败' });
     } finally {
       setSavingPrompt(false);
+    }
+  };
+
+  const resetPromptToDefault = async (promptName: string, type: 'system' | 'user') => {
+    if (!confirm(`确定要重置${type === 'system' ? 'System' : 'User'} Prompt 为默认值吗？当前内容将被覆盖。`)) {
+      return;
+    }
+
+    setResettingPrompt(true);
+    try {
+      const updated = await promptsApi.resetToDefault(promptName);
+      if (type === 'system') {
+        setEditSystemPromptContent(updated.content);
+      } else {
+        setEditPromptContent(updated.content);
+      }
+      setMessage({ type: 'success', text: `${type === 'system' ? 'System' : 'User'} Prompt 已重置为默认值` });
+      await loadData();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || '重置失败' });
+    } finally {
+      setResettingPrompt(false);
     }
   };
 
@@ -164,6 +212,7 @@ export default function AgentsPage() {
   const availableModels = models.filter(m => m.is_configured);
   const currentAgent = AGENTS.find(a => a.name === editingAgent);
   const currentPrompt = currentAgent ? getPromptForAgent(currentAgent.prompt_name) : null;
+  const currentSystemPrompt = currentAgent ? getPromptForAgent(currentAgent.system_prompt_name) : null;
 
   return (
     <div className="space-y-6">
@@ -191,6 +240,7 @@ export default function AgentsPage() {
         <ul className="divide-y divide-gray-200">
           {AGENTS.map((agent) => {
             const prompt = getPromptForAgent(agent.prompt_name);
+            const systemPrompt = getPromptForAgent(agent.system_prompt_name);
             const modelConfig = agent.model ? models.find(m => m.model_id === agent.model) : null;
 
             return (
@@ -203,11 +253,20 @@ export default function AgentsPage() {
                         <div className="ml-2 flex-shrink-0 flex space-x-2">
                           {prompt ? (
                             <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                              Prompt 已配置
+                              User Prompt
                             </p>
                           ) : (
                             <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                              Prompt 未配置
+                              User Prompt 未配置
+                            </p>
+                          )}
+                          {systemPrompt ? (
+                            <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                              System Prompt
+                            </p>
+                          ) : (
+                            <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                              System Prompt 未配置
                             </p>
                           )}
                           {modelConfig ? (
@@ -384,7 +443,7 @@ export default function AgentsPage() {
                   <div className="pt-4 border-t border-gray-200">
                     <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 mb-4">
                       <p className="text-sm text-yellow-800">
-                        🚧 Agent 配置功能正在开发中，目前仅支持 Prompt 编辑
+                        Agent 配置功能正在开发中，目前仅支持 Prompt 编辑
                       </p>
                     </div>
                   </div>
@@ -393,61 +452,96 @@ export default function AgentsPage() {
 
               {/* Prompt 编辑标签页 */}
               {activeTab === 'prompt' && (
-                <div className="space-y-4">
-                  {/* 显示名称 */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      显示名称（可选）
-                    </label>
-                    <input
-                      type="text"
-                      value={editPromptDisplayName}
-                      onChange={(e) => setEditPromptDisplayName(e.target.value)}
-                      placeholder="留空使用默认名称"
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                <div className="space-y-6">
+                  {/* System Prompt 区域 */}
+                  <div className="border border-purple-200 rounded-lg p-4 bg-purple-50/30">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-purple-800">
+                        System Prompt
+                        {currentSystemPrompt && (
+                          <span className="ml-2 text-xs font-normal text-purple-500">
+                            v{currentSystemPrompt.version}
+                          </span>
+                        )}
+                      </label>
+                      <button
+                        onClick={() => resetPromptToDefault(currentAgent.system_prompt_name, 'system')}
+                        disabled={resettingPrompt}
+                        className="px-3 py-1 text-xs border border-orange-300 rounded-md text-orange-700 bg-white hover:bg-orange-50 disabled:opacity-50"
+                      >
+                        {resettingPrompt ? '重置中...' : '重置为默认'}
+                      </button>
+                    </div>
+                    <p className="text-xs text-purple-600 mb-2">
+                      定义 Agent 的角色和全局行为规范，通常不包含变量
+                    </p>
+                    <textarea
+                      value={editSystemPromptContent}
+                      onChange={(e) => setEditSystemPromptContent(e.target.value)}
+                      rows={6}
+                      className="block w-full border-purple-200 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm font-mono text-xs"
+                      placeholder="System Prompt..."
                     />
                   </div>
 
-                  {/* 描述 */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      描述（可选）
-                    </label>
-                    <input
-                      type="text"
-                      value={editPromptDescription}
-                      onChange={(e) => setEditPromptDescription(e.target.value)}
-                      placeholder="简短描述这个 Prompt 的用途"
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    />
-                  </div>
+                  {/* User Prompt 区域 */}
+                  <div className="border border-blue-200 rounded-lg p-4 bg-blue-50/30">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-blue-800">
+                        User Prompt
+                        {currentPrompt && (
+                          <span className="ml-2 text-xs font-normal text-blue-500">
+                            v{currentPrompt.version}
+                          </span>
+                        )}
+                      </label>
+                      <button
+                        onClick={() => resetPromptToDefault(currentAgent.prompt_name, 'user')}
+                        disabled={resettingPrompt}
+                        className="px-3 py-1 text-xs border border-orange-300 rounded-md text-orange-700 bg-white hover:bg-orange-50 disabled:opacity-50"
+                      >
+                        {resettingPrompt ? '重置中...' : '重置为默认'}
+                      </button>
+                    </div>
 
-                  {/* Prompt 内容 */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Prompt 内容
-                    </label>
+                    {/* 显示名称 */}
+                    <div className="mb-3">
+                      <input
+                        type="text"
+                        value={editPromptDisplayName}
+                        onChange={(e) => setEditPromptDisplayName(e.target.value)}
+                        placeholder="显示名称（可选）"
+                        className="block w-full border-blue-200 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
+
+                    {/* 可用变量提示 */}
                     {currentPrompt?.variables && Object.keys(currentPrompt.variables).length > 0 && (
-                      <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                      <div className="mb-2 p-2 bg-blue-100/50 border border-blue-200 rounded-md">
                         <p className="text-xs text-blue-800">
                           可用变量：
-                          {Object.keys(currentPrompt.variables).map((key) => (
-                            <code key={key} className="ml-2 px-1.5 py-0.5 bg-blue-100 rounded text-blue-900">
-                              {`{${key}}`}
-                            </code>
+                          {Object.entries(currentPrompt.variables).map(([key, desc]) => (
+                            <span key={key} className="ml-2">
+                              <code className="px-1.5 py-0.5 bg-blue-100 rounded text-blue-900">
+                                {`{{${key}}}`}
+                              </code>
+                              <span className="text-blue-600 ml-1">{String(desc)}</span>
+                            </span>
                           ))}
                         </p>
                       </div>
                     )}
+
+                    {/* User Prompt 内容 */}
                     <textarea
                       value={editPromptContent}
                       onChange={(e) => setEditPromptContent(e.target.value)}
                       rows={16}
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm font-mono text-xs"
-                      placeholder="在这里输入 Prompt 内容..."
+                      className="block w-full border-blue-200 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm font-mono text-xs"
+                      placeholder="User Prompt 内容..."
                     />
                     <p className="mt-1 text-xs text-gray-500">
-                      使用 {`{变量名}`} 格式定义变量，例如：{`{user_message}`}
+                      使用 {'{{变量名}}'} 格式定义变量，例如：{'{{content}}'}
                     </p>
                   </div>
 
@@ -456,14 +550,13 @@ export default function AgentsPage() {
                     <div className="bg-gray-50 rounded-md p-3 text-xs text-gray-600">
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <span className="font-medium">版本:</span> v{currentPrompt.version}
+                          <span className="font-medium">User Prompt 版本:</span> v{currentPrompt.version}
+                        </div>
+                        <div>
+                          <span className="font-medium">System Prompt 版本:</span> v{currentSystemPrompt?.version || '-'}
                         </div>
                         <div>
                           <span className="font-medium">分类:</span> {currentPrompt.category}
-                        </div>
-                        <div>
-                          <span className="font-medium">创建时间:</span>{' '}
-                          {new Date(currentPrompt.created_at).toLocaleString('zh-CN')}
                         </div>
                         <div>
                           <span className="font-medium">更新时间:</span>{' '}
