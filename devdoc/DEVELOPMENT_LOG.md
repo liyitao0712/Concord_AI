@@ -249,6 +249,31 @@ EventDispatcher.dispatch()
 
 ---
 
+### 8. Celery Worker 中 EmailSummarizer 自动分析失败
+
+**问题**：邮件入库后自动 AI 分析（EmailSummarizer）在 Celery Worker 中始终失败，导致所有邮件 intent 被标记为 "other"
+
+| 当前 | 建议改为 | 文件 |
+|-----|---------|------|
+| Worker 初始化不加载 LLM 配置，`DEFAULT_LLM_MODEL` 为空 | `worker_process_init` 钩子中调用 `load_llm_settings_from_db()` 加载模型配置 | `backend/app/celery_app.py` |
+| 自动分析失败但邮件仍标记为"已处理"，用户以为分析完成 | 区分"已入库"和"已分析"状态，或在前端明确显示分析是否成功 | `backend/app/tasks/email.py`、前端 |
+| EmailSummarizer 的 prompt 和返回结构尚未定稿 | 设计好 prompt + 返回 schema 后再开启自动分析，避免浪费 token | `backend/app/agents/email_summarizer.py` |
+
+**原因**：
+- Celery Worker 是独立进程，不执行 FastAPI 的 `load_llm_settings_from_db()` 启动逻辑
+- `EmailSummarizer._get_model()` 拿到空字符串，LLM 调用报错 `LLM Provider NOT provided`
+- 当前即使分析失败，邮件仍被标记为 `is_processed=True`，前端无法区分
+
+**改动范围**：
+- `backend/app/celery_app.py`（Worker 初始化加载 LLM 配置）
+- `backend/app/agents/email_summarizer.py`（prompt 和返回结构设计）
+- `backend/app/tasks/email.py`（处理状态细化）
+- 前端邮件列表页（状态展示优化）
+
+**优先级**：中（prompt 和返回结构确定后再实施，避免浪费 token）
+
+---
+
 ## 2026-01-30 - 待改进项处理 + 整体测试
 
 ### 开发内容
