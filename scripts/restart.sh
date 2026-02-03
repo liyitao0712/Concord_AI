@@ -97,8 +97,13 @@ fi
 
 # 4. 重启 Docker 容器（包括 Celery）
 if [ "$RUN_MODE" = "all" ]; then
+    # 先停 Celery，避免 Redis 断开后 Worker 崩溃
     echo ""
-    echo "[4/5] 重启 Docker 容器（包括 Celery Beat/Worker）..."
+    echo "[3.5/6] 停止 Celery 服务..."
+    ./scripts/celery.sh stop 2>/dev/null || true
+
+    echo ""
+    echo "[4/6] 重启 Docker 容器..."
     docker compose down
     docker compose up -d
 
@@ -112,6 +117,11 @@ if [ "$RUN_MODE" = "all" ]; then
         echo -n "."
         sleep 1
     done
+
+    # 重启 Celery 服务
+    echo ""
+    echo "[4.5/6] 启动 Celery 服务..."
+    ./scripts/celery.sh start
 fi
 
 # 检查虚拟环境

@@ -73,6 +73,9 @@ stop_process() {
     if is_running "$pid_file"; then
         local pid=$(get_pid "$pid_file")
         echo "  停止 $name (PID: $pid)..."
+
+        # 先杀子进程树（确保守护进程包裹的实际 worker 也被停止）
+        pkill -P "$pid" 2>/dev/null || true
         kill "$pid" 2>/dev/null || true
 
         # 等待进程结束
@@ -87,10 +90,19 @@ stop_process() {
 
         # 强制终止
         echo "  强制终止 $name..."
+        pkill -9 -P "$pid" 2>/dev/null || true
         kill -9 "$pid" 2>/dev/null || true
         rm -f "$pid_file"
     else
         echo "  $name 未运行"
+        # 清理可能残留的 celery worker 进程
+        if [ "$name" = "Celery Worker" ]; then
+            local stale_pids=$(pgrep -f "celery.*worker.*app.celery_app" 2>/dev/null || true)
+            if [ -n "$stale_pids" ]; then
+                echo "  清理残留的 Worker 进程: $stale_pids"
+                echo "$stale_pids" | xargs kill 2>/dev/null || true
+            fi
+        fi
     fi
 }
 
@@ -136,6 +148,89 @@ start_process() {
     cd "$PROJECT_ROOT"
 }
 
+# 启动带自动重启守护的进程（用于 Worker）
+start_process_supervised() {
+    local name=$1
+    local pid_file=$2
+    local log_file=$3
+    local command=$4
+    local max_retries=100          # 最大连续重启次数
+    local base_delay=5             # 基础重启延迟（秒）
+    local max_delay=60             # 最大重启延迟（秒）
+    local healthy_threshold=120    # 运行超过此秒数则重置重启计数
+
+    if is_running "$pid_file"; then
+        local pid=$(get_pid "$pid_file")
+        echo "  $name 已在运行 (PID: $pid)"
+        return 0
+    fi
+
+    echo "  启动 $name（带自动重启守护）..."
+
+    # 切换到 backend 目录并激活虚拟环境
+    cd "$PROJECT_ROOT/backend"
+    source venv/bin/activate
+
+    # 设置 macOS fork 安全环境变量
+    export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+
+    # 守护包装：崩溃后自动重启，带退避延迟
+    nohup bash -c "
+        RETRY_COUNT=0
+        DELAY=$base_delay
+        while [ \$RETRY_COUNT -lt $max_retries ]; do
+            START_TIME=\$(date +%s)
+            echo \"[\$(date '+%Y-%m-%d %H:%M:%S')] [Supervisor] 启动 $name (第 \$((RETRY_COUNT+1)) 次)\" >> \"$log_file\"
+            $command >> \"$log_file\" 2>&1
+            EXIT_CODE=\$?
+            END_TIME=\$(date +%s)
+            RUN_DURATION=\$((END_TIME - START_TIME))
+
+            # 如果是正常退出（比如收到 stop 信号），不重启
+            if [ \$EXIT_CODE -eq 0 ]; then
+                echo \"[\$(date '+%Y-%m-%d %H:%M:%S')] [Supervisor] $name 正常退出，不再重启\" >> \"$log_file\"
+                break
+            fi
+
+            # 如果运行时间足够长，说明之前是稳定的，重置计数器
+            if [ \$RUN_DURATION -ge $healthy_threshold ]; then
+                RETRY_COUNT=0
+                DELAY=$base_delay
+            else
+                RETRY_COUNT=\$((RETRY_COUNT + 1))
+                # 退避延迟：每次翻倍，不超过上限
+                DELAY=\$((DELAY * 2))
+                if [ \$DELAY -gt $max_delay ]; then
+                    DELAY=$max_delay
+                fi
+            fi
+
+            echo \"[\$(date '+%Y-%m-%d %H:%M:%S')] [Supervisor] $name 异常退出 (code=\$EXIT_CODE, 运行了 \${RUN_DURATION}s)，\${DELAY}s 后重启...\" >> \"$log_file\"
+            sleep \$DELAY
+        done
+
+        if [ \$RETRY_COUNT -ge $max_retries ]; then
+            echo \"[\$(date '+%Y-%m-%d %H:%M:%S')] [Supervisor] $name 连续崩溃 $max_retries 次，放弃重启\" >> \"$log_file\"
+        fi
+    " > /dev/null 2>&1 &
+
+    local pid=$!
+    echo "$pid" > "$pid_file"
+
+    sleep 2
+
+    if ps -p "$pid" > /dev/null 2>&1; then
+        echo "  $name 已启动 (PID: $pid，带自动重启守护)"
+        echo "  日志: $log_file"
+    else
+        echo "  $name 启动失败，请查看日志: $log_file"
+        rm -f "$pid_file"
+        return 1
+    fi
+
+    cd "$PROJECT_ROOT"
+}
+
 # ==================== 命令处理 ====================
 
 case "${1:-start}" in
@@ -158,8 +253,8 @@ case "${1:-start}" in
             "$BEAT_LOG" \
             "celery -A app.celery_app beat --loglevel=info"
 
-        # 启动 Celery Worker
-        start_process \
+        # 启动 Celery Worker（带自动重启守护）
+        start_process_supervised \
             "Celery Worker" \
             "$WORKER_PID_FILE" \
             "$WORKER_LOG" \

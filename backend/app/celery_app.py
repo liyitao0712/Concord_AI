@@ -57,6 +57,18 @@ celery_app.conf.update(
     # Worker 配置
     worker_prefetch_multiplier=1,  # 每次只取 1 个任务（公平分发）
     worker_max_tasks_per_child=1000,  # 每个 Worker 进程处理 1000 个任务后重启（防止内存泄漏）
+    worker_cancel_long_running_tasks_on_connection_loss=True,  # 连接丢失时取消执行中的任务（Celery 6 默认行为）
+
+    # Broker 连接配置（增强 Redis 断线重连能力）
+    broker_connection_retry_on_startup=True,  # 启动时重试连接
+    broker_connection_max_retries=None,  # 无限重试（不放弃连接）
+    broker_connection_timeout=10,  # 连接超时 10 秒
+    broker_transport_options={
+        "visibility_timeout": 3600,   # 任务可见性超时 1 小时
+        "retry_on_timeout": True,     # 超时时自动重试
+        "socket_keepalive": True,     # 保持 TCP 连接活跃
+        "health_check_interval": 30,  # 每 30 秒健康检查
+    },
 
     # 任务路由
     task_routes={
@@ -96,24 +108,12 @@ def setup_periodic_tasks(sender, **kwargs):
     """
     启动时设置定时任务
 
-    注意：邮件轮询任务是动态添加的，由 EmailWorkerService 管理
-    这里只设置系统级别的定时任务
+    在 Beat 进程启动时直接从数据库加载邮箱账户并注册轮询任务，
+    确保 Beat 进程自身持有完整的调度计划。
     """
-    # 同步邮件轮询任务
-    from app.services.email_worker_service import email_worker_service
     import asyncio
 
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    # 同步邮件任务
-    stats = loop.run_until_complete(email_worker_service.sync_email_tasks())
-    logger.info(f"[Celery] 邮件任务同步完成: {stats}")
-
-    # 添加定期同步任务（每 5 分钟）
+    # 添加定期同步任务（每 5 分钟，处理运行时新增/删除的账户）
     sender.add_periodic_task(
         300.0,  # 每 5 分钟
         sync_email_tasks_periodic.s(),
@@ -127,6 +127,34 @@ def setup_periodic_tasks(sender, **kwargs):
         cleanup_expired_data.s(),
         name="cleanup-expired-data",
     )
+
+    # 启动时立即从数据库加载邮箱账户，注册轮询任务
+    # 这样 Beat 进程自身就持有这些任务，不依赖 Worker 进程的修改
+    try:
+        loop = asyncio.new_event_loop()
+        try:
+            from app.storage.email import get_active_imap_accounts
+            accounts = loop.run_until_complete(get_active_imap_accounts())
+            for account in accounts:
+                if account.id is not None:
+                    task_name = f"poll-email-{account.id}"
+                    # 用 signature 引用任务，避免循环导入
+                    task_sig = sender.signature(
+                        "app.tasks.email.poll_email_account",
+                        args=(account.id,),
+                    )
+                    sender.add_periodic_task(
+                        60.0,  # 每 60 秒
+                        task_sig,
+                        name=task_name,
+                        options={"queue": "email", "expires": 90},
+                    )
+                    logger.info(f"[Celery] 注册邮件轮询任务: {task_name}")
+            logger.info(f"[Celery] 启动时注册了 {len(accounts)} 个邮件轮询任务")
+        finally:
+            loop.close()
+    except Exception as e:
+        logger.warning(f"[Celery] 启动时注册邮件轮询任务失败（将由定期同步补充）: {e}")
 
 
 # ==================== 系统任务 ====================
