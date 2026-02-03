@@ -494,6 +494,99 @@ async def test_llm_connection(
         }
 
 
+# ==================== 公司信息配置接口 ====================
+
+# 公司信息 key 定义
+COMPANY_SETTINGS_KEYS = {
+    "company.name": {"description": "公司英文名称", "example": "Concord Tools Limited"},
+    "company.name_zh": {"description": "公司中文名称", "example": "广州协和工具有限公司"},
+    "company.industry": {"description": "所属行业", "example": "外贸五金工具"},
+    "company.context": {"description": "业务背景描述（会注入到所有 AI 分析 Prompt 中）", "example": "Concord 是一家外贸公司，主营五金工具出口，客户主要在欧美市场"},
+    "company.email_domains": {"description": "公司邮箱域名（逗号分隔，用于识别内部邮件）", "example": "concordtools.com"},
+}
+
+
+class CompanyConfigResponse(BaseModel):
+    """公司信息配置响应"""
+    name: Optional[str] = None
+    name_zh: Optional[str] = None
+    industry: Optional[str] = None
+    context: Optional[str] = None
+    email_domains: Optional[str] = None
+
+
+class CompanyConfigUpdate(BaseModel):
+    """公司信息配置更新（所有字段可选，只更新传入的字段）"""
+    name: Optional[str] = None
+    name_zh: Optional[str] = None
+    industry: Optional[str] = None
+    context: Optional[str] = None
+    email_domains: Optional[str] = None
+
+
+@router.get("/company", response_model=CompanyConfigResponse)
+async def get_company_config(
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    获取公司信息配置
+
+    这些信息会作为系统变量自动注入到所有 AI Prompt 中，
+    可在 Prompt 模板中通过 {{company_name}}、{{company_context}} 等引用。
+    """
+    return CompanyConfigResponse(
+        name=await get_setting(db, "company.name"),
+        name_zh=await get_setting(db, "company.name_zh"),
+        industry=await get_setting(db, "company.industry"),
+        context=await get_setting(db, "company.context"),
+        email_domains=await get_setting(db, "company.email_domains"),
+    )
+
+
+@router.put("/company")
+async def update_company_config(
+    config: CompanyConfigUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    更新公司信息配置
+
+    更新后会自动刷新 Prompt 缓存，后续所有 AI 分析将使用新的公司信息。
+    """
+    updated = []
+
+    # 遍历所有字段，只更新传入的
+    field_to_key = {
+        "name": "company.name",
+        "name_zh": "company.name_zh",
+        "industry": "company.industry",
+        "context": "company.context",
+        "email_domains": "company.email_domains",
+    }
+
+    for field_name, setting_key in field_to_key.items():
+        value = getattr(config, field_name, None)
+        if value is not None:
+            desc = COMPANY_SETTINGS_KEYS[setting_key]["description"]
+            await set_setting(db, setting_key, value, "company", desc)
+            updated.append(field_name)
+            logger.info(f"[Settings] 更新公司信息: {setting_key}")
+
+    # 刷新 Prompt 缓存中的系统变量
+    if updated:
+        from app.llm.prompts import prompt_manager
+        await prompt_manager.refresh_cache()
+
+    return {
+        "success": True,
+        "updated": updated,
+        "message": f"已更新 {len(updated)} 项公司信息",
+        "hint": "可在 Prompt 模板中使用 {{company_name}}、{{company_name_zh}}、{{company_industry}}、{{company_context}}、{{company_email_domains}} 引用",
+    }
+
+
 # ==================== 邮件配置接口 ====================
 
 @router.get("/email", response_model=EmailConfigResponse)
