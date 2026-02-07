@@ -1,84 +1,96 @@
 # app/llm/settings_loader.py
 # LLM 设置加载器
 #
-# 从数据库加载 LLM 设置，并应用到环境变量
-# 这样 LiteLLM 可以直接使用
+# 从 llm_model_configs 表加载 LLM 设置，并应用到环境变量
+# 这样 LiteLLM 和 Anthropic SDK 可以直接使用
+#
+# 唯一数据源：llm_model_configs 表（通过 /admin/llm 页面管理）
 
 import os
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings as app_settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# provider → 环境变量名 映射
+_PROVIDER_ENV_MAP = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "qwen": "DASHSCOPE_API_KEY",
+    "volcengine": "VOLCENGINE_API_KEY",
+}
+
 
 async def load_llm_settings(db: AsyncSession) -> dict:
     """
-    从数据库加载 LLM 设置
+    从 llm_model_configs 表加载 LLM 设置
+
+    数据源：llm_model_configs 表（唯一来源，通过 /admin/llm 页面管理）
 
     Returns:
         dict: {
-            "default_model": str,
-            "anthropic_api_key": str | None,
-            "openai_api_key": str | None,
+            "default_model": str | None,
+            "api_keys": {env_var_name: api_key, ...}
         }
     """
-    from app.models.settings import SystemSetting
     from app.models import LLMModelConfig
 
-    # 从 llm_model_config 表获取第一个已配置的模型作为默认模型
-    model_query = select(LLMModelConfig).where(
-        LLMModelConfig.is_enabled == True,
-        LLMModelConfig.is_configured == True
-    ).order_by(LLMModelConfig.created_at).limit(1)
-    model_result = await db.execute(model_query)
-    first_model = model_result.scalar_one_or_none()
-
     result = {
-        "default_model": first_model.model_id if first_model else None,
-        "anthropic_api_key": app_settings.ANTHROPIC_API_KEY or None,
-        "openai_api_key": app_settings.OPENAI_API_KEY or None,
+        "default_model": None,
+        "api_keys": {},
     }
 
     try:
-        # 查询 LLM 相关设置
-        query = select(SystemSetting).where(SystemSetting.category == "llm")
-        db_result = await db.execute(query)
-        settings_list = db_result.scalars().all()
+        # 查询所有已配置且启用的模型
+        query = select(LLMModelConfig).where(
+            LLMModelConfig.is_enabled == True,
+            LLMModelConfig.is_configured == True,
+        ).order_by(LLMModelConfig.created_at)
 
-        for setting in settings_list:
-            if setting.key == "llm.default_model":
-                result["default_model"] = setting.value
-            elif setting.key == "llm.anthropic_api_key":
-                result["anthropic_api_key"] = setting.value
-            elif setting.key == "llm.openai_api_key":
-                result["openai_api_key"] = setting.value
+        db_result = await db.execute(query)
+        models = db_result.scalars().all()
+
+        if not models:
+            logger.warning("[LLM Settings] 数据库中没有已配置的 LLM 模型")
+            return result
+
+        # 第一个模型作为默认模型
+        result["default_model"] = models[0].model_id
+
+        # 按 provider 提取 API Key（每个 provider 取第一个有 Key 的模型）
+        for model in models:
+            if model.api_key and model.provider in _PROVIDER_ENV_MAP:
+                env_key = _PROVIDER_ENV_MAP[model.provider]
+                if env_key not in result["api_keys"]:
+                    result["api_keys"][env_key] = model.api_key
 
     except Exception as e:
-        logger.warning(f"[LLM Settings] 从数据库加载设置失败，使用默认值: {e}")
+        logger.warning(f"[LLM Settings] 从数据库加载设置失败: {e}")
 
     return result
 
 
 async def apply_llm_settings(db: AsyncSession) -> None:
     """
-    加载 LLM 设置并应用到环境变量
+    从 llm_model_configs 加载设置并应用到环境变量
 
-    这个函数应该在需要使用 LLM 之前调用
+    这个函数应该在需要使用 LLM 之前调用。
+    会将 API Key 设置到环境变量，供 LiteLLM 和 Anthropic SDK 使用。
     """
     settings = await load_llm_settings(db)
 
-    # 设置 API Key 到环境变量（LiteLLM 会自动读取）
-    if settings["anthropic_api_key"]:
-        os.environ["ANTHROPIC_API_KEY"] = settings["anthropic_api_key"]
-        logger.debug("[LLM Settings] 已设置 ANTHROPIC_API_KEY")
+    # 设置默认模型
+    if settings["default_model"]:
+        os.environ["DEFAULT_LLM_MODEL"] = settings["default_model"]
 
-    if settings["openai_api_key"]:
-        os.environ["OPENAI_API_KEY"] = settings["openai_api_key"]
-        logger.debug("[LLM Settings] 已设置 OPENAI_API_KEY")
+    # 设置 API Key 到环境变量
+    for env_key, api_key in settings["api_keys"].items():
+        os.environ[env_key] = api_key
+        logger.debug(f"[LLM Settings] 已设置 {env_key}")
 
 
 async def get_default_model(db: AsyncSession) -> str:

@@ -19,10 +19,16 @@ from app.core.config import settings
 
 # 导入工作流和活动
 from app.temporal.workflows.work_type_suggestion import WorkTypeSuggestionWorkflow
+from app.temporal.workflows.customer_approval import CustomerApprovalWorkflow
 from app.temporal.activities.work_type import (
     notify_admin_activity,
     approve_suggestion_activity,
     reject_suggestion_activity,
+)
+from app.temporal.activities.customer import (
+    notify_admin_customer_activity,
+    approve_customer_activity,
+    reject_customer_activity,
 )
 
 # 配置日志
@@ -57,11 +63,15 @@ async def run_worker():
         task_queue=settings.TEMPORAL_TASK_QUEUE,
         workflows=[
             WorkTypeSuggestionWorkflow,
+            CustomerApprovalWorkflow,
         ],
         activities=[
             notify_admin_activity,
             approve_suggestion_activity,
             reject_suggestion_activity,
+            notify_admin_customer_activity,
+            approve_customer_activity,
+            reject_customer_activity,
         ],
         # 使用线程池执行活动（活动中有同步数据库操作）
         activity_executor=ThreadPoolExecutor(max_workers=10),

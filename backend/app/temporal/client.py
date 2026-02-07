@@ -114,6 +114,63 @@ async def reject_suggestion(workflow_id: str, reviewer_id: str, note: str = ""):
     await handle.signal(WorkTypeSuggestionWorkflow.reject, args=[reviewer_id, note])
 
 
+# ==================== 客户建议审批 ====================
+
+
+async def start_customer_approval_workflow(suggestion_id: str) -> str:
+    """
+    启动客户建议审批工作流
+
+    Args:
+        suggestion_id: CustomerSuggestion 的 ID
+
+    Returns:
+        str: Workflow ID
+    """
+    from app.temporal.workflows.customer_approval import CustomerApprovalWorkflow
+
+    client = await get_temporal_client()
+    workflow_id = f"customer-suggestion-{suggestion_id}"
+
+    logger.info(f"启动客户审批工作流: {workflow_id}")
+
+    handle = await client.start_workflow(
+        CustomerApprovalWorkflow.run,
+        suggestion_id,
+        id=workflow_id,
+        task_queue=settings.TEMPORAL_TASK_QUEUE,
+    )
+
+    logger.info(f"客户审批工作流已启动: {workflow_id}")
+    return workflow_id
+
+
+async def approve_customer_suggestion(workflow_id: str, reviewer_id: str, note: str = ""):
+    """
+    发送批准信号到客户审批工作流
+    """
+    from app.temporal.workflows.customer_approval import CustomerApprovalWorkflow
+
+    client = await get_temporal_client()
+    handle = client.get_workflow_handle(workflow_id)
+
+    logger.info(f"发送客户批准信号: workflow_id={workflow_id}, reviewer={reviewer_id}")
+    await handle.signal(CustomerApprovalWorkflow.approve, args=[reviewer_id, note])
+
+
+async def reject_customer_suggestion(workflow_id: str, reviewer_id: str, note: str = ""):
+    """
+    发送拒绝信号到客户审批工作流
+    """
+    from app.temporal.workflows.customer_approval import CustomerApprovalWorkflow
+
+    client = await get_temporal_client()
+    handle = client.get_workflow_handle(workflow_id)
+
+    logger.info(f"发送客户拒绝信号: workflow_id={workflow_id}, reviewer={reviewer_id}")
+    await handle.signal(CustomerApprovalWorkflow.reject, args=[reviewer_id, note])
+
+
 async def get_workflow_status(workflow_id: str) -> Optional[dict]:
     """
     查询工作流状态

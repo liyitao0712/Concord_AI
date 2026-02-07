@@ -50,32 +50,6 @@ async def db_session():
         await session.rollback()
 
 
-@pytest.fixture
-async def setup_intents(db_session):
-    """确保数据库中有意图种子数据"""
-    from sqlalchemy import select, func
-    from app.models.intent import Intent, SEED_INTENTS
-
-    # 检查是否有数据
-    count = await db_session.scalar(select(func.count(Intent.id)))
-
-    if count == 0:
-        # 插入种子数据
-        from uuid import uuid4
-        for seed in SEED_INTENTS:
-            intent = Intent(
-                id=str(uuid4()),
-                **seed,
-                created_by="system",
-            )
-            db_session.add(intent)
-        await db_session.commit()
-
-    yield
-
-    # 测试结束后不删除数据（保留种子数据）
-
-
 # ==================== Redis Fixtures ====================
 
 @pytest.fixture

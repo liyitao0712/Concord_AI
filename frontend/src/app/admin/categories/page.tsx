@@ -3,21 +3,22 @@
 //
 // 功能说明：
 // 1. 品类树形展示（缩进 + 展开/折叠）
-// 2. 新建/编辑品类弹窗（含编码自动生成）
+// 2. 新建/编辑品类弹窗（含编码自动生成 + 图片上传）
 // 3. 删除保护提示
 // 4. 显示品类编码、中英文名、增值税率、退税率、产品数量
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   categoriesApi,
+  uploadApi,
   Category,
   CategoryCreate,
   CategoryUpdate,
   CategoryTreeNode,
 } from '@/lib/api';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { Button } from '@/components/ui/button';
@@ -85,6 +86,13 @@ function TreeNodeItem({
               </button>
             ) : (
               <span className="w-5 mr-2" />
+            )}
+            {node.image_url && (
+              <img
+                src={node.image_url}
+                alt=""
+                className="w-6 h-6 rounded object-cover mr-2 flex-shrink-0"
+              />
             )}
             <span className="text-sm font-medium">{node.name}</span>
           </div>
@@ -154,6 +162,12 @@ export default function CategoriesPage() {
   const [formData, setFormData] = useState<CategoryCreate>({ code: '', name: '' });
   const [formLoading, setFormLoading] = useState(false);
 
+  // 图片上传
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const confirm = useConfirm();
 
   // ==================== 数据加载 ====================
@@ -205,12 +219,49 @@ export default function CategoriesPage() {
     });
   };
 
+  // ==================== 图片处理 ====================
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 验证类型
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('仅支持 JPEG/PNG/GIF/WebP 格式');
+      return;
+    }
+    // 验证大小（5MB）
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('图片大小不能超过 5MB');
+      return;
+    }
+
+    setImageFile(file);
+    setExistingImageUrl(null);
+    // 生成本地预览
+    const reader = new FileReader();
+    reader.onload = () => setImagePreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const clearImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    setExistingImageUrl(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   // ==================== 表单操作 ====================
 
   const openCreateForm = async (parentId?: string) => {
     setEditingId(null);
+    setImageFile(null);
+    setImagePreview(null);
+    setExistingImageUrl(null);
     try {
-      // 自动获取下一个编码
       const { code } = await categoriesApi.nextCode(parentId);
       setFormData({
         code,
@@ -219,7 +270,6 @@ export default function CategoriesPage() {
       });
       setShowForm(true);
     } catch {
-      // 如果获取编码失败，让用户手动填
       setFormData({
         code: '',
         name: '',
@@ -233,6 +283,9 @@ export default function CategoriesPage() {
     try {
       const category = await categoriesApi.get(node.id);
       setEditingId(node.id);
+      setImageFile(null);
+      setImagePreview(null);
+      setExistingImageUrl(category.image_url || null);
       setFormData({
         code: category.code,
         name: category.name,
@@ -252,10 +305,23 @@ export default function CategoriesPage() {
     if (!formData.code.trim() || !formData.name.trim()) return;
     setFormLoading(true);
     try {
+      let submitData: CategoryCreate | CategoryUpdate = { ...formData };
+
+      // 如果有新图片，先上传
+      if (imageFile) {
+        const uploadResult = await uploadApi.uploadImage(imageFile, 'images/categories');
+        submitData.image_key = uploadResult.key;
+        submitData.image_storage_type = uploadResult.storage_type;
+      } else if (!existingImageUrl && editingId) {
+        // 编辑时，如果没有新图也没有已有图（已删除），清空图片字段
+        (submitData as CategoryUpdate).image_key = null;
+        (submitData as CategoryUpdate).image_storage_type = null;
+      }
+
       if (editingId) {
-        await categoriesApi.update(editingId, formData as CategoryUpdate);
+        await categoriesApi.update(editingId, submitData as CategoryUpdate);
       } else {
-        await categoriesApi.create(formData);
+        await categoriesApi.create(submitData as CategoryCreate);
       }
       setShowForm(false);
       loadTree();
@@ -288,6 +354,9 @@ export default function CategoriesPage() {
       toast.error(err instanceof Error ? err.message : '删除失败');
     }
   };
+
+  // 当前显示的图片 URL（新选择的预览 > 已有图片）
+  const displayImageUrl = imagePreview || existingImageUrl;
 
   // ==================== 渲染 ====================
 
@@ -350,7 +419,7 @@ export default function CategoriesPage() {
 
       {/* ==================== 品类表单弹窗 ==================== */}
       <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>
               {editingId ? '编辑品类' : '新增品类'}
@@ -358,8 +427,8 @@ export default function CategoriesPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* 品类编码 + 品类名称 */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* 品类编码 + 父品类 */}
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="mb-1">品类编码 *</Label>
                 <Input
@@ -369,18 +438,37 @@ export default function CategoriesPage() {
                   placeholder="如 01、01-01"
                 />
               </div>
-              <div className="col-span-2">
-                <Label className="mb-1">品类名称（中文） *</Label>
-                <Input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="请输入品类中文名"
-                />
+              <div>
+                <Label className="mb-1">父品类</Label>
+                <select
+                  value={formData.parent_id || ''}
+                  onChange={(e) => setFormData({ ...formData, parent_id: e.target.value || undefined })}
+                  className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">无（作为根品类）</option>
+                  {flatCategories
+                    .filter((c) => c.id !== editingId)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.code} - {c.parent_name ? `${c.parent_name} / ${c.name}` : c.name}
+                      </option>
+                    ))}
+                </select>
               </div>
             </div>
 
-            {/* 英文名 */}
+            {/* 中文名（独占一行） */}
+            <div>
+              <Label className="mb-1">品类名称（中文） *</Label>
+              <Input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="请输入品类中文名"
+              />
+            </div>
+
+            {/* 英文名（独占一行） */}
             <div>
               <Label className="mb-1">品类名称（英文）</Label>
               <Input
@@ -391,23 +479,41 @@ export default function CategoriesPage() {
               />
             </div>
 
-            {/* 父品类 */}
+            {/* 品类图片 */}
             <div>
-              <Label className="mb-1">父品类</Label>
-              <select
-                value={formData.parent_id || ''}
-                onChange={(e) => setFormData({ ...formData, parent_id: e.target.value || undefined })}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">无（作为根品类）</option>
-                {flatCategories
-                  .filter((c) => c.id !== editingId)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.code} - {c.parent_name ? `${c.parent_name} / ${c.name}` : c.name}
-                    </option>
-                  ))}
-              </select>
+              <Label className="mb-1">品类图片</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+              {displayImageUrl ? (
+                <div className="relative inline-block">
+                  <img
+                    src={displayImageUrl}
+                    alt="品类图片"
+                    className="w-32 h-32 rounded-lg object-cover border border-border"
+                  />
+                  <button
+                    type="button"
+                    onClick={clearImage}
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center hover:bg-destructive/90"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-32 h-32 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-muted-foreground/60 flex flex-col items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Upload className="w-6 h-6 mb-1" />
+                  <span className="text-xs">点击上传</span>
+                </button>
+              )}
             </div>
 
             {/* 增值税率 + 退税率 */}

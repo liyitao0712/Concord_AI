@@ -32,7 +32,7 @@ from app.core.redis import redis_client
 from app.llm.gateway import LLMGateway, llm_gateway
 from app.agents.base import BaseAgent, AgentState, AgentResult
 from app.agents.registry import register_agent
-from app.llm.prompts import get_prompt
+from app.llm.prompts import get_prompt, render_prompt
 
 logger = get_logger(__name__)
 
@@ -79,6 +79,7 @@ class ChatAgent(BaseAgent):
     """
 
     name = "chat_agent"
+    display_name = "对话助手"
     description = "通用聊天助手，支持多轮对话和工具调用"
     prompt_name = "chat_agent"
     # 可用工具（默认不使用，可通过配置启用）
@@ -123,17 +124,20 @@ class ChatAgent(BaseAgent):
         )
 
     async def _get_system_prompt(self) -> str:
-        """获取系统提示：custom > DB chat_agent_system > DB chat_agent > hardcoded fallback"""
+        """获取系统提示：custom > DB chat_agent_system > DB chat_agent > hardcoded fallback
+
+        使用 render_prompt 而非 get_prompt，支持 {{company_name}} 等系统变量注入。
+        """
         if self._custom_system_prompt:
             return self._custom_system_prompt
 
-        # 优先加载 chat_agent_system
-        system_prompt = await get_prompt("chat_agent_system")
+        # 优先加载 chat_agent_system（支持系统变量渲染）
+        system_prompt = await render_prompt("chat_agent_system")
         if system_prompt:
             return system_prompt
 
         # 兼容旧的 chat_agent 条目
-        system_prompt = await get_prompt("chat_agent")
+        system_prompt = await render_prompt("chat_agent")
         if system_prompt:
             return system_prompt
 

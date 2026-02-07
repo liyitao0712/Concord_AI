@@ -27,6 +27,8 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from pydantic import BaseModel, Field
+
 from app.core.database import get_db
 from app.core.logging import get_logger
 from app.core.security import get_current_admin_user
@@ -246,6 +248,87 @@ async def delete_customer(
 
     logger.info(f"[CustomersAPI] 删除客户: {customer_name} (联系人: {contact_count}) by {admin.email}")
     return {"message": "删除成功", "contacts_deleted": contact_count}
+
+
+# ==================== AI 搜索 ====================
+
+
+class AILookupRequest(BaseModel):
+    """AI 搜索请求"""
+    company_name: str = Field(..., min_length=1, description="公司全称")
+
+
+class AILookupResponse(BaseModel):
+    """AI 搜索响应"""
+    short_name: Optional[str] = None
+    country: Optional[str] = None
+    region: Optional[str] = None
+    industry: Optional[str] = None
+    company_size: Optional[str] = None
+    website: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
+    notes: Optional[str] = None
+    confidence: float = 0.0
+    error: Optional[str] = None
+
+
+@router.post(
+    "/ai-lookup",
+    response_model=AILookupResponse,
+    summary="AI 搜索公司信息",
+    description="根据公司名称通过 AI 联网搜索自动填充客户信息",
+)
+async def ai_lookup_customer(
+    request: AILookupRequest,
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_user),
+):
+    """
+    AI 搜索公司信息
+
+    调用 AddNewClientHelper Agent 通过 LLM + Web Search 搜索公司公开信息，
+    返回可直接用于填充客户表单的结构化数据。
+    """
+    from app.llm import apply_llm_settings
+    from app.agents.registry import agent_registry
+
+    logger.info(f"[CustomersAPI] AI 搜索: {request.company_name} by {admin.email}")
+
+    # 加载 LLM 设置
+    await apply_llm_settings(session)
+
+    # 获取 Agent 并加载配置
+    agent = agent_registry.get("add_new_client_helper")
+    if not agent:
+        raise HTTPException(status_code=500, detail="Agent add_new_client_helper 未注册")
+
+    await agent.load_config_from_db(session)
+
+    # 执行搜索
+    try:
+        result = await agent.lookup(request.company_name)
+    except Exception as e:
+        logger.error(f"[CustomersAPI] AI 搜索失败: {e}")
+        raise HTTPException(status_code=500, detail=f"AI 搜索失败: {str(e)}")
+
+    return AILookupResponse(
+        short_name=result.get("short_name"),
+        country=result.get("country"),
+        region=result.get("region"),
+        industry=result.get("industry"),
+        company_size=result.get("company_size"),
+        website=result.get("website"),
+        email=result.get("email"),
+        phone=result.get("phone"),
+        address=result.get("address"),
+        tags=result.get("tags") or [],
+        notes=result.get("notes"),
+        confidence=result.get("confidence", 0),
+        error=result.get("error"),
+    )
 
 
 # ==================== 联系人 CRUD ====================

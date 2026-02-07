@@ -2077,6 +2077,39 @@ export const supplierContactsApi = {
 };
 
 
+// ==================== 文件上传 ====================
+
+export interface UploadResponse {
+  key: string;
+  storage_type: string;
+  url: string;
+}
+
+export const uploadApi = {
+  async uploadImage(file: File, directory: string = 'images/general'): Promise<UploadResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('directory', directory);
+
+    const token = getAccessToken();
+    const response = await fetch(`${API_BASE_URL}/admin/upload`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.detail || `上传失败: ${response.status}`);
+    }
+
+    return response.json();
+  },
+};
+
+
 // ==================== 品类管理 ====================
 
 export interface Category {
@@ -2089,6 +2122,7 @@ export interface Category {
   description: string | null;
   vat_rate: number | null;
   tax_rebate_rate: number | null;
+  image_url: string | null;
   product_count: number;
   children_count: number;
   created_at: string;
@@ -2103,6 +2137,7 @@ export interface CategoryTreeNode {
   description: string | null;
   vat_rate: number | null;
   tax_rebate_rate: number | null;
+  image_url: string | null;
   product_count: number;
   children: CategoryTreeNode[];
 }
@@ -2115,6 +2150,8 @@ export interface CategoryCreate {
   description?: string;
   vat_rate?: number;
   tax_rebate_rate?: number;
+  image_key?: string;
+  image_storage_type?: string;
 }
 
 export interface CategoryUpdate {
@@ -2125,6 +2162,8 @@ export interface CategoryUpdate {
   description?: string;
   vat_rate?: number;
   tax_rebate_rate?: number;
+  image_key?: string | null;
+  image_storage_type?: string | null;
 }
 
 export interface CategoryListResponse {
@@ -2404,5 +2443,106 @@ export const productsApi = {
       method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);
+  },
+};
+
+
+// ==================== 国家数据库 ====================
+
+export interface Country {
+  id: string;
+  name_zh: string;
+  name_en: string;
+  full_name_zh: string | null;
+  full_name_en: string | null;
+  iso_code_2: string;
+  iso_code_3: string | null;
+  numeric_code: string | null;
+  phone_code: string | null;
+  currency_name_zh: string | null;
+  currency_name_en: string | null;
+  currency_code: string | null;
+  created_at: string | null;
+}
+
+export interface CountryListResponse {
+  items: Country[];
+  total: number;
+}
+
+export const countriesApi = {
+  // 获取国家列表
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+  }): Promise<CountryListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    const query = searchParams.toString();
+    const response = await request<CountryListResponse>(`/admin/countries${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 获取国家详情
+  async get(id: string): Promise<Country> {
+    const response = await request<Country>(`/admin/countries/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+};
+
+
+// ==================== 贸易术语 ====================
+
+export interface TradeTerm {
+  id: string;
+  code: string;
+  name_en: string;
+  name_zh: string;
+  version: string;
+  transport_mode: string;
+  description_zh: string | null;
+  description_en: string | null;
+  risk_transfer: string | null;
+  is_current: boolean;
+  sort_order: number;
+  created_at: string | null;
+}
+
+export interface TradeTermListResponse {
+  items: TradeTerm[];
+  total: number;
+}
+
+export const tradeTermsApi = {
+  // 获取贸易术语列表
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    version?: string;
+    is_current?: boolean;
+  }): Promise<TradeTermListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.version) searchParams.set('version', params.version);
+    if (params?.is_current !== undefined) searchParams.set('is_current', String(params.is_current));
+    const query = searchParams.toString();
+    const response = await request<TradeTermListResponse>(`/admin/trade-terms${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 获取贸易术语详情
+  async get(id: string): Promise<TradeTerm> {
+    const response = await request<TradeTerm>(`/admin/trade-terms/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
   },
 };

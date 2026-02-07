@@ -17,7 +17,12 @@ from app.models.email_analysis import EmailAnalysis
 from app.models.llm_model_config import LLMModelConfig
 from app.models.work_type import WorkType, WorkTypeSuggestion
 from app.models.customer import Customer, Contact
+from app.models.customer_suggestion import CustomerSuggestion
 from app.models.supplier import Supplier, SupplierContact
+from app.models.category import Category
+from app.models.product import Product, ProductSupplier
+from app.models.country import Country
+from app.models.trade_term import TradeTerm
 
 # 导出所有模型（方便 Alembic 自动发现）
 __all__ = [
@@ -44,6 +49,12 @@ __all__ = [
     "WorkTypeSuggestion",
     "Customer",
     "Contact",
+    "CustomerSuggestion",
     "Supplier",
     "SupplierContact",
+    "Category",
+    "Product",
+    "ProductSupplier",
+    "Country",
+    "TradeTerm",
 ]

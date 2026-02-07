@@ -41,6 +41,14 @@ from app.api import prompts as prompts_router
 from app.api import llm_models
 from app.api import work_types as work_types_router
 from app.api import customers as customers_router
+from app.api import suppliers as suppliers_router
+from app.api import customer_suggestions as customer_suggestions_router
+from app.api import categories as categories_router
+from app.api import products as products_router
+from app.api import countries as countries_router
+from app.api import trade_terms_ref as trade_terms_ref_router
+from app.api import upload as upload_router
+from app.api import storage as storage_router
 
 
 # 初始化日志系统（在应用启动前）
@@ -412,6 +420,52 @@ app.include_router(llm_models.router)
 # - GET/PUT/DELETE /admin/contacts/{id} - 联系人详情/更新/删除
 app.include_router(customers_router.router)
 app.include_router(customers_router.contacts_router)
+
+# 客户建议审批路由（仅管理员）
+# - GET /admin/customer-suggestions - 建议列表
+# - GET /admin/customer-suggestions/{id} - 建议详情
+# - POST /admin/customer-suggestions/{id}/approve - 批准建议
+# - POST /admin/customer-suggestions/{id}/reject - 拒绝建议
+app.include_router(customer_suggestions_router.router)
+
+# 供应商管理路由（仅管理员）
+# - GET/POST /admin/suppliers - 供应商 CRUD
+# - GET/PUT/DELETE /admin/suppliers/{id} - 供应商详情/更新/删除
+# - GET/POST /admin/supplier-contacts - 供应商联系人 CRUD
+# - GET/PUT/DELETE /admin/supplier-contacts/{id} - 供应商联系人详情/更新/删除
+app.include_router(suppliers_router.router)
+app.include_router(suppliers_router.supplier_contacts_router)
+
+# 品类管理路由（仅管理员）
+# - GET/POST /admin/categories - 品类 CRUD
+# - GET /admin/categories/tree - 品类树形结构
+# - GET/PUT/DELETE /admin/categories/{id} - 品类详情/更新/删除
+app.include_router(categories_router.router)
+
+# 产品管理路由（仅管理员）
+# - GET/POST /admin/products - 产品 CRUD
+# - GET/PUT/DELETE /admin/products/{id} - 产品详情/更新/删除
+# - POST /admin/products/{id}/suppliers - 添加供应商关联
+# - PUT/DELETE /admin/products/{id}/suppliers/{supplier_id} - 更新/移除供应商关联
+app.include_router(products_router.router)
+
+# 国家数据库路由（仅管理员，只读）
+# - GET /admin/countries - 国家列表
+# - GET /admin/countries/{id} - 国家详情
+app.include_router(countries_router.router)
+
+# 贸易术语路由（仅管理员，只读）
+# - GET /admin/trade-terms - 贸易术语列表
+# - GET /admin/trade-terms/{id} - 贸易术语详情
+app.include_router(trade_terms_ref_router.router)
+
+# 文件上传路由（仅管理员）
+# - POST /admin/upload - 通用文件上传
+app.include_router(upload_router.router)
+
+# 文件下载路由（公开，通过 token 验证）
+# - GET /api/storage/download/{key} - 临时链接下载
+app.include_router(storage_router.router)
 
 
 # ==================== 根路由 ====================

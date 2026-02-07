@@ -84,8 +84,10 @@ class BaseAgent(ABC):
         result = await agent.run("用户输入")
     """
 
-    # Agent 名称
+    # Agent 名称（唯一标识）
     name: str = "base"
+    # Agent 显示名称（管理后台展示用）
+    display_name: str = ""
     # Agent 描述
     description: str = ""
     # 使用的 Prompt 名称
@@ -243,9 +245,9 @@ class BaseAgent(ABC):
             )
 
     async def _get_system_prompt(self) -> str:
-        """获取系统提示"""
+        """获取系统提示（支持 {{company_name}} 等系统变量渲染）"""
         if self.prompt_name:
-            prompt = await prompt_manager.get_prompt(self.prompt_name)
+            prompt = await prompt_manager.render(self.prompt_name)
             if prompt:
                 return prompt
         return self._default_system_prompt()

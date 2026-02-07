@@ -28,6 +28,9 @@ import {
   Brain,
   Tags,
   Plug,
+  Database,
+  Globe,
+  FileText,
   Settings,
   LayoutDashboard,
   Users,
@@ -83,6 +86,14 @@ const navigation: NavEntry[] = [
     ],
   },
   {
+    label: '基础数据',
+    icon: Database,
+    items: [
+      { name: '国家数据库', href: '/admin/countries', icon: Globe },
+      { name: '贸易术语', href: '/admin/trade-terms', icon: FileText },
+    ],
+  },
+  {
     label: '系统设置',
     icon: Settings,
     items: [
@@ -126,6 +137,7 @@ export default function AdminLayout({
   // 分组展开状态（默认全部展开）
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     'AI 设置': true,
+    '基础数据': true,
     '系统设置': true,
   });
 

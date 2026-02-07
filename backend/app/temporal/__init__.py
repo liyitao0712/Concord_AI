@@ -16,6 +16,9 @@ from app.temporal.client import (
     start_suggestion_workflow,
     approve_suggestion,
     reject_suggestion,
+    start_customer_approval_workflow,
+    approve_customer_suggestion,
+    reject_customer_suggestion,
 )
 
 __all__ = [
@@ -23,4 +26,7 @@ __all__ = [
     "start_suggestion_workflow",
     "approve_suggestion",
     "reject_suggestion",
+    "start_customer_approval_workflow",
+    "approve_customer_suggestion",
+    "reject_customer_suggestion",
 ]

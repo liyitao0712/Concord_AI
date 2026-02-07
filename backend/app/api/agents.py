@@ -87,9 +87,11 @@ class AgentConfigUpdateRequest(BaseModel):
 
 class AgentListItem(BaseModel):
     """Agent 列表项"""
-    name: str = Field(..., description="Agent 名称")
+    name: str = Field(..., description="Agent 名称（唯一标识）")
+    display_name: str = Field("", description="Agent 显示名称")
     description: str = Field("", description="Agent 描述")
-    prompt_name: str = Field("", description="Prompt 名称")
+    prompt_name: str = Field("", description="User Prompt 名称")
+    system_prompt_name: str = Field("", description="System Prompt 名称")
     model: Optional[str] = Field(None, description="使用的模型")
     tools: list[str] = Field(default_factory=list, description="可用工具")
 
@@ -317,10 +319,13 @@ async def list_all_agents(
 
     for agent_dict in agents:
         agent = agent_registry.get(agent_dict["name"])
+        prompt_name = getattr(agent, "prompt_name", "") or agent.name
         result.append(AgentListItem(
             name=agent.name,
+            display_name=getattr(agent, "display_name", "") or agent.name,
             description=agent.description,
-            prompt_name=getattr(agent, "prompt_name", ""),
+            prompt_name=prompt_name,
+            system_prompt_name=f"{prompt_name}_system",
             model=agent.model,
             tools=agent.tools,
         ))

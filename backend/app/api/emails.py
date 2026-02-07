@@ -538,15 +538,12 @@ async def execute_email_route(
     """
     执行邮件路由
 
-    根据指定的意图（或重新分析）执行相应的处理。
+    调用 RouterAgent 分析并执行相应处理。
 
-    - 如果指定 intent，直接使用该意图
-    - 否则重新调用 RouterAgent 分析
     - force=true 时，即使邮件已处理过也会重新执行
     """
     from app.agents.router_agent import router_agent
     from app.schemas.event import UnifiedEvent
-    from app.models.intent import Intent
     from datetime import datetime
     from uuid import uuid4
 
@@ -571,7 +568,7 @@ async def execute_email_route(
         event_type="email",
         source="email",
         source_id=email.message_id,
-        content=email.body_text or email.subject or "(无内容)",  # 优先用正文，其次用主题
+        content=email.body_text or email.subject or "(无内容)",
         user_external_id=email.sender,
         user_name=email.sender_name,
         metadata={
@@ -582,27 +579,8 @@ async def execute_email_route(
         },
     )
 
-    # 获取意图
-    if data.intent:
-        # 使用指定的意图
-        intent_query = select(Intent).where(Intent.name == data.intent)
-        intent_result = await session.execute(intent_query)
-        intent = intent_result.scalar_one_or_none()
-
-        if not intent:
-            raise HTTPException(status_code=400, detail=f"意图 '{data.intent}' 不存在")
-
-        route_result = type("RouteResult", (), {
-            "intent": intent.name,
-            "intent_label": intent.label,
-            "action": intent.default_handler,
-            "handler_config": intent.handler_config or {},
-            "workflow_name": intent.handler_config.get("workflow_name") if intent.default_handler == "workflow" else None,
-            "needs_escalation": False,
-        })()
-    else:
-        # 重新分析
-        route_result = await router_agent.route(event, session)
+    # 调用 RouterAgent 分析
+    route_result = await router_agent.route(event, session)
 
     # TODO: 实际执行逻辑
     # 目前只是标记为已处理，后续实现实际的 Agent/Workflow 调用
@@ -989,4 +967,117 @@ async def analyze_email_work_type(
         raise HTTPException(
             status_code=500,
             detail=f"工作类型分析失败: {str(e)}"
+        )
+
+
+# ==================== 客户提取 ====================
+
+class CustomerExtractResponse(BaseModel):
+    """客户提取结果"""
+    email_id: str
+    skip_extraction: bool = False
+    skip_reason: Optional[str] = None
+    is_new_customer: Optional[bool] = None
+    confidence: Optional[float] = None
+    reasoning: Optional[str] = None
+    company: Optional[dict] = None
+    contact: Optional[dict] = None
+    suggested_tags: Optional[List[str]] = None
+    matched_existing_customer: Optional[str] = None
+    sender_type: Optional[str] = None
+    suggestion_id: Optional[str] = None
+    llm_model: Optional[str] = None
+
+
+@router.post("/{email_id}/customer-extract", response_model=CustomerExtractResponse)
+async def extract_customer_from_email(
+    email_id: str,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_admin_user),
+):
+    """
+    从邮件中提取客户信息
+
+    使用 CustomerExtractorAgent 分析邮件，提取客户和联系人信息。
+    如果检测到新客户/新联系人，自动创建 CustomerSuggestion 并启动 Temporal 审批流程。
+
+    注意：此功能会复用已有的 EmailAnalysis 结果，如果没有会先提示用户执行 AI 分析。
+    """
+    from app.agents.customer_extractor import customer_extractor
+
+    # 获取邮件
+    query = select(EmailRawMessage).where(EmailRawMessage.id == email_id)
+    result = await session.execute(query)
+    email = result.scalar_one_or_none()
+
+    if not email:
+        raise HTTPException(status_code=404, detail="邮件不存在")
+
+    # 获取邮件正文
+    body_text = await _get_email_body_text(email)
+    if not body_text or not body_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="邮件正文为空，无法进行客户提取"
+        )
+
+    # 获取已有的 EmailAnalysis（复用 EmailSummarizer 分析结果）
+    email_analysis_data = None
+    analysis_query = select(EmailAnalysis).where(
+        EmailAnalysis.email_id == email_id
+    ).order_by(EmailAnalysis.created_at.desc()).limit(1)
+    analysis_result = await session.execute(analysis_query)
+    existing_analysis = analysis_result.scalars().first()
+
+    if existing_analysis:
+        email_analysis_data = {
+            "sender_company": existing_analysis.sender_company,
+            "sender_country": existing_analysis.sender_country,
+            "sender_type": existing_analysis.sender_type,
+            "is_new_contact": existing_analysis.is_new_contact,
+            "intent": existing_analysis.intent,
+            "products": existing_analysis.products,
+        }
+
+    # 调用 CustomerExtractorAgent
+    try:
+        extract_result = await customer_extractor.analyze(
+            email_id=email.id,
+            sender=email.sender,
+            sender_name=email.sender_name,
+            subject=email.subject,
+            content=body_text,
+            email_analysis=email_analysis_data,
+            session=session,
+        )
+
+        return CustomerExtractResponse(
+            email_id=email.id,
+            skip_extraction=extract_result.get("skip_extraction", False),
+            skip_reason=extract_result.get("skip_reason"),
+            is_new_customer=extract_result.get("is_new_customer"),
+            confidence=extract_result.get("confidence"),
+            reasoning=extract_result.get("reasoning"),
+            company=extract_result.get("company"),
+            contact=extract_result.get("contact"),
+            suggested_tags=extract_result.get("suggested_tags"),
+            matched_existing_customer=extract_result.get("matched_existing_customer"),
+            sender_type=extract_result.get("sender_type"),
+            suggestion_id=extract_result.get("suggestion_id"),
+            llm_model=extract_result.get("llm_model"),
+        )
+
+    except ValueError as e:
+        error_msg = str(e)
+        if "未找到可用的 LLM 模型配置" in error_msg or "API Key 未配置" in error_msg:
+            raise HTTPException(
+                status_code=400,
+                detail="LLM 模型未配置。请前往「管理后台 → LLM 配置」页面添加模型配置。"
+            )
+        raise HTTPException(status_code=400, detail=error_msg)
+    except Exception as e:
+        logger.error(f"[EmailAPI] 客户提取失败: {email_id}, {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"客户提取失败: {str(e)}"
         )
