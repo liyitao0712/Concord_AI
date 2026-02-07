@@ -10,6 +10,13 @@
 
 import { useState, useEffect } from 'react';
 import { feishuApi, FeishuConfig, FeishuWorkerStatus } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { Separator } from '@/components/ui/separator';
 
 export default function FeishuSettingsPage() {
   const [config, setConfig] = useState<FeishuConfig | null>(null);
@@ -113,7 +120,7 @@ export default function FeishuSettingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">加载中...</div>
+        <LoadingSpinner size="lg" text="加载中..." />
       </div>
     );
   }
@@ -122,16 +129,16 @@ export default function FeishuSettingsPage() {
     <div className="space-y-6">
       {/* 页面标题 */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">飞书配置</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold">飞书配置</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           配置飞书机器人，实现与飞书的消息互通
         </p>
       </div>
 
       {/* 提示信息 */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-700">{error}</p>
+        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4">
+          <p className="text-destructive">{error}</p>
         </div>
       )}
 
@@ -142,36 +149,27 @@ export default function FeishuSettingsPage() {
       )}
 
       {/* 配置表单 */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-6 space-y-6">
+      <Card>
+        <CardContent className="space-y-6">
           {/* 启用开关 */}
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-medium text-gray-900">启用飞书机器人</h3>
-              <p className="text-sm text-gray-500">
+              <h3 className="text-lg font-medium">启用飞书机器人</h3>
+              <p className="text-sm text-muted-foreground">
                 启用后，飞书 Worker 将接收和处理飞书消息
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setEnabled(!enabled)}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                enabled ? 'bg-blue-600' : 'bg-gray-200'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                  enabled ? 'translate-x-5' : 'translate-x-0'
-                }`}
-              />
-            </button>
+            <Switch
+              checked={enabled}
+              onCheckedChange={setEnabled}
+            />
           </div>
 
-          <hr />
+          <Separator />
 
           {/* Worker 运行状态 */}
           <div>
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Worker 运行状态</h3>
+            <h3 className="text-lg font-medium mb-4">Worker 运行状态</h3>
             <div className={`p-4 rounded-lg border ${
               workerStatus?.worker_running
                 ? 'bg-green-50 border-green-200'
@@ -201,133 +199,120 @@ export default function FeishuSettingsPage() {
             </div>
           </div>
 
-          <hr />
+          <Separator />
 
           {/* 配置状态 */}
           <div>
-            <h3 className="text-lg font-medium text-gray-900 mb-4">配置状态</h3>
+            <h3 className="text-lg font-medium mb-4">配置状态</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center">
                 <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
-                  config?.configured ? 'bg-green-500' : 'bg-gray-300'
+                  config?.configured ? 'bg-green-500' : 'bg-muted-foreground/30'
                 }`}></span>
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-muted-foreground">
                   基础配置：{config?.configured ? '已完成' : '未配置'}
                 </span>
               </div>
               <div className="flex items-center">
                 <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
-                  config?.app_secret_configured ? 'bg-green-500' : 'bg-gray-300'
+                  config?.app_secret_configured ? 'bg-green-500' : 'bg-muted-foreground/30'
                 }`}></span>
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-muted-foreground">
                   App Secret：{config?.app_secret_configured ? '已配置' : '未配置'}
                 </span>
               </div>
               <div className="flex items-center">
                 <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
-                  config?.encrypt_key_configured ? 'bg-green-500' : 'bg-gray-300'
+                  config?.encrypt_key_configured ? 'bg-green-500' : 'bg-muted-foreground/30'
                 }`}></span>
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-muted-foreground">
                   Encrypt Key：{config?.encrypt_key_configured ? '已配置' : '未配置'}
                 </span>
               </div>
               <div className="flex items-center">
                 <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
-                  config?.verification_token_configured ? 'bg-green-500' : 'bg-gray-300'
+                  config?.verification_token_configured ? 'bg-green-500' : 'bg-muted-foreground/30'
                 }`}></span>
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-muted-foreground">
                   Verification Token：{config?.verification_token_configured ? '已配置' : '未配置'}
                 </span>
               </div>
             </div>
           </div>
 
-          <hr />
+          <Separator />
 
           {/* App ID */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              App ID
-            </label>
-            <input
+            <Label className="mb-1">App ID</Label>
+            <Input
               type="text"
               value={appId}
               onChange={(e) => setAppId(e.target.value)}
               placeholder="cli_xxxxxxxx"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               在飞书开放平台 -&gt; 应用管理 -&gt; 凭证与基础信息中获取
             </p>
           </div>
 
           {/* App Secret */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              App Secret
-            </label>
-            <input
+            <Label className="mb-1">App Secret</Label>
+            <Input
               type="password"
               value={appSecret}
               onChange={(e) => setAppSecret(e.target.value)}
               placeholder={config?.app_secret_configured ? '••••••••（已配置，留空保持不变）' : '输入 App Secret'}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           {/* Encrypt Key（可选） */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Encrypt Key（可选）
-            </label>
-            <input
+            <Label className="mb-1">Encrypt Key（可选）</Label>
+            <Input
               type="password"
               value={encryptKey}
               onChange={(e) => setEncryptKey(e.target.value)}
               placeholder={config?.encrypt_key_configured ? '••••••••（已配置，留空保持不变）' : '输入 Encrypt Key'}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               用于解密飞书回调消息，在事件订阅中配置
             </p>
           </div>
 
           {/* Verification Token（可选） */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Verification Token（可选）
-            </label>
-            <input
+            <Label className="mb-1">Verification Token（可选）</Label>
+            <Input
               type="password"
               value={verificationToken}
               onChange={(e) => setVerificationToken(e.target.value)}
               placeholder={config?.verification_token_configured ? '••••••••（已配置，留空保持不变）' : '输入 Verification Token'}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               用于验证飞书回调请求，在事件订阅中获取
             </p>
           </div>
-        </div>
+        </CardContent>
 
         {/* 操作按钮 */}
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between">
-          <button
+        <div className="px-6 py-4 bg-muted/50 border-t flex justify-between">
+          <Button
+            variant="outline"
             onClick={handleTest}
             disabled={testing || !config?.configured}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {testing ? '测试中...' : '测试连接'}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
           >
             {saving ? '保存中...' : '保存配置'}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       {/* 使用说明 */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

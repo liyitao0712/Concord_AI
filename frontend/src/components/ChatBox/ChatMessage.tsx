@@ -9,6 +9,9 @@
 'use client';
 
 import { useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Copy, Check } from 'lucide-react';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant' | 'system';
@@ -43,9 +46,9 @@ export function ChatMessage({
   if (isSystem) {
     return (
       <div className="flex justify-center my-2">
-        <span className="px-3 py-1 text-xs text-gray-500 bg-gray-100 rounded-full">
+        <Badge variant="secondary" className="font-normal">
           {content}
-        </span>
+        </Badge>
       </div>
     );
   }
@@ -57,14 +60,13 @@ export function ChatMessage({
       <div
         className={`max-w-[80%] ${
           isUser
-            ? 'bg-blue-600 text-white rounded-tl-2xl rounded-tr-2xl rounded-bl-2xl'
-            : 'bg-gray-100 text-gray-900 rounded-tl-2xl rounded-tr-2xl rounded-br-2xl'
+            ? 'bg-primary text-primary-foreground rounded-tl-2xl rounded-tr-2xl rounded-bl-2xl'
+            : 'bg-muted rounded-tl-2xl rounded-tr-2xl rounded-br-2xl'
         } px-4 py-3 relative`}
       >
         {/* 消息内容 */}
         <div className="whitespace-pre-wrap break-words">
           {content}
-          {/* 流式光标 */}
           {isStreaming && (
             <span className="inline-block w-2 h-4 ml-1 bg-current animate-pulse" />
           )}
@@ -73,7 +75,7 @@ export function ChatMessage({
         {/* 时间戳和操作 */}
         <div
           className={`flex items-center mt-1 text-xs ${
-            isUser ? 'text-blue-200' : 'text-gray-400'
+            isUser ? 'text-primary-foreground/60' : 'text-muted-foreground'
           }`}
         >
           {timestamp && (
@@ -85,17 +87,22 @@ export function ChatMessage({
             </span>
           )}
 
-          {/* 复制按钮（悬停显示） */}
           {!isStreaming && content && (
-            <button
-              onClick={handleCopy}
-              className={`ml-2 opacity-0 group-hover:opacity-100 transition-opacity ${
-                isUser ? 'hover:text-white' : 'hover:text-gray-600'
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`ml-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity ${
+                isUser ? 'hover:bg-primary-foreground/10' : ''
               }`}
+              onClick={handleCopy}
               title="复制"
             >
-              {copied ? '已复制' : '复制'}
-            </button>
+              {copied ? (
+                <Check className="h-3 w-3" />
+              ) : (
+                <Copy className="h-3 w-3" />
+              )}
+            </Button>
           )}
         </div>
       </div>

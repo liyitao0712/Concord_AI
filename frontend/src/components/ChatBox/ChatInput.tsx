@@ -9,6 +9,8 @@
 'use client';
 
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
+import { Button } from '@/components/ui/button';
+import { Send, Loader2 } from 'lucide-react';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -39,7 +41,6 @@ export function ChatInput({
     if (trimmedMessage && !disabled) {
       onSend(trimmedMessage);
       setMessage('');
-      // 重置高度
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -57,7 +58,7 @@ export function ChatInput({
   const canSend = message.trim().length > 0 && !disabled;
 
   return (
-    <div className="flex items-end space-x-2 p-4 border-t border-gray-200 bg-white">
+    <div className="flex items-end gap-2 p-4 border-t bg-background">
       <div className="flex-1 relative">
         <textarea
           ref={textareaRef}
@@ -67,48 +68,29 @@ export function ChatInput({
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
-          className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+          className="w-full px-4 py-3 pr-12 border border-input rounded-2xl resize-none bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:bg-muted disabled:cursor-not-allowed"
           style={{ maxHeight: '200px' }}
         />
-        {/* 字符计数 */}
         {message.length > 0 && (
-          <span className="absolute right-3 bottom-3 text-xs text-gray-400">
+          <span className="absolute right-3 bottom-3 text-xs text-muted-foreground">
             {message.length}
           </span>
         )}
       </div>
 
-      {/* 发送按钮 */}
-      <button
+      <Button
         onClick={handleSend}
         disabled={!canSend}
-        className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
-          canSend
-            ? 'bg-blue-600 hover:bg-blue-700 text-white'
-            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-        }`}
+        size="icon"
+        className="flex-shrink-0 h-12 w-12 rounded-full"
         title={disabled ? '正在响应...' : '发送 (Enter)'}
       >
         {disabled ? (
-          // 加载动画
-          <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+          <Loader2 className="h-5 w-5 animate-spin" />
         ) : (
-          // 发送图标
-          <svg
-            className="w-6 h-6"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-            />
-          </svg>
+          <Send className="h-5 w-5" />
         )}
-      </button>
+      </Button>
     </div>
   );
 }

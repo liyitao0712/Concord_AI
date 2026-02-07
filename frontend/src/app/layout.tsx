@@ -4,23 +4,15 @@
 // 功能说明：
 // 1. 设置全局字体和样式
 // 2. 包裹 AuthProvider 提供认证上下文
-// 3. 设置页面元数据
+// 3. 包裹 ConfirmProvider 提供全局确认对话框
+// 4. 包裹 Toaster 提供全局 Toast 通知
+// 5. 设置页面元数据
 
 import type { Metadata } from "next";
-// import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
-
-// 暂时禁用 Google Fonts，使用系统字体
-// const geistSans = Geist({
-//   variable: "--font-geist-sans",
-//   subsets: ["latin"],
-// });
-//
-// const geistMono = Geist_Mono({
-//   variable: "--font-geist-mono",
-//   subsets: ["latin"],
-// });
+import { ConfirmProvider } from "@/components/ConfirmProvider";
+import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: "Concord AI - 管理后台",
@@ -34,12 +26,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body
-        className="antialiased"
-      >
+      <body className="antialiased">
         <AuthProvider>
-          {children}
+          <ConfirmProvider>
+            {children}
+          </ConfirmProvider>
         </AuthProvider>
+        <Toaster richColors position="top-right" />
       </body>
     </html>
   );

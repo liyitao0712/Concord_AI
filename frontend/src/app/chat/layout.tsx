@@ -10,6 +10,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { PageLoading } from '@/components/LoadingSpinner';
 
 export default function ChatLayout({
   children,
@@ -27,11 +28,8 @@ export default function ChatLayout({
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin mx-auto" />
-          <p className="mt-4 text-gray-500">加载中...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-muted/40">
+        <PageLoading />
       </div>
     );
   }
@@ -41,7 +39,7 @@ export default function ChatLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-muted/40">
       {children}
     </div>
   );

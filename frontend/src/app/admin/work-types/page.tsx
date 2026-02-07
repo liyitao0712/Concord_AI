@@ -19,6 +19,23 @@ import {
   WorkTypeUpdate,
   WorkTypeSuggestion,
 } from '@/lib/api';
+import { toast } from 'sonner';
+import { useConfirm } from '@/components/ConfirmProvider';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { Card } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { LoadingSpinner, PageLoading } from '@/components/LoadingSpinner';
+import { ChevronRight, Plus, Pencil, Ban, CheckCircle2, Trash2, Lightbulb } from 'lucide-react';
 
 // ==================== 工具函数 ====================
 
@@ -31,90 +48,6 @@ function formatDateTime(dateStr: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-// ==================== 模态框组件 ====================
-
-function Modal({
-  isOpen,
-  onClose,
-  title,
-  children,
-  wide = false,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  title: string;
-  children: React.ReactNode;
-  wide?: boolean;
-}) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 py-8">
-        <div
-          className="fixed inset-0 bg-black opacity-50"
-          onClick={onClose}
-        />
-        <div className={`relative bg-white rounded-lg shadow-xl ${wide ? 'max-w-4xl' : 'max-w-2xl'} w-full p-6 max-h-[90vh] overflow-y-auto`}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">{title}</h3>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ==================== Tab 组件 ====================
-
-function Tabs({
-  tabs,
-  activeTab,
-  onChange,
-}: {
-  tabs: { id: string; label: string; count?: number }[];
-  activeTab: string;
-  onChange: (id: string) => void;
-}) {
-  return (
-    <div className="border-b border-gray-200">
-      <nav className="-mb-px flex space-x-8">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => onChange(tab.id)}
-            className={`py-4 px-1 border-b-2 font-medium text-sm ${
-              activeTab === tab.id
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            {tab.label}
-            {tab.count !== undefined && tab.count > 0 && (
-              <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
-                activeTab === tab.id
-                  ? 'bg-blue-100 text-blue-600'
-                  : 'bg-gray-100 text-gray-600'
-              }`}>
-                {tab.count}
-              </span>
-            )}
-          </button>
-        ))}
-      </nav>
-    </div>
-  );
 }
 
 // ==================== 树形节点组件 ====================
@@ -138,72 +71,74 @@ function TreeNode({
   return (
     <div>
       <div
-        className={`flex items-center justify-between py-3 px-4 hover:bg-gray-50 ${
-          level > 0 ? 'border-l-2 border-gray-200 ml-6' : ''
+        className={`flex items-center justify-between py-3 px-4 hover:bg-muted/50 ${
+          level > 0 ? 'border-l-2 border ml-6' : ''
         }`}
       >
         <div className="flex items-center space-x-3">
           {hasChildren ? (
-            <button
+            <Button
+              variant="ghost"
+              size="icon-xs"
               onClick={() => setExpanded(!expanded)}
-              className="text-gray-400 hover:text-gray-600"
             >
-              <svg
-                className={`w-4 h-4 transition-transform ${expanded ? 'rotate-90' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+              <ChevronRight
+                className={`size-4 transition-transform ${expanded ? 'rotate-90' : ''}`}
+              />
+            </Button>
           ) : (
             <span className="w-4" />
           )}
 
           <div>
             <div className="flex items-center space-x-2">
-              <span className="font-mono text-sm text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+              <Badge variant="secondary" className="font-mono text-sm px-2 py-0.5">
                 {node.code}
-              </span>
-              <span className="font-medium text-gray-900">{node.name}</span>
+              </Badge>
+              <span className="font-medium text-foreground">{node.name}</span>
               {node.is_system && (
-                <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                <Badge variant="secondary" className="text-xs">
                   系统
-                </span>
+                </Badge>
               )}
               {!node.is_active && (
-                <span className="text-xs text-red-500 bg-red-50 px-1.5 py-0.5 rounded">
+                <Badge className="text-xs bg-red-50 text-red-500 border-red-200">
                   已禁用
-                </span>
+                </Badge>
               )}
             </div>
-            <p className="text-sm text-gray-500 mt-0.5">{node.description}</p>
+            <p className="text-sm text-muted-foreground mt-0.5">{node.description}</p>
           </div>
         </div>
 
         <div className="flex items-center space-x-2">
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-muted-foreground">
             使用 {node.usage_count} 次
           </span>
-          <button
+          <Button
+            variant="ghost"
+            size="xs"
             onClick={() => onEdit(node)}
-            className="text-blue-600 hover:text-blue-800 text-sm"
+            className="text-blue-600 hover:text-blue-800"
           >
             编辑
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
             onClick={() => onToggle(node.id)}
-            className={`text-sm ${node.is_active ? 'text-orange-600 hover:text-orange-800' : 'text-green-600 hover:text-green-800'}`}
+            className={node.is_active ? 'text-orange-600 hover:text-orange-800' : 'text-green-600 hover:text-green-800'}
           >
             {node.is_active ? '禁用' : '启用'}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
             onClick={() => onDelete(node.id)}
-            className="text-red-600 hover:text-red-800 text-sm"
+            className="text-red-600 hover:text-red-800"
           >
             删除
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -228,8 +163,10 @@ function TreeNode({
 // ==================== 主页面 ====================
 
 export default function WorkTypesPage() {
+  const confirmDialog = useConfirm();
+
   // Tab 状态
-  const [activeTab, setActiveTab] = useState<'types' | 'suggestions'>('types');
+  const [activeTab, setActiveTab] = useState<string>('types');
 
   // 工作类型列表状态
   const [treeData, setTreeData] = useState<WorkTypeTreeNode[]>([]);
@@ -381,13 +318,19 @@ export default function WorkTypesPage() {
 
   // 删除
   const handleDelete = async (id: string) => {
-    if (!confirm('确定要删除此工作类型吗？')) return;
+    const confirmed = await confirmDialog({
+      title: '确认删除',
+      description: '确定要删除此工作类型吗？',
+      variant: 'destructive',
+      confirmText: '删除',
+    });
+    if (!confirmed) return;
 
     try {
       await workTypesApi.delete(id);
       loadWorkTypes();
     } catch (e) {
-      alert(e instanceof Error ? e.message : '删除失败');
+      toast.error(e instanceof Error ? e.message : '删除失败');
     }
   };
 
@@ -400,7 +343,7 @@ export default function WorkTypesPage() {
       await workTypesApi.update(id, { is_active: !item.is_active });
       loadWorkTypes();
     } catch (e) {
-      alert(e instanceof Error ? e.message : '操作失败');
+      toast.error(e instanceof Error ? e.message : '操作失败');
     }
   };
 
@@ -482,7 +425,7 @@ export default function WorkTypesPage() {
       setEmailDetail(detail);
     } catch (e) {
       setEmailDetail(null);
-      alert(e instanceof Error ? e.message : '加载邮件失败');
+      toast.error(e instanceof Error ? e.message : '加载邮件失败');
       setShowEmailModal(false);
     }
 
@@ -496,497 +439,499 @@ export default function WorkTypesPage() {
     <div className="space-y-6">
       {/* 页面标题 */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">工作类型管理</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">工作类型管理</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           管理系统工作类型，AI 自动识别的新类型需要人工审批
         </p>
       </div>
 
       {/* Tab 切换 */}
-      <Tabs
-        tabs={[
-          { id: 'types', label: '工作类型列表' },
-          { id: 'suggestions', label: '待审批建议', count: pendingCount },
-        ]}
-        activeTab={activeTab}
-        onChange={(id) => setActiveTab(id as 'types' | 'suggestions')}
-      />
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList variant="line">
+          <TabsTrigger value="types">
+            工作类型列表
+          </TabsTrigger>
+          <TabsTrigger value="suggestions">
+            待审批建议
+            {pendingCount > 0 && (
+              <Badge className="ml-2 bg-blue-100 text-blue-600 border-blue-200">
+                {pendingCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-      {/* 工作类型列表 Tab */}
-      {activeTab === 'types' && (
-        <div className="bg-white rounded-lg shadow">
-          {/* 工具栏 */}
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-            <div className="text-sm text-gray-500">
-              共 {flatList.length} 个工作类型
+        {/* 工作类型列表 Tab */}
+        <TabsContent value="types">
+          <Card className="p-0">
+            {/* 工具栏 */}
+            <div className="p-4 border-b flex justify-between items-center">
+              <div className="text-sm text-muted-foreground">
+                共 {flatList.length} 个工作类型
+              </div>
+              <Button onClick={handleCreate}>
+                <Plus className="size-4" />
+                新增工作类型
+              </Button>
             </div>
-            <button
-              onClick={handleCreate}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm"
-            >
-              + 新增工作类型
-            </button>
-          </div>
 
-          {/* 列表 */}
-          {loading ? (
-            <div className="p-8 text-center text-gray-500">加载中...</div>
-          ) : error ? (
-            <div className="p-8 text-center text-red-500">{error}</div>
-          ) : treeData.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">暂无数据</div>
-          ) : (
-            <div className="divide-y divide-gray-200">
-              {treeData.map((node) => (
-                <TreeNode
-                  key={node.id}
-                  node={node}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                  onToggle={handleToggle}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+            {/* 列表 */}
+            {loading ? (
+              <div className="p-8 text-center">
+                <LoadingSpinner text="加载中..." />
+              </div>
+            ) : error ? (
+              <div className="p-8 text-center text-red-500">{error}</div>
+            ) : treeData.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">暂无数据</div>
+            ) : (
+              <div className="divide-y">
+                {treeData.map((node) => (
+                  <TreeNode
+                    key={node.id}
+                    node={node}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onToggle={handleToggle}
+                  />
+                ))}
+              </div>
+            )}
+          </Card>
+        </TabsContent>
 
-      {/* 待审批建议 Tab */}
-      {activeTab === 'suggestions' && (
-        <div className="bg-white rounded-lg shadow">
-          {suggestionsLoading ? (
-            <div className="p-8 text-center text-gray-500">加载中...</div>
-          ) : suggestions.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">暂无待审批建议</div>
-          ) : (
-            <div className="divide-y divide-gray-200">
-              {suggestions.map((item) => (
-                <div key={item.id} className="p-4 hover:bg-gray-50">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <span className="font-mono text-sm text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                          {item.suggested_code}
-                        </span>
-                        <span className="font-medium text-gray-900">
-                          {item.suggested_name}
-                        </span>
-                        {item.suggested_parent_code && (
-                          <span className="text-xs text-gray-500">
-                            (父级: {item.suggested_parent_code})
+        {/* 待审批建议 Tab */}
+        <TabsContent value="suggestions">
+          <Card className="p-0">
+            {suggestionsLoading ? (
+              <div className="p-8 text-center">
+                <LoadingSpinner text="加载中..." />
+              </div>
+            ) : suggestions.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">暂无待审批建议</div>
+            ) : (
+              <div className="divide-y">
+                {suggestions.map((item) => (
+                  <div key={item.id} className="p-4 hover:bg-muted/50">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <Badge className="font-mono text-sm bg-blue-50 text-blue-600 border-blue-200 px-2 py-0.5">
+                            {item.suggested_code}
+                          </Badge>
+                          <span className="font-medium text-foreground">
+                            {item.suggested_name}
                           </span>
+                          {item.suggested_parent_code && (
+                            <span className="text-xs text-muted-foreground">
+                              (父级: {item.suggested_parent_code})
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {item.suggested_description}
+                        </p>
+                        <div className="flex items-center space-x-4 mt-2 text-xs text-muted-foreground">
+                          <span>置信度: {(item.confidence * 100).toFixed(0)}%</span>
+                          <span>来源: {item.trigger_source}</span>
+                          <span>{formatDateTime(item.created_at)}</span>
+                        </div>
+                        {item.reasoning && (
+                          <p className="text-sm text-muted-foreground mt-2 bg-muted p-2 rounded">
+                            AI 推理: {item.reasoning}
+                          </p>
                         )}
                       </div>
-                      <p className="text-sm text-gray-500 mt-1">
-                        {item.suggested_description}
-                      </p>
-                      <div className="flex items-center space-x-4 mt-2 text-xs text-gray-400">
-                        <span>置信度: {(item.confidence * 100).toFixed(0)}%</span>
-                        <span>来源: {item.trigger_source}</span>
-                        <span>{formatDateTime(item.created_at)}</span>
+                      <div className="flex space-x-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleReview(item)}
+                        >
+                          审批
+                        </Button>
                       </div>
-                      {item.reasoning && (
-                        <p className="text-sm text-gray-600 mt-2 bg-gray-50 p-2 rounded">
-                          AI 推理: {item.reasoning}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleReview(item)}
-                        className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
-                      >
-                        审批
-                      </button>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+                ))}
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* 创建/编辑弹窗 */}
-      <Modal
-        isOpen={showEditModal}
-        onClose={() => setShowEditModal(false)}
-        title={editingItem ? '编辑工作类型' : '新增工作类型'}
-      >
-        <div className="space-y-4">
-          {formError && (
-            <div className="bg-red-50 text-red-600 p-3 rounded text-sm">
-              {formError}
-            </div>
-          )}
-
-          {/* Code */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              标识码 <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.code || ''}
-              onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-              placeholder="如 ORDER、ORDER_NEW"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
-            <p className="text-xs text-gray-500 mt-1">全大写英文，可包含数字和下划线</p>
-          </div>
-
-          {/* 名称 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              名称 <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.name || ''}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="如 订单、新订单"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-
-          {/* 描述 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              描述 <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              value={formData.description || ''}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="给 AI 的描述，帮助识别此工作类型"
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-
-          {/* 父级（仅创建时可选） */}
-          {!editingItem && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                父级工作类型
-              </label>
-              <select
-                value={formData.parent_id || ''}
-                onChange={(e) => setFormData({ ...formData, parent_id: e.target.value || undefined })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">无（顶级类型）</option>
-                {topLevelTypes.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.code} - {item.name}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">如选择父级，标识码需以父级标识码开头加下划线</p>
-            </div>
-          )}
-
-          {/* 关键词 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              关键词
-            </label>
-            <input
-              type="text"
-              value={keywordsText}
-              onChange={(e) => setKeywordsText(e.target.value)}
-              placeholder="用逗号分隔，如: 订单, order, PO"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
-            <p className="text-xs text-gray-500 mt-1">辅助 AI 匹配的关键词，支持中英文逗号分隔</p>
-          </div>
-
-          {/* 示例 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              示例文本
-            </label>
-            <input
-              type="text"
-              value={examplesText}
-              onChange={(e) => setExamplesText(e.target.value)}
-              placeholder="用逗号分隔，如: 我想下单, 订单确认, PO"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
-            <p className="text-xs text-gray-500 mt-1">帮助 AI 识别此类型的示例短语，支持中英文逗号分隔</p>
-          </div>
-
-          {/* 是否启用 */}
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="is_active"
-              checked={formData.is_active ?? true}
-              onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-              className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-            />
-            <label htmlFor="is_active" className="ml-2 text-sm text-gray-700">
-              启用
-            </label>
-          </div>
-
-          {/* 按钮 */}
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              onClick={() => setShowEditModal(false)}
-              className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              取消
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-            >
-              {saving ? '保存中...' : '保存'}
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* 审批弹窗（复用新增表单样式，AI 数据预填可编辑） */}
-      <Modal
-        isOpen={showReviewModal}
-        onClose={() => setShowReviewModal(false)}
-        title="审批工作类型建议"
-        wide
-      >
-        {reviewingItem && (
+      <Dialog open={showEditModal} onOpenChange={(open) => !open && setShowEditModal(false)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingItem ? '编辑工作类型' : '新增工作类型'}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4">
-            {/* AI 分析信息 */}
-            <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-blue-800">AI 建议</span>
-                <div className="flex items-center space-x-3">
-                  <span className="text-xs text-blue-600">
-                    置信度: {(reviewingItem.confidence * 100).toFixed(0)}%
-                  </span>
-                  {reviewingItem.trigger_email_id && (
-                    <button
-                      onClick={() => handleViewEmail(reviewingItem.trigger_email_id!)}
-                      className="text-xs text-blue-700 hover:text-blue-900 underline"
-                    >
-                      查看来源邮件
-                    </button>
-                  )}
-                </div>
-              </div>
-              {reviewingItem.reasoning && (
-                <p className="text-sm text-blue-700 mt-1">{reviewingItem.reasoning}</p>
-              )}
-              {reviewingItem.trigger_content && (
-                <details className="mt-2">
-                  <summary className="text-xs text-blue-600 cursor-pointer">查看触发内容</summary>
-                  <p className="text-xs text-blue-700 mt-1 bg-white p-2 rounded border border-blue-100">
-                    {reviewingItem.trigger_content.substring(0, 500)}
-                    {reviewingItem.trigger_content.length > 500 && '...'}
-                  </p>
-                </details>
-              )}
-            </div>
-
-            {reviewFormError && (
+            {formError && (
               <div className="bg-red-50 text-red-600 p-3 rounded text-sm">
-                {reviewFormError}
+                {formError}
               </div>
             )}
 
-            {/* 表单字段（与新增工作类型一致） */}
+            {/* Code */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <Label className="mb-1">
                 标识码 <span className="text-red-500">*</span>
-              </label>
-              <input
+              </Label>
+              <Input
                 type="text"
-                value={reviewFormData.code || ''}
-                onChange={(e) => setReviewFormData({ ...reviewFormData, code: e.target.value.toUpperCase() })}
+                value={formData.code || ''}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                 placeholder="如 ORDER、ORDER_NEW"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               />
-              <p className="text-xs text-gray-500 mt-1">全大写英文，可包含数字和下划线</p>
+              <p className="text-xs text-muted-foreground mt-1">全大写英文，可包含数字和下划线</p>
             </div>
 
+            {/* 名称 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <Label className="mb-1">
                 名称 <span className="text-red-500">*</span>
-              </label>
-              <input
+              </Label>
+              <Input
                 type="text"
-                value={reviewFormData.name || ''}
-                onChange={(e) => setReviewFormData({ ...reviewFormData, name: e.target.value })}
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="如 订单、新订单"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
 
+            {/* 描述 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <Label className="mb-1">
                 描述 <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                value={reviewFormData.description || ''}
-                onChange={(e) => setReviewFormData({ ...reviewFormData, description: e.target.value })}
+              </Label>
+              <Textarea
+                value={formData.description || ''}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="给 AI 的描述，帮助识别此工作类型"
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                父级工作类型
-              </label>
-              <select
-                value={reviewFormData.parent_id || ''}
-                onChange={(e) => setReviewFormData({ ...reviewFormData, parent_id: e.target.value || undefined })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">无（顶级类型）</option>
-                {topLevelTypes.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.code} - {item.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* 父级（仅创建时可选） */}
+            {!editingItem && (
+              <div>
+                <Label className="mb-1">
+                  父级工作类型
+                </Label>
+                <select
+                  value={formData.parent_id || ''}
+                  onChange={(e) => setFormData({ ...formData, parent_id: e.target.value || undefined })}
+                  className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">无（顶级类型）</option>
+                  {topLevelTypes.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.code} - {item.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground mt-1">如选择父级，标识码需以父级标识码开头加下划线</p>
+              </div>
+            )}
 
+            {/* 关键词 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <Label className="mb-1">
                 关键词
-              </label>
-              <input
+              </Label>
+              <Input
                 type="text"
-                value={reviewKeywordsText}
-                onChange={(e) => setReviewKeywordsText(e.target.value)}
+                value={keywordsText}
+                onChange={(e) => setKeywordsText(e.target.value)}
                 placeholder="用逗号分隔，如: 订单, order, PO"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               />
-              <p className="text-xs text-gray-500 mt-1">辅助 AI 匹配的关键词，支持中英文逗号分隔</p>
+              <p className="text-xs text-muted-foreground mt-1">辅助 AI 匹配的关键词，支持中英文逗号分隔</p>
             </div>
 
+            {/* 示例 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <Label className="mb-1">
                 示例文本
-              </label>
-              <input
+              </Label>
+              <Input
                 type="text"
-                value={reviewExamplesText}
-                onChange={(e) => setReviewExamplesText(e.target.value)}
+                value={examplesText}
+                onChange={(e) => setExamplesText(e.target.value)}
                 placeholder="用逗号分隔，如: 我想下单, 订单确认, PO"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               />
-              <p className="text-xs text-gray-500 mt-1">帮助 AI 识别此类型的示例短语，支持中英文逗号分隔</p>
+              <p className="text-xs text-muted-foreground mt-1">帮助 AI 识别此类型的示例短语，支持中英文逗号分隔</p>
             </div>
 
-            {/* 审批备注 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                审批备注
-              </label>
-              <textarea
-                value={reviewNote}
-                onChange={(e) => setReviewNote(e.target.value)}
-                placeholder="可选，填写审批说明"
-                rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            {/* 是否启用 */}
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="is_active"
+                checked={formData.is_active ?? true}
+                onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                className="h-4 w-4 text-primary border-input rounded"
               />
+              <label htmlFor="is_active" className="ml-2 text-sm text-muted-foreground">
+                启用
+              </label>
             </div>
 
             {/* 按钮 */}
             <div className="flex justify-end space-x-3 pt-4">
-              <button
-                onClick={() => setShowReviewModal(false)}
-                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+              <Button
+                variant="outline"
+                onClick={() => setShowEditModal(false)}
               >
                 取消
-              </button>
-              <button
-                onClick={handleReject}
-                disabled={reviewing}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+              </Button>
+              <Button
+                onClick={handleSave}
+                disabled={saving}
               >
-                {reviewing ? '处理中...' : '拒绝'}
-              </button>
-              <button
-                onClick={handleApprove}
-                disabled={reviewing}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-              >
-                {reviewing ? '处理中...' : '批准'}
-              </button>
+                {saving ? '保存中...' : '保存'}
+              </Button>
             </div>
           </div>
-        )}
-      </Modal>
+        </DialogContent>
+      </Dialog>
+
+      {/* 审批弹窗（复用新增表单样式，AI 数据预填可编辑） */}
+      <Dialog open={showReviewModal} onOpenChange={(open) => !open && setShowReviewModal(false)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>审批工作类型建议</DialogTitle>
+          </DialogHeader>
+          {reviewingItem && (
+            <div className="space-y-4">
+              {/* AI 分析信息 */}
+              <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-blue-800">AI 建议</span>
+                  <div className="flex items-center space-x-3">
+                    <span className="text-xs text-blue-600">
+                      置信度: {(reviewingItem.confidence * 100).toFixed(0)}%
+                    </span>
+                    {reviewingItem.trigger_email_id && (
+                      <Button
+                        variant="link"
+                        size="xs"
+                        onClick={() => handleViewEmail(reviewingItem.trigger_email_id!)}
+                        className="text-xs text-blue-700 hover:text-blue-900"
+                      >
+                        查看来源邮件
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {reviewingItem.reasoning && (
+                  <p className="text-sm text-blue-700 mt-1">{reviewingItem.reasoning}</p>
+                )}
+                {reviewingItem.trigger_content && (
+                  <details className="mt-2">
+                    <summary className="text-xs text-blue-600 cursor-pointer">查看触发内容</summary>
+                    <p className="text-xs text-blue-700 mt-1 bg-background p-2 rounded border border-blue-100">
+                      {reviewingItem.trigger_content.substring(0, 500)}
+                      {reviewingItem.trigger_content.length > 500 && '...'}
+                    </p>
+                  </details>
+                )}
+              </div>
+
+              {reviewFormError && (
+                <div className="bg-red-50 text-red-600 p-3 rounded text-sm">
+                  {reviewFormError}
+                </div>
+              )}
+
+              {/* 表单字段（与新增工作类型一致） */}
+              <div>
+                <Label className="mb-1">
+                  标识码 <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="text"
+                  value={reviewFormData.code || ''}
+                  onChange={(e) => setReviewFormData({ ...reviewFormData, code: e.target.value.toUpperCase() })}
+                  placeholder="如 ORDER、ORDER_NEW"
+                />
+                <p className="text-xs text-muted-foreground mt-1">全大写英文，可包含数字和下划线</p>
+              </div>
+
+              <div>
+                <Label className="mb-1">
+                  名称 <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="text"
+                  value={reviewFormData.name || ''}
+                  onChange={(e) => setReviewFormData({ ...reviewFormData, name: e.target.value })}
+                  placeholder="如 订单、新订单"
+                />
+              </div>
+
+              <div>
+                <Label className="mb-1">
+                  描述 <span className="text-red-500">*</span>
+                </Label>
+                <Textarea
+                  value={reviewFormData.description || ''}
+                  onChange={(e) => setReviewFormData({ ...reviewFormData, description: e.target.value })}
+                  placeholder="给 AI 的描述，帮助识别此工作类型"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <Label className="mb-1">
+                  父级工作类型
+                </Label>
+                <select
+                  value={reviewFormData.parent_id || ''}
+                  onChange={(e) => setReviewFormData({ ...reviewFormData, parent_id: e.target.value || undefined })}
+                  className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">无（顶级类型）</option>
+                  {topLevelTypes.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.code} - {item.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <Label className="mb-1">
+                  关键词
+                </Label>
+                <Input
+                  type="text"
+                  value={reviewKeywordsText}
+                  onChange={(e) => setReviewKeywordsText(e.target.value)}
+                  placeholder="用逗号分隔，如: 订单, order, PO"
+                />
+                <p className="text-xs text-muted-foreground mt-1">辅助 AI 匹配的关键词，支持中英文逗号分隔</p>
+              </div>
+
+              <div>
+                <Label className="mb-1">
+                  示例文本
+                </Label>
+                <Input
+                  type="text"
+                  value={reviewExamplesText}
+                  onChange={(e) => setReviewExamplesText(e.target.value)}
+                  placeholder="用逗号分隔，如: 我想下单, 订单确认, PO"
+                />
+                <p className="text-xs text-muted-foreground mt-1">帮助 AI 识别此类型的示例短语，支持中英文逗号分隔</p>
+              </div>
+
+              {/* 审批备注 */}
+              <div>
+                <Label className="mb-1">
+                  审批备注
+                </Label>
+                <Textarea
+                  value={reviewNote}
+                  onChange={(e) => setReviewNote(e.target.value)}
+                  placeholder="可选，填写审批说明"
+                  rows={2}
+                />
+              </div>
+
+              {/* 按钮 */}
+              <div className="flex justify-end space-x-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowReviewModal(false)}
+                >
+                  取消
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleReject}
+                  disabled={reviewing}
+                >
+                  {reviewing ? '处理中...' : '拒绝'}
+                </Button>
+                <Button
+                  onClick={handleApprove}
+                  disabled={reviewing}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {reviewing ? '处理中...' : '批准'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* 邮件原文预览弹窗 */}
-      <Modal
-        isOpen={showEmailModal}
-        onClose={() => setShowEmailModal(false)}
-        title="来源邮件原文"
-        wide
-      >
-        {emailLoading ? (
-          <div className="p-8 text-center text-gray-500">加载中...</div>
-        ) : emailDetail ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500">发件人:</span>{' '}
-                <span className="text-gray-900">
-                  {emailDetail.sender_name ? `${emailDetail.sender_name} <${emailDetail.sender}>` : emailDetail.sender}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500">时间:</span>{' '}
-                <span className="text-gray-900">{formatDateTime(emailDetail.received_at)}</span>
-              </div>
+      <Dialog open={showEmailModal} onOpenChange={(open) => !open && setShowEmailModal(false)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>来源邮件原文</DialogTitle>
+          </DialogHeader>
+          {emailLoading ? (
+            <div className="p-8 text-center">
+              <LoadingSpinner text="加载中..." />
             </div>
-            <div className="text-sm">
-              <span className="text-gray-500">收件人:</span>{' '}
-              <span className="text-gray-900">{emailDetail.recipients.join(', ')}</span>
-            </div>
-            <div className="text-sm">
-              <span className="text-gray-500">主题:</span>{' '}
-              <span className="font-medium text-gray-900">{emailDetail.subject}</span>
-            </div>
-
-            <div className="border-t pt-4">
-              <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-800 whitespace-pre-wrap max-h-96 overflow-y-auto">
-                {emailDetail.body_text || '（无正文内容）'}
-              </div>
-            </div>
-
-            {emailDetail.attachments && emailDetail.attachments.length > 0 && (
-              <div className="text-sm">
-                <span className="text-gray-500">附件 ({emailDetail.attachments.length}):</span>
-                <div className="mt-1 space-y-1">
-                  {emailDetail.attachments.map((att, idx) => (
-                    <div key={idx} className="text-gray-700 bg-gray-50 px-2 py-1 rounded text-xs">
-                      {att.filename} ({(att.size_bytes / 1024).toFixed(1)} KB)
-                    </div>
-                  ))}
+          ) : emailDetail ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">发件人:</span>{' '}
+                  <span className="text-foreground">
+                    {emailDetail.sender_name ? `${emailDetail.sender_name} <${emailDetail.sender}>` : emailDetail.sender}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">时间:</span>{' '}
+                  <span className="text-foreground">{formatDateTime(emailDetail.received_at)}</span>
                 </div>
               </div>
-            )}
+              <div className="text-sm">
+                <span className="text-muted-foreground">收件人:</span>{' '}
+                <span className="text-foreground">{emailDetail.recipients.join(', ')}</span>
+              </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">主题:</span>{' '}
+                <span className="font-medium text-foreground">{emailDetail.subject}</span>
+              </div>
 
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={() => setShowEmailModal(false)}
-                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                关闭
-              </button>
+              <div className="border-t pt-4">
+                <div className="bg-muted p-4 rounded-lg text-sm text-foreground whitespace-pre-wrap max-h-96 overflow-y-auto">
+                  {emailDetail.body_text || '（无正文内容）'}
+                </div>
+              </div>
+
+              {emailDetail.attachments && emailDetail.attachments.length > 0 && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground">附件 ({emailDetail.attachments.length}):</span>
+                  <div className="mt-1 space-y-1">
+                    {emailDetail.attachments.map((att, idx) => (
+                      <div key={idx} className="text-foreground bg-muted px-2 py-1 rounded text-xs">
+                        {att.filename} ({(att.size_bytes / 1024).toFixed(1)} KB)
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowEmailModal(false)}
+                >
+                  关闭
+                </Button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="p-8 text-center text-gray-500">无法加载邮件内容</div>
-        )}
-      </Modal>
+          ) : (
+            <div className="p-8 text-center text-muted-foreground">无法加载邮件内容</div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

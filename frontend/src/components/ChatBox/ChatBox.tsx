@@ -14,6 +14,10 @@ import { useSSE } from './hooks/useSSE';
 import { ChatSidebar } from './ChatSidebar';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { Card } from '@/components/ui/card';
+import { MessageSquare } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface ChatBoxProps {
   showSidebar?: boolean;
@@ -42,7 +46,6 @@ export function ChatBox({ showSidebar = true, defaultSessionId }: ChatBoxProps) 
       setStreamingContent((prev) => prev + token);
     },
     onDone: ({ sessionId, messageId }) => {
-      // 流式结束，将内容添加到消息列表
       setMessages((prev) => [
         ...prev,
         {
@@ -61,7 +64,6 @@ export function ChatBox({ showSidebar = true, defaultSessionId }: ChatBoxProps) 
       ]);
       setStreamingContent('');
 
-      // 如果是新会话，更新会话 ID 并刷新列表
       if (sessionId !== currentSessionId) {
         setCurrentSessionId(sessionId);
         loadSessions();
@@ -70,7 +72,6 @@ export function ChatBox({ showSidebar = true, defaultSessionId }: ChatBoxProps) 
     onError: (error) => {
       console.error('SSE 错误:', error);
       setStreamingContent('');
-      // 添加错误消息
       setMessages((prev) => [
         ...prev,
         {
@@ -142,7 +143,6 @@ export function ChatBox({ showSidebar = true, defaultSessionId }: ChatBoxProps) 
 
   // 创建新会话
   const handleCreateSession = useCallback(async () => {
-    // 清空当前会话，让后端自动创建
     setCurrentSessionId(null);
     setMessages([]);
     setStreamingContent('');
@@ -162,16 +162,14 @@ export function ChatBox({ showSidebar = true, defaultSessionId }: ChatBoxProps) 
     async (sessionId: string) => {
       try {
         await chatApi.deleteSession(sessionId);
-        // 从列表中移除
         setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-        // 如果删除的是当前会话，清空
         if (sessionId === currentSessionId) {
           setCurrentSessionId(null);
           setMessages([]);
         }
       } catch (error) {
         console.error('删除会话失败:', error);
-        alert('删除失败');
+        toast.error('删除失败');
       }
     },
     [currentSessionId]
@@ -180,7 +178,6 @@ export function ChatBox({ showSidebar = true, defaultSessionId }: ChatBoxProps) 
   // 发送消息
   const handleSendMessage = useCallback(
     async (content: string) => {
-      // 先添加用户消息到列表
       const userMessage: ChatMessageType = {
         id: `temp-${Date.now()}`,
         session_id: currentSessionId || '',
@@ -196,13 +193,10 @@ export function ChatBox({ showSidebar = true, defaultSessionId }: ChatBoxProps) 
       };
       setMessages((prev) => [...prev, userMessage]);
 
-      // 重置流式内容
       setStreamingContent('');
 
-      // 发送消息
       const newSessionId = await sendMessage(currentSessionId, content);
 
-      // 如果是新会话，更新会话 ID
       if (newSessionId && newSessionId !== currentSessionId) {
         setCurrentSessionId(newSessionId);
         loadSessions();
@@ -212,7 +206,7 @@ export function ChatBox({ showSidebar = true, defaultSessionId }: ChatBoxProps) 
   );
 
   return (
-    <div className="flex h-full bg-white rounded-lg shadow-lg overflow-hidden">
+    <Card className="flex h-full overflow-hidden">
       {/* 侧边栏 */}
       {showSidebar && (
         <ChatSidebar
@@ -231,19 +225,16 @@ export function ChatBox({ showSidebar = true, defaultSessionId }: ChatBoxProps) 
         <div className="flex-1 overflow-y-auto p-4">
           {messagesLoading ? (
             <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <div className="w-8 h-8 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mx-auto" />
-                <p className="mt-2 text-sm text-gray-500">加载中...</p>
-              </div>
+              <LoadingSpinner size="lg" text="加载中..." />
             </div>
           ) : messages.length === 0 && !streamingContent ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl">💬</span>
+                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <MessageSquare className="h-8 w-8 text-primary" />
                 </div>
-                <h3 className="text-lg font-medium text-gray-900">开始对话</h3>
-                <p className="mt-1 text-sm text-gray-500">
+                <h3 className="text-lg font-medium">开始对话</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
                   在下方输入框中输入消息开始聊天
                 </p>
               </div>
@@ -258,7 +249,6 @@ export function ChatBox({ showSidebar = true, defaultSessionId }: ChatBoxProps) 
                   timestamp={message.created_at}
                 />
               ))}
-              {/* 流式响应中的消息 */}
               {streamingContent && (
                 <ChatMessage
                   role="assistant"
@@ -278,7 +268,7 @@ export function ChatBox({ showSidebar = true, defaultSessionId }: ChatBoxProps) 
           placeholder={isStreaming ? '正在响应中...' : '输入消息...'}
         />
       </div>
-    </div>
+    </Card>
   );
 }
 

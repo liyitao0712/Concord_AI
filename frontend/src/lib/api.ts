@@ -259,23 +259,6 @@ export const adminApi = {
 
 // ==================== 系统设置 API ====================
 
-export interface LLMConfig {
-  default_model: string;
-  available_models: Array<{
-    id: string;
-    name: string;
-    provider: string;
-    description: string;
-    recommended?: boolean;
-  }>;
-  anthropic_configured: boolean;
-  openai_configured: boolean;
-  volcengine_configured: boolean;
-  anthropic_key_preview: string | null;
-  openai_key_preview: string | null;
-  volcengine_key_preview: string | null;
-}
-
 export interface EmailConfig {
   smtp_configured: boolean;
   imap_configured: boolean;
@@ -285,14 +268,6 @@ export interface EmailConfig {
   imap_host: string | null;
   imap_port: number | null;
   imap_user: string | null;
-}
-
-export interface LLMConfigUpdate {
-  default_model?: string;
-  custom_model_id?: string;  // 自定义模型 ID（如火山引擎 Endpoint ID）
-  anthropic_api_key?: string;
-  openai_api_key?: string;
-  volcengine_api_key?: string;
 }
 
 export interface EmailConfigUpdate {
@@ -306,40 +281,7 @@ export interface EmailConfigUpdate {
   imap_password?: string;
 }
 
-export interface TestResult {
-  success: boolean;
-  model?: string;
-  provider?: string;
-  response?: string;
-  error?: string;
-}
-
 export const settingsApi = {
-  // LLM 配置
-  async getLLMConfig(): Promise<LLMConfig> {
-    const response = await request<LLMConfig>('/admin/settings/llm');
-    if (response.error) throw new Error(response.error);
-    return response.data!;
-  },
-
-  async updateLLMConfig(data: LLMConfigUpdate): Promise<any> {
-    const response = await request('/admin/settings/llm', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-    if (response.error) throw new Error(response.error);
-    return response.data;
-  },
-
-  async testLLMConnection(modelId?: string): Promise<TestResult> {
-    const response = await request<TestResult>('/admin/settings/llm/test', {
-      method: 'POST',
-      body: JSON.stringify(modelId ? { model_id: modelId } : {}),
-    });
-    if (response.error) throw new Error(response.error);
-    return response.data!;
-  },
-
   // 邮件配置
   async getEmailConfig(): Promise<EmailConfig> {
     const response = await request<EmailConfig>('/admin/settings/email');
@@ -1246,8 +1188,10 @@ export const llmModelsApi = {
 
 export interface AgentListItem {
   name: string;
+  display_name: string;
   description: string;
   prompt_name: string;
+  system_prompt_name: string;
   model: string | null;
   tools: string[];
 }
@@ -1586,6 +1530,22 @@ export interface CustomerListResponse {
   total: number;
 }
 
+export interface AILookupResponse {
+  short_name: string | null;
+  country: string | null;
+  region: string | null;
+  industry: string | null;
+  company_size: string | null;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  tags: string[];
+  notes: string | null;
+  confidence: number;
+  error: string | null;
+}
+
 export interface ContactCreate {
   customer_id: string;
   name: string;
@@ -1675,6 +1635,16 @@ export const customersApi = {
     });
     if (response.error) throw new Error(response.error);
   },
+
+  // AI 搜索公司信息
+  async aiLookup(companyName: string): Promise<AILookupResponse> {
+    const response = await request<AILookupResponse>('/admin/customers/ai-lookup', {
+      method: 'POST',
+      body: JSON.stringify({ company_name: companyName }),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
 };
 
 export const contactsApi = {
@@ -1728,6 +1698,709 @@ export const contactsApi = {
   // 删除联系人
   async delete(id: string): Promise<void> {
     const response = await request(`/admin/contacts/${id}`, {
+      method: 'DELETE',
+    });
+    if (response.error) throw new Error(response.error);
+  },
+};
+
+
+// ==================== 客户建议审批 ====================
+
+export interface CustomerSuggestion {
+  id: string;
+  suggestion_type: string; // "new_customer" | "new_contact"
+
+  // AI 提取的客户信息
+  suggested_company_name: string;
+  suggested_short_name: string | null;
+  suggested_country: string | null;
+  suggested_region: string | null;
+  suggested_industry: string | null;
+  suggested_website: string | null;
+  suggested_email_domain: string | null;
+  suggested_customer_level: string;
+  suggested_tags: string[];
+
+  // AI 提取的联系人信息
+  suggested_contact_name: string | null;
+  suggested_contact_email: string | null;
+  suggested_contact_title: string | null;
+  suggested_contact_phone: string | null;
+  suggested_contact_department: string | null;
+
+  // AI 分析
+  confidence: number;
+  reasoning: string | null;
+  sender_type: string | null;
+
+  // 触发来源
+  trigger_email_id: string | null;
+  trigger_content: string;
+  trigger_source: string;
+
+  // 查重
+  email_domain: string | null;
+  matched_customer_id: string | null;
+
+  // 审批状态
+  status: string;
+  workflow_id: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  created_customer_id: string | null;
+  created_contact_id: string | null;
+
+  created_at: string;
+}
+
+export interface CustomerSuggestionListResponse {
+  items: CustomerSuggestion[];
+  total: number;
+}
+
+export interface CustomerReviewData {
+  note?: string;
+  company_name?: string;
+  short_name?: string;
+  country?: string;
+  region?: string;
+  industry?: string;
+  website?: string;
+  customer_level?: string;
+  tags?: string[];
+  contact_name?: string;
+  contact_email?: string;
+  contact_title?: string;
+  contact_phone?: string;
+  contact_department?: string;
+}
+
+export const customerSuggestionsApi = {
+  // 获取客户建议列表
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+    search?: string;
+  }): Promise<CustomerSuggestionListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.search) searchParams.set('search', params.search);
+    const query = searchParams.toString();
+    const response = await request<CustomerSuggestionListResponse>(
+      `/admin/customer-suggestions${query ? `?${query}` : ''}`
+    );
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 获取建议详情
+  async get(id: string): Promise<CustomerSuggestion> {
+    const response = await request<CustomerSuggestion>(`/admin/customer-suggestions/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 批准建议
+  async approve(id: string, data: CustomerReviewData): Promise<{ message: string; customer_id?: string; contact_id?: string }> {
+    const response = await request<{ message: string; customer_id?: string; contact_id?: string }>(
+      `/admin/customer-suggestions/${id}/approve`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 拒绝建议
+  async reject(id: string, note?: string): Promise<{ message: string }> {
+    const response = await request<{ message: string }>(
+      `/admin/customer-suggestions/${id}/reject`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ note }),
+      }
+    );
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+};
+
+
+// ==================== 供应商管理 ====================
+
+export interface Supplier {
+  id: string;
+  name: string;
+  short_name: string | null;
+  country: string | null;
+  region: string | null;
+  industry: string | null;
+  company_size: string | null;
+  main_products: string | null;
+  supplier_level: string;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  address: string | null;
+  payment_terms: string | null;
+  shipping_terms: string | null;
+  is_active: boolean;
+  source: string | null;
+  notes: string | null;
+  tags: string[];
+  contact_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupplierContact {
+  id: string;
+  supplier_id: string;
+  name: string;
+  title: string | null;
+  department: string | null;
+  email: string | null;
+  phone: string | null;
+  mobile: string | null;
+  social_media: Record<string, string>;
+  is_primary: boolean;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupplierDetail extends Supplier {
+  contacts: SupplierContact[];
+}
+
+export interface SupplierCreate {
+  name: string;
+  short_name?: string;
+  country?: string;
+  region?: string;
+  industry?: string;
+  company_size?: string;
+  main_products?: string;
+  supplier_level?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  address?: string;
+  payment_terms?: string;
+  shipping_terms?: string;
+  is_active?: boolean;
+  source?: string;
+  notes?: string;
+  tags?: string[];
+}
+
+export interface SupplierUpdate {
+  name?: string;
+  short_name?: string;
+  country?: string;
+  region?: string;
+  industry?: string;
+  company_size?: string;
+  main_products?: string;
+  supplier_level?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  address?: string;
+  payment_terms?: string;
+  shipping_terms?: string;
+  is_active?: boolean;
+  source?: string;
+  notes?: string;
+  tags?: string[];
+}
+
+export interface SupplierListResponse {
+  items: Supplier[];
+  total: number;
+}
+
+export interface SupplierContactCreate {
+  supplier_id: string;
+  name: string;
+  title?: string;
+  department?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  social_media?: Record<string, string>;
+  is_primary?: boolean;
+  is_active?: boolean;
+  notes?: string;
+}
+
+export interface SupplierContactUpdate {
+  name?: string;
+  title?: string;
+  department?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  social_media?: Record<string, string>;
+  is_primary?: boolean;
+  is_active?: boolean;
+  notes?: string;
+}
+
+export interface SupplierContactListResponse {
+  items: SupplierContact[];
+  total: number;
+}
+
+export const suppliersApi = {
+  // 获取供应商列表
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    country?: string;
+    supplier_level?: string;
+    is_active?: boolean;
+  }): Promise<SupplierListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.country) searchParams.set('country', params.country);
+    if (params?.supplier_level) searchParams.set('supplier_level', params.supplier_level);
+    if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
+    const query = searchParams.toString();
+    const response = await request<SupplierListResponse>(`/admin/suppliers${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 获取供应商详情（含联系人）
+  async get(id: string): Promise<SupplierDetail> {
+    const response = await request<SupplierDetail>(`/admin/suppliers/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 创建供应商
+  async create(data: SupplierCreate): Promise<Supplier> {
+    const response = await request<Supplier>('/admin/suppliers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 更新供应商
+  async update(id: string, data: SupplierUpdate): Promise<Supplier> {
+    const response = await request<Supplier>(`/admin/suppliers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 删除供应商
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/suppliers/${id}`, {
+      method: 'DELETE',
+    });
+    if (response.error) throw new Error(response.error);
+  },
+};
+
+export const supplierContactsApi = {
+  // 获取联系人列表
+  async list(params?: {
+    supplier_id?: string;
+    page?: number;
+    page_size?: number;
+    search?: string;
+    is_active?: boolean;
+  }): Promise<SupplierContactListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.supplier_id) searchParams.set('supplier_id', params.supplier_id);
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
+    const query = searchParams.toString();
+    const response = await request<SupplierContactListResponse>(`/admin/supplier-contacts${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 获取联系人详情
+  async get(id: string): Promise<SupplierContact> {
+    const response = await request<SupplierContact>(`/admin/supplier-contacts/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 创建联系人
+  async create(data: SupplierContactCreate): Promise<SupplierContact> {
+    const response = await request<SupplierContact>('/admin/supplier-contacts', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 更新联系人
+  async update(id: string, data: SupplierContactUpdate): Promise<SupplierContact> {
+    const response = await request<SupplierContact>(`/admin/supplier-contacts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 删除联系人
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/supplier-contacts/${id}`, {
+      method: 'DELETE',
+    });
+    if (response.error) throw new Error(response.error);
+  },
+};
+
+
+// ==================== 品类管理 ====================
+
+export interface Category {
+  id: string;
+  code: string;
+  name: string;
+  name_en: string | null;
+  parent_id: string | null;
+  parent_name: string | null;
+  description: string | null;
+  vat_rate: number | null;
+  tax_rebate_rate: number | null;
+  product_count: number;
+  children_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CategoryTreeNode {
+  id: string;
+  code: string;
+  name: string;
+  name_en: string | null;
+  description: string | null;
+  vat_rate: number | null;
+  tax_rebate_rate: number | null;
+  product_count: number;
+  children: CategoryTreeNode[];
+}
+
+export interface CategoryCreate {
+  code: string;
+  name: string;
+  name_en?: string;
+  parent_id?: string;
+  description?: string;
+  vat_rate?: number;
+  tax_rebate_rate?: number;
+}
+
+export interface CategoryUpdate {
+  code?: string;
+  name?: string;
+  name_en?: string;
+  parent_id?: string | null;
+  description?: string;
+  vat_rate?: number;
+  tax_rebate_rate?: number;
+}
+
+export interface CategoryListResponse {
+  items: Category[];
+  total: number;
+}
+
+export interface CategoryTreeResponse {
+  items: CategoryTreeNode[];
+}
+
+export const categoriesApi = {
+  // 获取品类列表（平铺）
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    parent_id?: string;
+  }): Promise<CategoryListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.parent_id) searchParams.set('parent_id', params.parent_id);
+    const query = searchParams.toString();
+    const response = await request<CategoryListResponse>(`/admin/categories${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 获取品类树形结构
+  async tree(params?: { is_active?: boolean }): Promise<CategoryTreeResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.is_active !== undefined) searchParams.set('is_active', String(params.is_active));
+    const query = searchParams.toString();
+    const response = await request<CategoryTreeResponse>(`/admin/categories/tree${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 获取下一个可用品类编码
+  async nextCode(parentId?: string): Promise<{ code: string }> {
+    const searchParams = new URLSearchParams();
+    if (parentId) searchParams.set('parent_id', parentId);
+    const query = searchParams.toString();
+    const response = await request<{ code: string }>(`/admin/categories/next-code${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 获取品类详情
+  async get(id: string): Promise<Category> {
+    const response = await request<Category>(`/admin/categories/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 创建品类
+  async create(data: CategoryCreate): Promise<Category> {
+    const response = await request<Category>('/admin/categories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 更新品类
+  async update(id: string, data: CategoryUpdate): Promise<Category> {
+    const response = await request<Category>(`/admin/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 删除品类
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/categories/${id}`, {
+      method: 'DELETE',
+    });
+    if (response.error) throw new Error(response.error);
+  },
+};
+
+
+// ==================== 产品管理 ====================
+
+export interface Product {
+  id: string;
+  category_id: string | null;
+  category_name: string | null;
+  name: string;
+  model_number: string | null;
+  specifications: string | null;
+  unit: string | null;
+  moq: number | null;
+  reference_price: number | null;
+  currency: string;
+  hs_code: string | null;
+  origin: string | null;
+  material: string | null;
+  packaging: string | null;
+  images: string[];
+  description: string | null;
+  tags: string[];
+  status: string;
+  notes: string | null;
+  supplier_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductSupplierInfo {
+  id: string;
+  product_id: string;
+  supplier_id: string;
+  supplier_name: string | null;
+  supply_price: number | null;
+  currency: string;
+  moq: number | null;
+  lead_time: number | null;
+  is_primary: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductDetail extends Product {
+  suppliers: ProductSupplierInfo[];
+}
+
+export interface ProductCreate {
+  name: string;
+  category_id?: string;
+  model_number?: string;
+  specifications?: string;
+  unit?: string;
+  moq?: number;
+  reference_price?: number;
+  currency?: string;
+  hs_code?: string;
+  origin?: string;
+  material?: string;
+  packaging?: string;
+  images?: string[];
+  description?: string;
+  tags?: string[];
+  status?: string;
+  notes?: string;
+}
+
+export interface ProductUpdate {
+  name?: string;
+  category_id?: string | null;
+  model_number?: string;
+  specifications?: string;
+  unit?: string;
+  moq?: number;
+  reference_price?: number;
+  currency?: string;
+  hs_code?: string;
+  origin?: string;
+  material?: string;
+  packaging?: string;
+  images?: string[];
+  description?: string;
+  tags?: string[];
+  status?: string;
+  notes?: string;
+}
+
+export interface ProductListResponse {
+  items: Product[];
+  total: number;
+}
+
+export interface ProductSupplierCreate {
+  supplier_id: string;
+  supply_price?: number;
+  currency?: string;
+  moq?: number;
+  lead_time?: number;
+  is_primary?: boolean;
+  notes?: string;
+}
+
+export interface ProductSupplierUpdate {
+  supply_price?: number;
+  currency?: string;
+  moq?: number;
+  lead_time?: number;
+  is_primary?: boolean;
+  notes?: string;
+}
+
+export const productsApi = {
+  // 获取产品列表
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    category_id?: string;
+    status?: string;
+  }): Promise<ProductListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.category_id) searchParams.set('category_id', params.category_id);
+    if (params?.status) searchParams.set('status', params.status);
+    const query = searchParams.toString();
+    const response = await request<ProductListResponse>(`/admin/products${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 获取产品详情（含供应商）
+  async get(id: string): Promise<ProductDetail> {
+    const response = await request<ProductDetail>(`/admin/products/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 创建产品
+  async create(data: ProductCreate): Promise<Product> {
+    const response = await request<Product>('/admin/products', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 更新产品
+  async update(id: string, data: ProductUpdate): Promise<Product> {
+    const response = await request<Product>(`/admin/products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 删除产品
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/products/${id}`, {
+      method: 'DELETE',
+    });
+    if (response.error) throw new Error(response.error);
+  },
+
+  // 添加供应商关联
+  async addSupplier(productId: string, data: ProductSupplierCreate): Promise<ProductSupplierInfo> {
+    const response = await request<ProductSupplierInfo>(`/admin/products/${productId}/suppliers`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 更新供应商关联
+  async updateSupplier(productId: string, supplierId: string, data: ProductSupplierUpdate): Promise<ProductSupplierInfo> {
+    const response = await request<ProductSupplierInfo>(`/admin/products/${productId}/suppliers/${supplierId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 移除供应商关联
+  async removeSupplier(productId: string, supplierId: string): Promise<void> {
+    const response = await request(`/admin/products/${productId}/suppliers/${supplierId}`, {
       method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);

@@ -11,33 +11,11 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getStats, StatsResponse } from '@/lib/api';
-
-// 统计卡片组件
-function StatCard({
-  title,
-  value,
-  icon,
-  color,
-}: {
-  title: string;
-  value: number | string;
-  icon: string;
-  color: string;
-}) {
-  return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="flex items-center">
-        <div className={`flex-shrink-0 p-3 rounded-full ${color}`}>
-          <span className="text-2xl">{icon}</span>
-        </div>
-        <div className="ml-4">
-          <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className="text-2xl font-semibold text-gray-900">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
+import { StatCard } from '@/components/StatCard';
+import { PageLoading } from '@/components/LoadingSpinner';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Users, CheckCircle, Crown, TrendingUp, UserPlus, RefreshCw } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
@@ -60,16 +38,12 @@ export default function AdminDashboard() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">加载中...</div>
-      </div>
-    );
+    return <PageLoading />;
   }
 
   if (error) {
     return (
-      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+      <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-md">
         {error}
       </div>
     );
@@ -79,8 +53,8 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       {/* 页面标题 */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">仪表盘</h1>
-        <p className="mt-1 text-sm text-gray-500">系统概览和统计数据</p>
+        <h1 className="text-2xl font-bold">仪表盘</h1>
+        <p className="mt-1 text-sm text-muted-foreground">系统概览和统计数据</p>
       </div>
 
       {/* 统计卡片 */}
@@ -88,82 +62,97 @@ export default function AdminDashboard() {
         <StatCard
           title="总用户数"
           value={stats?.total_users ?? 0}
-          icon="👥"
-          color="bg-blue-100"
+          icon={Users}
+          color="bg-blue-100 text-blue-600"
         />
         <StatCard
           title="活跃用户"
           value={stats?.active_users ?? 0}
-          icon="✅"
-          color="bg-green-100"
+          icon={CheckCircle}
+          color="bg-green-100 text-green-600"
         />
         <StatCard
           title="管理员"
           value={stats?.admin_users ?? 0}
-          icon="👑"
-          color="bg-purple-100"
+          icon={Crown}
+          color="bg-purple-100 text-purple-600"
         />
         <StatCard
           title="今日新增"
           value={stats?.today_new_users ?? 0}
-          icon="📈"
-          color="bg-yellow-100"
+          icon={TrendingUp}
+          color="bg-amber-100 text-amber-600"
         />
       </div>
 
       {/* 快捷操作 */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">快捷操作</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Link
-            href="/admin/users"
-            className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <span className="text-2xl mr-3">👥</span>
-            <div>
-              <p className="font-medium text-gray-900">用户管理</p>
-              <p className="text-sm text-gray-500">查看和管理用户</p>
-            </div>
-          </Link>
-          <Link
-            href="/admin/users?action=create"
-            className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <span className="text-2xl mr-3">➕</span>
-            <div>
-              <p className="font-medium text-gray-900">创建用户</p>
-              <p className="text-sm text-gray-500">添加新用户账户</p>
-            </div>
-          </Link>
-          <button
-            onClick={loadStats}
-            className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left"
-          >
-            <span className="text-2xl mr-3">🔄</span>
-            <div>
-              <p className="font-medium text-gray-900">刷新数据</p>
-              <p className="text-sm text-gray-500">重新加载统计</p>
-            </div>
-          </button>
-        </div>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>快捷操作</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Link href="/admin/users">
+              <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
+                <CardContent className="flex items-center gap-3 p-4">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Users className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium">用户管理</p>
+                    <p className="text-sm text-muted-foreground">查看和管理用户</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+            <Link href="/admin/users?action=create">
+              <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
+                <CardContent className="flex items-center gap-3 p-4">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <UserPlus className="h-5 w-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium">创建用户</p>
+                    <p className="text-sm text-muted-foreground">添加新用户账户</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+            <Card className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={loadStats}>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="p-2 bg-amber-100 rounded-lg">
+                  <RefreshCw className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <p className="font-medium">刷新数据</p>
+                  <p className="text-sm text-muted-foreground">重新加载统计</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 系统信息 */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">系统信息</h2>
-        <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <dt className="text-sm font-medium text-gray-500">系统版本</dt>
-            <dd className="mt-1 text-sm text-gray-900">v0.1.0</dd>
-          </div>
-          <div>
-            <dt className="text-sm font-medium text-gray-500">API 地址</dt>
-            <dd className="mt-1 text-sm text-gray-900">
-              {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
-            </dd>
-          </div>
-        </dl>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>系统信息</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <dt className="text-sm font-medium text-muted-foreground">系统版本</dt>
+              <dd className="mt-1 text-sm">v0.1.0</dd>
+            </div>
+            <div>
+              <dt className="text-sm font-medium text-muted-foreground">API 地址</dt>
+              <dd className="mt-1 text-sm">
+                {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
+              </dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
     </div>
   );
 }

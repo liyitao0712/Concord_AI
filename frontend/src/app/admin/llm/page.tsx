@@ -2,7 +2,25 @@
 
 import { useState, useEffect } from 'react';
 import { llmModelsApi, type LLMModelConfig } from '@/lib/api';
-import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
+import { ChevronDown, ChevronUp, Trash2, Info } from 'lucide-react';
+import { toast } from 'sonner';
+import { useConfirm } from '@/components/ConfirmProvider';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { PageLoading } from '@/components/LoadingSpinner';
 
 interface ProviderGroup {
   id: string;
@@ -43,6 +61,8 @@ export default function LLMConfigPage() {
     api_key: '',
   });
   const [creating, setCreating] = useState(false);
+
+  const confirm = useConfirm();
 
   useEffect(() => {
     loadModels();
@@ -217,9 +237,12 @@ export default function LLMConfigPage() {
 
   // 删除模型
   const handleDeleteModel = async (modelId: string, modelName: string) => {
-    if (!confirm(`确定要删除模型 "${modelName}" 吗？\n\n删除后相关的使用统计也会丢失。`)) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: '确认删除',
+      description: `确定要删除模型 "${modelName}" 吗？\n\n删除后相关的使用统计也会丢失。`,
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
 
     try {
       await llmModelsApi.delete(modelId);
@@ -243,11 +266,7 @@ export default function LLMConfigPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">加载中...</div>
-      </div>
-    );
+    return <PageLoading />;
   }
 
   const providerGroups = getProviderGroups();
@@ -258,47 +277,44 @@ export default function LLMConfigPage() {
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">LLM 模型配置</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-semibold">LLM 模型配置</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             配置各个 AI 模型的 API Key 和参数
           </p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
-        >
-          ➕ 新增模型
-        </button>
+        <Button onClick={() => setShowCreateModal(true)}>
+          新增模型
+        </Button>
       </div>
 
       {/* 统计信息 */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-4">
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <dt className="text-sm font-medium text-gray-500 truncate">总模型数</dt>
-            <dd className="mt-1 text-3xl font-semibold text-gray-900">{models.length}</dd>
-          </div>
-        </div>
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <dt className="text-sm font-medium text-gray-500 truncate">已配置</dt>
+        <Card>
+          <CardContent>
+            <dt className="text-sm font-medium text-muted-foreground truncate">总模型数</dt>
+            <dd className="mt-1 text-3xl font-semibold">{models.length}</dd>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent>
+            <dt className="text-sm font-medium text-muted-foreground truncate">已配置</dt>
             <dd className="mt-1 text-3xl font-semibold text-green-600">{stats.configured}</dd>
-          </div>
-        </div>
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <dt className="text-sm font-medium text-gray-500 truncate">总请求数</dt>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent>
+            <dt className="text-sm font-medium text-muted-foreground truncate">总请求数</dt>
             <dd className="mt-1 text-3xl font-semibold text-blue-600">{stats.totalRequests}</dd>
-          </div>
-        </div>
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <dt className="text-sm font-medium text-gray-500 truncate">总 Token 数</dt>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent>
+            <dt className="text-sm font-medium text-muted-foreground truncate">总 Token 数</dt>
             <dd className="mt-1 text-3xl font-semibold text-purple-600">
               {(stats.totalTokens / 1000).toFixed(1)}K
             </dd>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* 提示消息 */}
@@ -317,7 +333,7 @@ export default function LLMConfigPage() {
         {/* 调试信息 */}
         {models.length === 0 && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-yellow-800 mb-2">⚠️ 调试信息</h3>
+            <h3 className="text-sm font-medium text-yellow-800 mb-2">调试信息</h3>
             <p className="text-sm text-yellow-700">
               未加载到任何模型数据。请检查浏览器控制台（F12）查看详细错误信息。
             </p>
@@ -341,162 +357,160 @@ export default function LLMConfigPage() {
           const totalCount = provider.models.length;
 
           return (
-            <div key={provider.id} className="bg-white shadow rounded-lg overflow-hidden">
-              {/* Provider 头部（可点击折叠/展开） */}
-              <button
-                onClick={() => toggleProvider(provider.id)}
-                className="w-full px-6 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex items-center space-x-4">
-                  <div className="text-left">
-                    <h3 className="text-lg font-medium text-gray-900">{provider.name}</h3>
-                    <p className="text-sm text-gray-500">{provider.description}</p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      {configuredCount}/{totalCount} 已配置
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <a
-                    href={provider.docsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+            <Collapsible
+              key={provider.id}
+              open={isExpanded}
+              onOpenChange={() => toggleProvider(provider.id)}
+            >
+              <Card className="py-0 overflow-hidden">
+                {/* Provider 头部（可点击折叠/展开） */}
+                <CollapsibleTrigger asChild>
+                  <button
+                    className="w-full px-6 py-4 bg-muted/50 border-b flex items-center justify-between hover:bg-muted transition-colors"
                   >
-                    获取 API Key
-                  </a>
-                  {isExpanded ? (
-                    <ChevronUpIcon className="h-5 w-5 text-gray-400" />
-                  ) : (
-                    <ChevronDownIcon className="h-5 w-5 text-gray-400" />
-                  )}
-                </div>
-              </button>
-
-              {/* 模型列表（展开时显示） */}
-              {isExpanded && (
-                <div className="px-6 py-4">
-                  <div className="space-y-4">
-                    {provider.models.map((model) => (
-                      <div
-                        key={model.model_id}
-                        className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                    <div className="flex items-center space-x-4">
+                      <div className="text-left">
+                        <h3 className="text-lg font-medium">{provider.name}</h3>
+                        <p className="text-sm text-muted-foreground">{provider.description}</p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+                          {configuredCount}/{totalCount} 已配置
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <a
+                        href={provider.docsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
                       >
-                        {/* 模型信息 */}
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
+                        获取 API Key
+                      </a>
+                      {isExpanded ? (
+                        <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                  </button>
+                </CollapsibleTrigger>
+
+                {/* 模型列表（展开时显示） */}
+                <CollapsibleContent>
+                  <div className="px-6 py-4">
+                    <div className="space-y-4">
+                      {provider.models.map((model) => (
+                        <div
+                          key={model.model_id}
+                          className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
+                        >
+                          {/* 模型信息 */}
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2">
+                                <h4 className="text-base font-medium">{model.model_name}</h4>
+                                {model.is_configured && (
+                                  <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+                                    已配置
+                                  </Badge>
+                                )}
+                                {!model.is_enabled && (
+                                  <Badge variant="secondary">
+                                    已禁用
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground mt-1">{model.description}</p>
+                              <p className="text-xs text-muted-foreground mt-1 font-mono">{model.model_id}</p>
+                            </div>
+
+                            {/* 操作按钮 */}
                             <div className="flex items-center space-x-2">
-                              <h4 className="text-base font-medium text-gray-900">{model.model_name}</h4>
-                              {model.is_configured && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                  已配置
-                                </span>
-                              )}
-                              {!model.is_enabled && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                                  已禁用
-                                </span>
+                              {/* 删除按钮 */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteModel(model.model_id, model.model_name)}
+                                className="text-destructive hover:text-destructive"
+                                title="删除模型"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </Button>
+
+                              {/* 启用/禁用开关 */}
+                              <Switch
+                                checked={model.is_enabled}
+                                onCheckedChange={() => toggleModelEnabled(model.model_id, model.is_enabled)}
+                              />
+                            </div>
+                          </div>
+
+                          {/* 使用统计 */}
+                          {model.total_requests > 0 && (
+                            <div className="mb-3 flex items-center space-x-4 text-xs text-muted-foreground">
+                              <span>请求: {model.total_requests}</span>
+                              <span>Tokens: {(model.total_tokens / 1000).toFixed(1)}K</span>
+                              {model.last_used_at && (
+                                <span>最后使用: {new Date(model.last_used_at).toLocaleString('zh-CN')}</span>
                               )}
                             </div>
-                            <p className="text-sm text-gray-500 mt-1">{model.description}</p>
-                            <p className="text-xs text-gray-400 mt-1 font-mono">{model.model_id}</p>
-                          </div>
+                          )}
 
-                          {/* 操作按钮 */}
-                          <div className="flex items-center space-x-2">
-                            {/* 删除按钮 */}
-                            <button
-                              onClick={() => handleDeleteModel(model.model_id, model.model_name)}
-                              className="text-red-600 hover:text-red-800 p-1"
-                              title="删除模型"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-
-                            {/* 启用/禁用开关 */}
-                            <button
-                              onClick={() => toggleModelEnabled(model.model_id, model.is_enabled)}
-                              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                                model.is_enabled ? 'bg-blue-600' : 'bg-gray-200'
-                              }`}
-                            >
-                              <span
-                                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                  model.is_enabled ? 'translate-x-5' : 'translate-x-0'
-                                }`}
+                          {/* API Key 配置 */}
+                          <div className="space-y-2">
+                            <Label>
+                              API Key
+                              {model.api_key_preview && (
+                                <span className="ml-2 text-muted-foreground font-mono text-xs font-normal">
+                                  当前: {model.api_key_preview}
+                                </span>
+                              )}
+                            </Label>
+                            <div className="flex space-x-2">
+                              <Input
+                                type="password"
+                                value={modelApiKeys[model.model_id] || ''}
+                                onChange={(e) =>
+                                  setModelApiKeys(prev => ({ ...prev, [model.model_id]: e.target.value }))
+                                }
+                                placeholder="输入新的 API Key..."
+                                className="flex-1"
                               />
-                            </button>
+                              <Button
+                                onClick={() => saveModelConfig(model.model_id)}
+                                disabled={
+                                  savingModel === model.model_id ||
+                                  !modelApiKeys[model.model_id]?.trim()
+                                }
+                              >
+                                {savingModel === model.model_id ? '保存中...' : '保存'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => testModel(model.model_id)}
+                                disabled={!model.is_configured || testingModel === model.model_id}
+                              >
+                                {testingModel === model.model_id ? '测试中...' : '测试'}
+                              </Button>
+                            </div>
                           </div>
                         </div>
-
-                        {/* 使用统计 */}
-                        {model.total_requests > 0 && (
-                          <div className="mb-3 flex items-center space-x-4 text-xs text-gray-500">
-                            <span>请求: {model.total_requests}</span>
-                            <span>Tokens: {(model.total_tokens / 1000).toFixed(1)}K</span>
-                            {model.last_used_at && (
-                              <span>最后使用: {new Date(model.last_used_at).toLocaleString('zh-CN')}</span>
-                            )}
-                          </div>
-                        )}
-
-                        {/* API Key 配置 */}
-                        <div className="space-y-2">
-                          <label className="block text-sm font-medium text-gray-700">
-                            API Key
-                            {model.api_key_preview && (
-                              <span className="ml-2 text-gray-400 font-mono text-xs">
-                                当前: {model.api_key_preview}
-                              </span>
-                            )}
-                          </label>
-                          <div className="flex space-x-2">
-                            <input
-                              type="password"
-                              value={modelApiKeys[model.model_id] || ''}
-                              onChange={(e) =>
-                                setModelApiKeys(prev => ({ ...prev, [model.model_id]: e.target.value }))
-                              }
-                              placeholder="输入新的 API Key..."
-                              className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                            />
-                            <button
-                              onClick={() => saveModelConfig(model.model_id)}
-                              disabled={
-                                savingModel === model.model_id ||
-                                !modelApiKeys[model.model_id]?.trim()
-                              }
-                              className="px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {savingModel === model.model_id ? '保存中...' : '保存'}
-                            </button>
-                            <button
-                              onClick={() => testModel(model.model_id)}
-                              disabled={!model.is_configured || testingModel === model.model_id}
-                              className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {testingModel === model.model_id ? '测试中...' : '测试'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           );
         })}
       </div>
 
       {/* 说明文档 */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="text-sm font-medium text-blue-900 mb-2">💡 使用说明</h3>
+        <h3 className="text-sm font-medium text-blue-900 mb-2">使用说明</h3>
         <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
           <li>每个模型可以单独配置 API Key，实现精细化管理和成本追踪</li>
           <li>点击提供商名称可以展开/收起模型列表</li>
@@ -508,171 +522,139 @@ export default function LLMConfigPage() {
       </div>
 
       {/* 新增模型弹窗 */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4 py-8">
-            {/* 背景遮罩 */}
-            <div
-              className="fixed inset-0 bg-black opacity-50"
-              onClick={() => setShowCreateModal(false)}
-            />
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>新增 LLM 模型</DialogTitle>
+          </DialogHeader>
 
-            {/* 弹窗内容 */}
-            <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">新增 LLM 模型</h3>
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* LiteLLM 配置说明 */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <div className="flex items-start">
-                  <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                  </svg>
-                  <div className="flex-1">
-                    <h4 className="text-sm font-semibold text-blue-900 mb-2">LiteLLM 模型配置说明</h4>
-                    <div className="text-xs text-blue-800 space-y-1">
-                      <p><strong>Model ID 格式：</strong><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono">provider/model-name</code></p>
-                      <p className="mt-2"><strong>常见示例：</strong></p>
-                      <ul className="list-disc list-inside ml-2 space-y-0.5">
-                        <li><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[11px]">anthropic/claude-3-opus-20240229</code></li>
-                        <li><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[11px]">openai/gpt-4-turbo-preview</code></li>
-                        <li><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[11px]">gemini/gemini-1.5-pro</code></li>
-                        <li><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[11px]">qwen/qwen-turbo</code></li>
-                      </ul>
-                      <p className="mt-2">
-                        💡 <strong>注意：</strong>系统会自动添加提供商前缀，您也可以输入完整格式
-                      </p>
-                      <p className="mt-1">
-                        📚 <a href="https://docs.litellm.ai/docs/providers" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline font-medium">查看完整的模型列表 →</a>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {/* Model ID */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Model ID <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={createFormData.model_id}
-                    onChange={(e) => setCreateFormData({ ...createFormData, model_id: e.target.value })}
-                    placeholder={
-                      createFormData.provider === 'anthropic' ? 'claude-3-opus-20240229 或 anthropic/claude-3-opus-20240229' :
-                      createFormData.provider === 'openai' ? 'gpt-4-turbo-preview 或 openai/gpt-4-turbo-preview' :
-                      createFormData.provider === 'gemini' ? 'gemini-1.5-pro 或 gemini/gemini-1.5-pro' :
-                      createFormData.provider === 'qwen' ? 'qwen-turbo 或 qwen/qwen-turbo' :
-                      createFormData.provider === 'volcengine' ? 'doubao-pro-4k 或 volcengine/doubao-pro-4k' :
-                      'provider/model-name 格式'
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    {createFormData.provider === 'anthropic' && '例如：claude-3-opus-20240229、claude-3-sonnet-20240229、claude-3-haiku-20240307'}
-                    {createFormData.provider === 'openai' && '例如：gpt-4-turbo-preview、gpt-4、gpt-3.5-turbo'}
-                    {createFormData.provider === 'gemini' && '例如：gemini-1.5-pro、gemini-1.5-flash、gemini-pro'}
-                    {createFormData.provider === 'qwen' && '例如：qwen-turbo、qwen-plus、qwen-max'}
-                    {createFormData.provider === 'volcengine' && '例如：doubao-pro-4k、doubao-lite-4k'}
-                    {!['anthropic', 'openai', 'gemini', 'qwen', 'volcengine'].includes(createFormData.provider) &&
-                      '模型 ID 应为 LiteLLM 格式，如 provider/model-name'}
+          {/* LiteLLM 配置说明 */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-start">
+              <Info className="w-5 h-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" />
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-blue-900 mb-2">LiteLLM 模型配置说明</h4>
+                <div className="text-xs text-blue-800 space-y-1">
+                  <p><strong>Model ID 格式：</strong><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono">provider/model-name</code></p>
+                  <p className="mt-2"><strong>常见示例：</strong></p>
+                  <ul className="list-disc list-inside ml-2 space-y-0.5">
+                    <li><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[11px]">anthropic/claude-3-opus-20240229</code></li>
+                    <li><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[11px]">openai/gpt-4-turbo-preview</code></li>
+                    <li><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[11px]">gemini/gemini-1.5-pro</code></li>
+                    <li><code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[11px]">qwen/qwen-turbo</code></li>
+                  </ul>
+                  <p className="mt-2">
+                    <strong>注意：</strong>系统会自动添加提供商前缀，您也可以输入完整格式
                   </p>
-                </div>
-
-                {/* Provider */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    提供商 <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={createFormData.provider}
-                    onChange={(e) => setCreateFormData({ ...createFormData, provider: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  >
-                    <option value="anthropic">Anthropic (Claude)</option>
-                    <option value="openai">OpenAI (GPT)</option>
-                    <option value="gemini">Google Gemini</option>
-                    <option value="qwen">阿里千问 (Qwen)</option>
-                    <option value="volcengine">火山引擎 (Doubao)</option>
-                    <option value="zhipu">智谱 AI (GLM)</option>
-                    <option value="other">其他</option>
-                  </select>
-                </div>
-
-                {/* Model Name */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    显示名称 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={createFormData.model_name}
-                    onChange={(e) => setCreateFormData({ ...createFormData, model_name: e.target.value })}
-                    placeholder="如：Claude Opus 4.5"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    描述（可选）
-                  </label>
-                  <textarea
-                    value={createFormData.description}
-                    onChange={(e) => setCreateFormData({ ...createFormData, description: e.target.value })}
-                    placeholder="模型的简短描述..."
-                    rows={2}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-
-                {/* API Key */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    API Key（可选）
-                  </label>
-                  <input
-                    type="password"
-                    value={createFormData.api_key}
-                    onChange={(e) => setCreateFormData({ ...createFormData, api_key: e.target.value })}
-                    placeholder="创建时可以留空，之后再配置"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-
-                {/* 操作按钮 */}
-                <div className="flex justify-end space-x-3 pt-4 border-t">
-                  <button
-                    onClick={() => setShowCreateModal(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={handleCreateModel}
-                    disabled={creating || !createFormData.model_id || !createFormData.provider || !createFormData.model_name}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {creating ? '创建中...' : '创建模型'}
-                  </button>
+                  <p className="mt-1">
+                    <a href="https://docs.litellm.ai/docs/providers" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline font-medium">查看完整的模型列表</a>
+                  </p>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+
+          <div className="space-y-4">
+            {/* Model ID */}
+            <div>
+              <Label className="mb-1">
+                Model ID <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                type="text"
+                value={createFormData.model_id}
+                onChange={(e) => setCreateFormData({ ...createFormData, model_id: e.target.value })}
+                placeholder={
+                  createFormData.provider === 'anthropic' ? 'claude-3-opus-20240229 或 anthropic/claude-3-opus-20240229' :
+                  createFormData.provider === 'openai' ? 'gpt-4-turbo-preview 或 openai/gpt-4-turbo-preview' :
+                  createFormData.provider === 'gemini' ? 'gemini-1.5-pro 或 gemini/gemini-1.5-pro' :
+                  createFormData.provider === 'qwen' ? 'qwen-turbo 或 qwen/qwen-turbo' :
+                  createFormData.provider === 'volcengine' ? 'doubao-pro-4k 或 volcengine/doubao-pro-4k' :
+                  'provider/model-name 格式'
+                }
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                {createFormData.provider === 'anthropic' && '例如：claude-3-opus-20240229、claude-3-sonnet-20240229、claude-3-haiku-20240307'}
+                {createFormData.provider === 'openai' && '例如：gpt-4-turbo-preview、gpt-4、gpt-3.5-turbo'}
+                {createFormData.provider === 'gemini' && '例如：gemini-1.5-pro、gemini-1.5-flash、gemini-pro'}
+                {createFormData.provider === 'qwen' && '例如：qwen-turbo、qwen-plus、qwen-max'}
+                {createFormData.provider === 'volcengine' && '例如：doubao-pro-4k、doubao-lite-4k'}
+                {!['anthropic', 'openai', 'gemini', 'qwen', 'volcengine'].includes(createFormData.provider) &&
+                  '模型 ID 应为 LiteLLM 格式，如 provider/model-name'}
+              </p>
+            </div>
+
+            {/* Provider */}
+            <div>
+              <Label className="mb-1">
+                提供商 <span className="text-destructive">*</span>
+              </Label>
+              <select
+                value={createFormData.provider}
+                onChange={(e) => setCreateFormData({ ...createFormData, provider: e.target.value })}
+                className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="openai">OpenAI (GPT)</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="qwen">阿里千问 (Qwen)</option>
+                <option value="volcengine">火山引擎 (Doubao)</option>
+                <option value="zhipu">智谱 AI (GLM)</option>
+                <option value="other">其他</option>
+              </select>
+            </div>
+
+            {/* Model Name */}
+            <div>
+              <Label className="mb-1">
+                显示名称 <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                type="text"
+                value={createFormData.model_name}
+                onChange={(e) => setCreateFormData({ ...createFormData, model_name: e.target.value })}
+                placeholder="如：Claude Opus 4.5"
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <Label className="mb-1">描述（可选）</Label>
+              <Textarea
+                value={createFormData.description}
+                onChange={(e) => setCreateFormData({ ...createFormData, description: e.target.value })}
+                placeholder="模型的简短描述..."
+                rows={2}
+              />
+            </div>
+
+            {/* API Key */}
+            <div>
+              <Label className="mb-1">API Key（可选）</Label>
+              <Input
+                type="password"
+                value={createFormData.api_key}
+                onChange={(e) => setCreateFormData({ ...createFormData, api_key: e.target.value })}
+                placeholder="创建时可以留空，之后再配置"
+              />
+            </div>
+          </div>
+
+          {/* 操作按钮 */}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={handleCreateModel}
+              disabled={creating || !createFormData.model_id || !createFormData.provider || !createFormData.model_name}
+            >
+              {creating ? '创建中...' : '创建模型'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

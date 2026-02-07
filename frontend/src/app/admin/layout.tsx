@@ -12,18 +12,43 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { PageLoading } from '@/components/LoadingSpinner';
+import {
+  Mail,
+  Building2,
+  Factory,
+  FolderTree,
+  Package,
+  Bot,
+  Cpu,
+  Brain,
+  Tags,
+  Plug,
+  Settings,
+  LayoutDashboard,
+  Users,
+  ScrollText,
+  MailCheck,
+  ChevronDown,
+  LogOut,
+  type LucideIcon,
+} from 'lucide-react';
 
 // 导航项
 interface NavItem {
   name: string;
   href: string;
-  icon: string;
+  icon: LucideIcon;
 }
 
 // 导航分组
 interface NavGroup {
   label: string;
-  icon: string;
+  icon: LucideIcon;
   items: NavItem[];
 }
 
@@ -32,41 +57,38 @@ interface NavTopLevel {
   topLevel: true;
   name: string;
   href: string;
-  icon: string;
+  icon: LucideIcon;
 }
 
 type NavEntry = NavGroup | NavTopLevel;
 
 // 导航菜单配置
 const navigation: NavEntry[] = [
-  {
-    label: '系统设置',
-    icon: '⚙️',
-    items: [
-      { name: '系统仪表板', href: '/admin', icon: '📊' },
-      { name: '用户管理', href: '/admin/users', icon: '👥' },
-      { name: '系统日志', href: '/admin/logs', icon: '📋' },
-      { name: '邮箱管理', href: '/admin/settings', icon: '📧' },
-    ],
-  },
+  { topLevel: true, name: '邮件记录', href: '/admin/emails', icon: Mail },
+  { topLevel: true, name: '客户管理', href: '/admin/customers', icon: Building2 },
+  { topLevel: true, name: '供应商管理', href: '/admin/suppliers', icon: Factory },
+  { topLevel: true, name: '品类管理', href: '/admin/categories', icon: FolderTree },
+  { topLevel: true, name: '产品管理', href: '/admin/products', icon: Package },
   {
     label: 'AI 设置',
-    icon: '🤖',
+    icon: Bot,
     items: [
-      { name: 'LLM 配置', href: '/admin/llm', icon: '🤖' },
-      { name: 'Agent 管理', href: '/admin/agents', icon: '🧠' },
-      { name: '工作类型', href: '/admin/work-types', icon: '🏷️' },
-      { name: 'Worker 管理', href: '/admin/workers', icon: '🔌' },
+      { name: 'LLM 配置', href: '/admin/llm', icon: Cpu },
+      { name: 'Agent 管理', href: '/admin/agents', icon: Brain },
+      { name: '工作类型', href: '/admin/work-types', icon: Tags },
+      { name: 'Worker 管理', href: '/admin/workers', icon: Plug },
     ],
   },
   {
-    label: '业务管理',
-    icon: '💼',
+    label: '系统设置',
+    icon: Settings,
     items: [
-      { name: '客户管理', href: '/admin/customers', icon: '🏢' },
+      { name: '系统仪表板', href: '/admin', icon: LayoutDashboard },
+      { name: '用户管理', href: '/admin/users', icon: Users },
+      { name: '系统日志', href: '/admin/logs', icon: ScrollText },
+      { name: '邮箱管理', href: '/admin/settings', icon: MailCheck },
     ],
   },
-  { topLevel: true, name: '邮件记录', href: '/admin/emails', icon: '📬' },
 ];
 
 export default function AdminLayout({
@@ -97,9 +119,8 @@ export default function AdminLayout({
 
   // 分组展开状态（默认全部展开）
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    '系统设置': true,
     'AI 设置': true,
-    '业务管理': true,
+    '系统设置': true,
   });
 
   const toggleGroup = (label: string) => {
@@ -116,126 +137,116 @@ export default function AdminLayout({
 
   // 加载中或无权限时显示空白
   if (isLoading || !isAuthenticated || !isAdmin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-gray-500">加载中...</div>
-      </div>
-    );
+    return <PageLoading />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-muted/40">
       {/* 侧边栏 */}
-      <aside className="fixed inset-y-0 left-0 w-64 bg-gray-900 overflow-y-auto">
+      <aside className="fixed inset-y-0 left-0 w-64 bg-slate-950 border-r border-slate-800">
         {/* Logo */}
-        <div className="flex items-center justify-center h-16 bg-gray-800">
-          <span className="text-white text-xl font-bold">Concord AI</span>
+        <div className="flex items-center justify-center h-16 border-b border-slate-800">
+          <span className="text-white text-xl font-bold tracking-tight">Concord AI</span>
         </div>
 
         {/* 导航菜单 */}
-        <nav className="mt-4 space-y-1">
-          {navigation.map((entry) => {
-            // 顶级导航项（不在分组内）
-            if ('topLevel' in entry) {
-              const active = isItemActive(entry.href);
-              return (
-                <Link
-                  key={entry.name}
-                  href={entry.href}
-                  className={`flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-                    active
-                      ? 'bg-gray-800 text-white border-l-4 border-blue-500'
-                      : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  }`}
-                >
-                  <span className="mr-3">{entry.icon}</span>
-                  {entry.name}
-                </Link>
-              );
-            }
-
-            // 可折叠分组
-            const group = entry;
-            const expanded = expandedGroups[group.label] ?? true;
-            const groupActive = isGroupActive(group.items);
-
-            return (
-              <div key={group.label}>
-                {/* 分组标题 */}
-                <button
-                  onClick={() => toggleGroup(group.label)}
-                  className={`w-full flex items-center justify-between px-6 py-3 text-sm font-medium transition-colors ${
-                    groupActive
-                      ? 'text-white'
-                      : 'text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  <span className="flex items-center">
-                    <span className="mr-3">{group.icon}</span>
-                    {group.label}
-                  </span>
-                  <svg
-                    className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+        <ScrollArea className="h-[calc(100vh-4rem)]">
+          <nav className="mt-2 px-3 space-y-1">
+            {navigation.map((entry) => {
+              // 顶级导航项
+              if ('topLevel' in entry) {
+                const active = isItemActive(entry.href);
+                const Icon = entry.icon;
+                return (
+                  <Link
+                    key={entry.name}
+                    href={entry.href}
+                    className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-md transition-colors ${
+                      active
+                        ? 'bg-slate-800 text-white'
+                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                    }`}
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
+                    <Icon className="h-4 w-4 flex-shrink-0" />
+                    {entry.name}
+                  </Link>
+                );
+              }
 
-                {/* 分组子项 */}
-                {expanded && (
-                  <div>
-                    {group.items.map((item) => {
-                      const active = isItemActive(item.href);
-                      return (
-                        <Link
-                          key={item.name}
-                          href={item.href}
-                          className={`flex items-center pl-10 pr-6 py-2.5 text-sm transition-colors ${
-                            active
-                              ? 'bg-gray-800 text-white border-l-4 border-blue-500'
-                              : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                          }`}
-                        >
-                          <span className="mr-3">{item.icon}</span>
-                          {item.name}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
+              // 可折叠分组
+              const group = entry;
+              const expanded = expandedGroups[group.label] ?? true;
+              const groupActive = isGroupActive(group.items);
+              const GroupIcon = group.icon;
+
+              return (
+                <div key={group.label} className="pt-2">
+                  <Separator className="mb-2 bg-slate-800" />
+                  {/* 分组标题 */}
+                  <button
+                    onClick={() => toggleGroup(group.label)}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors ${
+                      groupActive
+                        ? 'text-slate-200'
+                        : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <GroupIcon className="h-3.5 w-3.5" />
+                      {group.label}
+                    </span>
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+
+                  {/* 分组子项 */}
+                  {expanded && (
+                    <div className="mt-1 space-y-0.5">
+                      {group.items.map((item) => {
+                        const active = isItemActive(item.href);
+                        const Icon = item.icon;
+                        return (
+                          <Link
+                            key={item.name}
+                            href={item.href}
+                            className={`flex items-center gap-3 pl-6 pr-3 py-2 text-sm transition-colors rounded-md ${
+                              active
+                                ? 'bg-slate-800 text-white'
+                                : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                            }`}
+                          >
+                            <Icon className="h-4 w-4 flex-shrink-0" />
+                            {item.name}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </nav>
+        </ScrollArea>
       </aside>
 
       {/* 主内容区域 */}
       <div className="pl-64">
         {/* 顶部栏 */}
-        <header className="bg-white shadow-sm">
-          <div className="flex items-center justify-between h-16 px-6">
-            {/* 面包屑或标题 */}
-            <div className="text-lg font-medium text-gray-900">
+        <header className="sticky top-0 z-30 bg-background border-b">
+          <div className="flex items-center justify-between h-14 px-6">
+            <div className="text-lg font-semibold">
               管理后台
             </div>
-
-            {/* 用户信息 */}
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-700">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">
                 {user?.name}
-                <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                  管理员
-                </span>
               </span>
-              <button
-                onClick={handleLogout}
-                className="text-sm text-gray-500 hover:text-gray-700"
-              >
-                退出登录
-              </button>
+              <Badge variant="secondary">管理员</Badge>
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground">
+                <LogOut className="h-4 w-4 mr-1" />
+                退出
+              </Button>
             </div>
           </div>
         </header>
