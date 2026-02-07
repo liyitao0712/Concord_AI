@@ -381,8 +381,8 @@ async def approve_suggestion(
     """
     批准工作类型建议
 
-    如果建议有关联的 Temporal Workflow，通过 Signal 处理；
-    否则直接在本地执行（兼容没有工作流的建议）
+    统一在本地直接处理（支持管理员修改字段后审批），
+    如果有关联的 Temporal Workflow，处理完成后发送信号通知工作流结束。
     """
     suggestion = await session.get(WorkTypeSuggestion, suggestion_id)
     if not suggestion:
@@ -391,66 +391,57 @@ async def approve_suggestion(
     if suggestion.status != "pending":
         raise HTTPException(status_code=400, detail=f"建议已处理: {suggestion.status}")
 
-    # 如果有 workflow_id，通过 Temporal Signal 处理
-    if suggestion.workflow_id:
-        try:
-            from app.temporal import approve_suggestion as temporal_approve
-            await temporal_approve(
-                suggestion.workflow_id,
-                admin.id,
-                data.note or "",
-            )
-            logger.info(
-                f"[WorkTypesAPI] 发送批准信号: suggestion={suggestion_id}, "
-                f"workflow={suggestion.workflow_id}, by={admin.email}"
-            )
-            return {"message": "审批已提交，等待工作流处理"}
-        except Exception as e:
-            logger.error(f"[WorkTypesAPI] 发送 Temporal 信号失败: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"发送审批信号失败: {str(e)}",
-            )
+    # 审批时可覆盖 AI 建议的字段
+    final_code = data.code or suggestion.suggested_code
+    final_name = data.name or suggestion.suggested_name
+    final_description = data.description or suggestion.suggested_description
+    final_keywords = data.keywords if data.keywords is not None else (suggestion.suggested_keywords or [])
+    final_examples = data.examples if data.examples is not None else (suggestion.suggested_examples or [])
 
-    # 没有 workflow_id，直接在本地处理（兼容模式）
     # 检查 code 是否已存在
     existing = await session.scalar(
-        select(WorkType).where(WorkType.code == suggestion.suggested_code)
+        select(WorkType).where(WorkType.code == final_code)
     )
     if existing:
         raise HTTPException(
             status_code=400,
-            detail=f"工作类型代码 '{suggestion.suggested_code}' 已存在",
+            detail=f"工作类型代码 '{final_code}' 已存在",
         )
 
-    # 处理父级
-    parent_id = suggestion.suggested_parent_id
-    level = suggestion.suggested_level
-    path = f"/{suggestion.suggested_code}"
+    # 处理父级（优先使用覆盖的 parent_id）
+    parent_id = data.parent_id if data.parent_id is not None else suggestion.suggested_parent_id
+    level = 1
+    path = f"/{final_code}"
 
-    if suggestion.suggested_parent_code:
+    if parent_id:
+        parent = await session.get(WorkType, parent_id)
+        if parent:
+            level = parent.level + 1
+            path = f"{parent.path}/{final_code}"
+    elif suggestion.suggested_parent_code and not data.parent_id:
+        # fallback：用原始的 parent_code 查找
         parent = await session.scalar(
             select(WorkType).where(WorkType.code == suggestion.suggested_parent_code)
         )
         if parent:
             parent_id = parent.id
             level = parent.level + 1
-            path = f"{parent.path}/{suggestion.suggested_code}"
+            path = f"{parent.path}/{final_code}"
 
     # 创建工作类型
     work_type = WorkType(
         id=str(uuid4()),
-        code=suggestion.suggested_code,
-        name=suggestion.suggested_name,
-        description=suggestion.suggested_description,
+        code=final_code,
+        name=final_name,
+        description=final_description,
         parent_id=parent_id,
         level=level,
         path=path,
-        examples=suggestion.suggested_examples or [],
-        keywords=suggestion.suggested_keywords or [],
+        examples=final_examples,
+        keywords=final_keywords,
         is_active=True,
         is_system=False,
-        created_by="ai",
+        created_by=f"ai_approved_by_{admin.id}",
     )
     session.add(work_type)
 
@@ -465,9 +456,21 @@ async def approve_suggestion(
     await session.refresh(work_type)
 
     logger.info(
-        f"[WorkTypesAPI] 本地批准建议: {suggestion.suggested_code} -> {work_type.id} "
-        f"by {admin.email}"
+        f"[WorkTypesAPI] 批准建议: {final_code} -> {work_type.id} by {admin.email}"
     )
+
+    # 如果有关联的 Temporal Workflow，发送信号让工作流正常结束
+    if suggestion.workflow_id:
+        try:
+            from app.temporal import approve_suggestion as temporal_approve
+            await temporal_approve(
+                suggestion.workflow_id,
+                str(admin.id),
+                data.note or "",
+            )
+        except Exception as e:
+            # 工作流通知失败不影响审批结果，只记日志
+            logger.warning(f"[WorkTypesAPI] 通知 Temporal 工作流失败（不影响审批）: {e}")
 
     return WorkTypeResponse.model_validate(work_type)
 
@@ -482,8 +485,8 @@ async def reject_suggestion(
     """
     拒绝工作类型建议
 
-    如果建议有关联的 Temporal Workflow，通过 Signal 处理；
-    否则直接在本地执行（兼容没有工作流的建议）
+    统一在本地直接处理，如果有关联的 Temporal Workflow，
+    处理完成后发送信号通知工作流结束。
     """
     suggestion = await session.get(WorkTypeSuggestion, suggestion_id)
     if not suggestion:
@@ -492,28 +495,7 @@ async def reject_suggestion(
     if suggestion.status != "pending":
         raise HTTPException(status_code=400, detail=f"建议已处理: {suggestion.status}")
 
-    # 如果有 workflow_id，通过 Temporal Signal 处理
-    if suggestion.workflow_id:
-        try:
-            from app.temporal import reject_suggestion as temporal_reject
-            await temporal_reject(
-                suggestion.workflow_id,
-                admin.id,
-                data.note or "",
-            )
-            logger.info(
-                f"[WorkTypesAPI] 发送拒绝信号: suggestion={suggestion_id}, "
-                f"workflow={suggestion.workflow_id}, by={admin.email}"
-            )
-            return {"message": "拒绝已提交，等待工作流处理"}
-        except Exception as e:
-            logger.error(f"[WorkTypesAPI] 发送 Temporal 信号失败: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"发送拒绝信号失败: {str(e)}",
-            )
-
-    # 没有 workflow_id，直接在本地处理（兼容模式）
+    # 直接在本地处理
     suggestion.status = "rejected"
     suggestion.reviewed_by = admin.id
     suggestion.reviewed_at = datetime.utcnow()
@@ -521,6 +503,18 @@ async def reject_suggestion(
 
     await session.commit()
 
-    logger.info(f"[WorkTypesAPI] 本地拒绝建议: {suggestion.suggested_code} by {admin.email}")
+    logger.info(f"[WorkTypesAPI] 拒绝建议: {suggestion.suggested_code} by {admin.email}")
+
+    # 如果有关联的 Temporal Workflow，发送信号让工作流正常结束
+    if suggestion.workflow_id:
+        try:
+            from app.temporal import reject_suggestion as temporal_reject
+            await temporal_reject(
+                suggestion.workflow_id,
+                str(admin.id),
+                data.note or "",
+            )
+        except Exception as e:
+            logger.warning(f"[WorkTypesAPI] 通知 Temporal 工作流失败（不影响拒绝）: {e}")
 
     return {"message": "已拒绝"}

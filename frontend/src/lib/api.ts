@@ -1644,11 +1644,19 @@ export const workTypesApi = {
     return response.data!;
   },
 
-  // 批准建议
-  async approveSuggestion(id: string, note?: string): Promise<WorkType> {
+  // 批准建议（支持覆盖 AI 建议的字段）
+  async approveSuggestion(id: string, data: {
+    note?: string;
+    code?: string;
+    name?: string;
+    description?: string;
+    parent_id?: string;
+    keywords?: string[];
+    examples?: string[];
+  }): Promise<WorkType> {
     const response = await request<WorkType>(`/admin/work-type-suggestions/${id}/approve`, {
       method: 'POST',
-      body: JSON.stringify({ note }),
+      body: JSON.stringify(data),
     });
     if (response.error) throw new Error(response.error);
     return response.data!;

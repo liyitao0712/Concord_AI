@@ -120,9 +120,9 @@ class WorkType(Base):
 
     # 来源追踪
     created_by: Mapped[str] = mapped_column(
-        String(50),
+        String(100),
         default="system",
-        comment="创建者: system | admin | ai",
+        comment="创建者: system | admin | ai_approved_by_{user_id}",
     )
 
     # 时间戳

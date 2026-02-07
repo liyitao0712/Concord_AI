@@ -93,7 +93,7 @@ async def approve_suggestion(workflow_id: str, reviewer_id: str, note: str = "")
     handle = client.get_workflow_handle(workflow_id)
 
     logger.info(f"发送批准信号: workflow_id={workflow_id}, reviewer={reviewer_id}")
-    await handle.signal(WorkTypeSuggestionWorkflow.approve, reviewer_id, note)
+    await handle.signal(WorkTypeSuggestionWorkflow.approve, args=[reviewer_id, note])
 
 
 async def reject_suggestion(workflow_id: str, reviewer_id: str, note: str = ""):
@@ -111,7 +111,7 @@ async def reject_suggestion(workflow_id: str, reviewer_id: str, note: str = ""):
     handle = client.get_workflow_handle(workflow_id)
 
     logger.info(f"发送拒绝信号: workflow_id={workflow_id}, reviewer={reviewer_id}")
-    await handle.signal(WorkTypeSuggestionWorkflow.reject, reviewer_id, note)
+    await handle.signal(WorkTypeSuggestionWorkflow.reject, args=[reviewer_id, note])
 
 
 async def get_workflow_status(workflow_id: str) -> Optional[dict]:

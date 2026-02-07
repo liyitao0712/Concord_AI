@@ -85,6 +85,38 @@ class WorkTypeAnalyzerAgent(BaseAgent):
 
         return "\n".join(lines)
 
+    async def _get_pending_suggestions_list(self, session: Optional[AsyncSession] = None) -> str:
+        """
+        获取待审批和已拒绝的工作类型建议（格式化为 Prompt 可用的文本）
+
+        让 LLM 知道哪些类型已经在审批中或已被拒绝，避免重复建议。
+        """
+        if session is None:
+            async with async_session_maker() as session:
+                return await self._get_pending_suggestions_list(session)
+
+        result = await session.execute(
+            select(WorkTypeSuggestion)
+            .where(WorkTypeSuggestion.status.in_(["pending", "rejected"]))
+            .order_by(WorkTypeSuggestion.status, WorkTypeSuggestion.created_at.desc())
+        )
+        suggestions = list(result.scalars().all())
+
+        if not suggestions:
+            return "（暂无待审批或已拒绝的建议）"
+
+        lines = []
+        for s in suggestions:
+            keywords_str = ", ".join(s.suggested_keywords) if s.suggested_keywords else ""
+            status_label = "待审批" if s.status == "pending" else "已拒绝"
+            lines.append(
+                f"- [{status_label}] {s.suggested_code} ({s.suggested_name}): {s.suggested_description}"
+                f"{f' [关键词: {keywords_str}]' if keywords_str else ''}"
+                f" [置信度: {s.confidence:.2f}]"
+            )
+
+        return "\n".join(lines)
+
     async def analyze(
         self,
         email_id: str,
@@ -110,8 +142,9 @@ class WorkTypeAnalyzerAgent(BaseAgent):
         """
         logger.info(f"[WorkTypeAnalyzer] 开始分析邮件: {email_id}")
 
-        # 1. 获取工作类型列表
+        # 1. 获取工作类型列表 + 待审批建议列表
         work_types_list = await self._get_work_types_list(session)
+        pending_suggestions_list = await self._get_pending_suggestions_list(session)
 
         # 2. 加载 system prompt（优先从数据库，fallback 到 defaults.py）
         system_prompt = await get_prompt("work_type_analyzer_system")
@@ -125,6 +158,7 @@ class WorkTypeAnalyzerAgent(BaseAgent):
         prompt = await render_prompt(
             "work_type_analyzer",
             work_types_list=work_types_list,
+            pending_suggestions_list=pending_suggestions_list,
             sender=sender,
             subject=subject or "(No subject)",
             received_at=received_at.strftime("%Y-%m-%d %H:%M") if received_at else "Unknown",
@@ -268,16 +302,18 @@ class WorkTypeAnalyzerAgent(BaseAgent):
             logger.info(f"[WorkTypeAnalyzer] 工作类型已存在: {suggested_code}")
             return None
 
-        # 检查是否已有相同的待审批建议
+        # 检查是否已有相同 code 的待审批或已拒绝建议
         existing_suggestion = await session.scalar(
             select(WorkTypeSuggestion).where(
                 WorkTypeSuggestion.suggested_code == suggested_code,
-                WorkTypeSuggestion.status == "pending",
+                WorkTypeSuggestion.status.in_(["pending", "rejected"]),
             )
         )
         if existing_suggestion:
-            logger.info(f"[WorkTypeAnalyzer] 已有待审批建议: {suggested_code}")
-            return existing_suggestion.id
+            logger.info(
+                f"[WorkTypeAnalyzer] 已有建议 ({existing_suggestion.status}): {suggested_code}"
+            )
+            return None
 
         # 确定父级
         parent_id = None

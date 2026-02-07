@@ -259,10 +259,11 @@ class PromptManager:
         """
         初始化默认 Prompt 到数据库
 
-        用于首次部署时填充默认值
+        - 新 Prompt：直接创建
+        - 已有 Prompt：同步 variables 定义（合并新增变量，不删除已有的）
+          并且如果 content 仍是上一版默认值则一并更新
         """
         for name, data in DEFAULT_PROMPTS.items():
-            # 检查是否已存在
             result = await session.execute(
                 select(Prompt).where(Prompt.name == name)
             )
@@ -280,6 +281,32 @@ class PromptManager:
                 )
                 session.add(prompt)
                 logger.info(f"[Prompt] 初始化默认 Prompt: {name}")
+            else:
+                # 同步 variables：合并新增的变量定义到已有记录
+                default_vars = data.get("variables", {})
+                current_vars = existing.variables or {}
+                new_keys = set(default_vars.keys()) - set(current_vars.keys())
+                if new_keys:
+                    merged_vars = {**current_vars, **{k: default_vars[k] for k in new_keys}}
+                    existing.variables = merged_vars
+                    logger.info(
+                        f"[Prompt] 同步新增变量到 {name}: {', '.join(new_keys)}"
+                    )
+
+                # 同步 content：仅当管理员未手动修改时更新
+                # 判断逻辑：如果当前 content 里不包含新增变量的占位符，
+                # 说明是旧版本，自动更新为最新默认内容
+                default_content = data["content"]
+                if new_keys and existing.content != default_content:
+                    has_new_placeholders = any(
+                        "{{" + k + "}}" in existing.content for k in new_keys
+                    )
+                    if not has_new_placeholders:
+                        existing.content = default_content
+                        existing.version = (existing.version or 1) + 1
+                        logger.info(
+                            f"[Prompt] 同步更新 {name} 的 content（新增变量占位符）"
+                        )
 
         await session.commit()
 

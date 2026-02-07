@@ -11,6 +11,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   workTypesApi,
+  emailsApi,
+  EmailDetail,
   WorkType,
   WorkTypeTreeNode,
   WorkTypeCreate,
@@ -246,12 +248,24 @@ export default function WorkTypesPage() {
   const [formData, setFormData] = useState<Partial<WorkTypeCreate>>({});
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  // 关键词/示例用 string 状态，避免实时 split 破坏 IME 输入
+  const [keywordsText, setKeywordsText] = useState('');
+  const [examplesText, setExamplesText] = useState('');
 
   // 审批弹窗
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewingItem, setReviewingItem] = useState<WorkTypeSuggestion | null>(null);
   const [reviewNote, setReviewNote] = useState('');
   const [reviewing, setReviewing] = useState(false);
+  const [reviewFormData, setReviewFormData] = useState<Partial<WorkTypeCreate>>({});
+  const [reviewFormError, setReviewFormError] = useState('');
+  const [reviewKeywordsText, setReviewKeywordsText] = useState('');
+  const [reviewExamplesText, setReviewExamplesText] = useState('');
+
+  // 邮件原文预览
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailDetail, setEmailDetail] = useState<EmailDetail | null>(null);
+  const [emailLoading, setEmailLoading] = useState(false);
 
   // 加载工作类型列表
   const loadWorkTypes = useCallback(async () => {
@@ -304,6 +318,8 @@ export default function WorkTypesPage() {
       keywords: [],
       is_active: true,
     });
+    setKeywordsText('');
+    setExamplesText('');
     setFormError('');
     setShowEditModal(true);
   };
@@ -321,25 +337,38 @@ export default function WorkTypesPage() {
       keywords: fullItem?.keywords || [],
       is_active: item.is_active,
     });
+    setKeywordsText((fullItem?.keywords || []).join(', '));
+    setExamplesText((fullItem?.examples || []).join(', '));
     setFormError('');
     setShowEditModal(true);
   };
+
+  // 将逗号分隔文本转为数组（支持中英文逗号）
+  const splitTags = (text: string) =>
+    text.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
 
   // 保存
   const handleSave = async () => {
     setSaving(true);
     setFormError('');
 
+    // 提交时才从文本解析为数组
+    const submitData = {
+      ...formData,
+      keywords: splitTags(keywordsText),
+      examples: splitTags(examplesText),
+    };
+
     try {
       if (editingItem) {
         // 更新
-        await workTypesApi.update(editingItem.id, formData as WorkTypeUpdate);
+        await workTypesApi.update(editingItem.id, submitData as WorkTypeUpdate);
       } else {
         // 创建
-        if (!formData.code || !formData.name || !formData.description) {
+        if (!submitData.code || !submitData.name || !submitData.description) {
           throw new Error('请填写必填字段');
         }
-        await workTypesApi.create(formData as WorkTypeCreate);
+        await workTypesApi.create(submitData as WorkTypeCreate);
       }
       setShowEditModal(false);
       loadWorkTypes();
@@ -375,25 +404,52 @@ export default function WorkTypesPage() {
     }
   };
 
-  // 打开审批弹窗
+  // 打开审批弹窗（预填 AI 建议数据）
   const handleReview = (item: WorkTypeSuggestion) => {
     setReviewingItem(item);
     setReviewNote('');
+    setReviewFormError('');
+    setReviewFormData({
+      code: item.suggested_code,
+      name: item.suggested_name,
+      description: item.suggested_description,
+      parent_id: item.suggested_parent_id || undefined,
+      keywords: item.suggested_keywords || [],
+      examples: item.suggested_examples || [],
+      is_active: true,
+    });
+    setReviewKeywordsText((item.suggested_keywords || []).join(', '));
+    setReviewExamplesText((item.suggested_examples || []).join(', '));
     setShowReviewModal(true);
   };
 
   // 批准
   const handleApprove = async () => {
     if (!reviewingItem) return;
+    setReviewFormError('');
+
+    if (!reviewFormData.code || !reviewFormData.name || !reviewFormData.description) {
+      setReviewFormError('请填写标识码、名称和描述');
+      return;
+    }
+
     setReviewing(true);
 
     try {
-      await workTypesApi.approveSuggestion(reviewingItem.id, reviewNote);
+      await workTypesApi.approveSuggestion(reviewingItem.id, {
+        note: reviewNote || undefined,
+        code: reviewFormData.code,
+        name: reviewFormData.name,
+        description: reviewFormData.description,
+        parent_id: reviewFormData.parent_id || undefined,
+        keywords: splitTags(reviewKeywordsText),
+        examples: splitTags(reviewExamplesText),
+      });
       setShowReviewModal(false);
       loadWorkTypes();
       loadSuggestions();
     } catch (e) {
-      alert(e instanceof Error ? e.message : '操作失败');
+      setReviewFormError(e instanceof Error ? e.message : '操作失败');
     }
 
     setReviewing(false);
@@ -405,14 +461,32 @@ export default function WorkTypesPage() {
     setReviewing(true);
 
     try {
-      await workTypesApi.rejectSuggestion(reviewingItem.id, reviewNote);
+      await workTypesApi.rejectSuggestion(reviewingItem.id, reviewNote || undefined);
       setShowReviewModal(false);
       loadSuggestions();
     } catch (e) {
-      alert(e instanceof Error ? e.message : '操作失败');
+      setReviewFormError(e instanceof Error ? e.message : '操作失败');
     }
 
     setReviewing(false);
+  };
+
+  // 查看来源邮件原文
+  const handleViewEmail = async (emailId: string) => {
+    setEmailLoading(true);
+    setEmailDetail(null);
+    setShowEmailModal(true);
+
+    try {
+      const detail = await emailsApi.get(emailId);
+      setEmailDetail(detail);
+    } catch (e) {
+      setEmailDetail(null);
+      alert(e instanceof Error ? e.message : '加载邮件失败');
+      setShowEmailModal(false);
+    }
+
+    setEmailLoading(false);
   };
 
   // 获取顶级类型列表（用于父级选择）
@@ -618,15 +692,12 @@ export default function WorkTypesPage() {
             </label>
             <input
               type="text"
-              value={(formData.keywords || []).join(', ')}
-              onChange={(e) => setFormData({
-                ...formData,
-                keywords: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-              })}
+              value={keywordsText}
+              onChange={(e) => setKeywordsText(e.target.value)}
               placeholder="用逗号分隔，如: 订单, order, PO"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
-            <p className="text-xs text-gray-500 mt-1">辅助 AI 匹配的关键词，逗号分隔</p>
+            <p className="text-xs text-gray-500 mt-1">辅助 AI 匹配的关键词，支持中英文逗号分隔</p>
           </div>
 
           {/* 示例 */}
@@ -636,15 +707,12 @@ export default function WorkTypesPage() {
             </label>
             <input
               type="text"
-              value={(formData.examples || []).join(', ')}
-              onChange={(e) => setFormData({
-                ...formData,
-                examples: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-              })}
+              value={examplesText}
+              onChange={(e) => setExamplesText(e.target.value)}
               placeholder="用逗号分隔，如: 我想下单, 订单确认, PO"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
-            <p className="text-xs text-gray-500 mt-1">帮助 AI 识别此类型的示例短语，逗号分隔</p>
+            <p className="text-xs text-gray-500 mt-1">帮助 AI 识别此类型的示例短语，支持中英文逗号分隔</p>
           </div>
 
           {/* 是否启用 */}
@@ -680,7 +748,7 @@ export default function WorkTypesPage() {
         </div>
       </Modal>
 
-      {/* 审批弹窗 */}
+      {/* 审批弹窗（复用新增表单样式，AI 数据预填可编辑） */}
       <Modal
         isOpen={showReviewModal}
         onClose={() => setShowReviewModal(false)}
@@ -689,49 +757,129 @@ export default function WorkTypesPage() {
       >
         {reviewingItem && (
           <div className="space-y-4">
-            {/* 建议详情 */}
-            <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-              <div className="flex items-center space-x-2">
-                <span className="font-mono text-sm text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
-                  {reviewingItem.suggested_code}
-                </span>
-                <span className="font-medium text-gray-900">
-                  {reviewingItem.suggested_name}
-                </span>
-              </div>
-              <p className="text-sm text-gray-600">{reviewingItem.suggested_description}</p>
-
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">父级:</span>{' '}
-                  <span className="text-gray-900">
-                    {reviewingItem.suggested_parent_code || '无（顶级类型）'}
+            {/* AI 分析信息 */}
+            <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-blue-800">AI 建议</span>
+                <div className="flex items-center space-x-3">
+                  <span className="text-xs text-blue-600">
+                    置信度: {(reviewingItem.confidence * 100).toFixed(0)}%
                   </span>
-                </div>
-                <div>
-                  <span className="text-gray-500">置信度:</span>{' '}
-                  <span className="text-gray-900">
-                    {(reviewingItem.confidence * 100).toFixed(0)}%
-                  </span>
+                  {reviewingItem.trigger_email_id && (
+                    <button
+                      onClick={() => handleViewEmail(reviewingItem.trigger_email_id!)}
+                      className="text-xs text-blue-700 hover:text-blue-900 underline"
+                    >
+                      查看来源邮件
+                    </button>
+                  )}
                 </div>
               </div>
-
               {reviewingItem.reasoning && (
-                <div>
-                  <span className="text-gray-500 text-sm">AI 推理:</span>
-                  <p className="text-gray-900 text-sm mt-1">{reviewingItem.reasoning}</p>
-                </div>
+                <p className="text-sm text-blue-700 mt-1">{reviewingItem.reasoning}</p>
               )}
-
               {reviewingItem.trigger_content && (
-                <div>
-                  <span className="text-gray-500 text-sm">触发内容:</span>
-                  <p className="text-gray-700 text-sm mt-1 bg-white p-2 rounded border">
+                <details className="mt-2">
+                  <summary className="text-xs text-blue-600 cursor-pointer">查看触发内容</summary>
+                  <p className="text-xs text-blue-700 mt-1 bg-white p-2 rounded border border-blue-100">
                     {reviewingItem.trigger_content.substring(0, 500)}
                     {reviewingItem.trigger_content.length > 500 && '...'}
                   </p>
-                </div>
+                </details>
               )}
+            </div>
+
+            {reviewFormError && (
+              <div className="bg-red-50 text-red-600 p-3 rounded text-sm">
+                {reviewFormError}
+              </div>
+            )}
+
+            {/* 表单字段（与新增工作类型一致） */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                标识码 <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={reviewFormData.code || ''}
+                onChange={(e) => setReviewFormData({ ...reviewFormData, code: e.target.value.toUpperCase() })}
+                placeholder="如 ORDER、ORDER_NEW"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">全大写英文，可包含数字和下划线</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                名称 <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={reviewFormData.name || ''}
+                onChange={(e) => setReviewFormData({ ...reviewFormData, name: e.target.value })}
+                placeholder="如 订单、新订单"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                描述 <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={reviewFormData.description || ''}
+                onChange={(e) => setReviewFormData({ ...reviewFormData, description: e.target.value })}
+                placeholder="给 AI 的描述，帮助识别此工作类型"
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                父级工作类型
+              </label>
+              <select
+                value={reviewFormData.parent_id || ''}
+                onChange={(e) => setReviewFormData({ ...reviewFormData, parent_id: e.target.value || undefined })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">无（顶级类型）</option>
+                {topLevelTypes.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.code} - {item.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                关键词
+              </label>
+              <input
+                type="text"
+                value={reviewKeywordsText}
+                onChange={(e) => setReviewKeywordsText(e.target.value)}
+                placeholder="用逗号分隔，如: 订单, order, PO"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">辅助 AI 匹配的关键词，支持中英文逗号分隔</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                示例文本
+              </label>
+              <input
+                type="text"
+                value={reviewExamplesText}
+                onChange={(e) => setReviewExamplesText(e.target.value)}
+                placeholder="用逗号分隔，如: 我想下单, 订单确认, PO"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">帮助 AI 识别此类型的示例短语，支持中英文逗号分隔</p>
             </div>
 
             {/* 审批备注 */}
@@ -772,6 +920,71 @@ export default function WorkTypesPage() {
               </button>
             </div>
           </div>
+        )}
+      </Modal>
+
+      {/* 邮件原文预览弹窗 */}
+      <Modal
+        isOpen={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        title="来源邮件原文"
+        wide
+      >
+        {emailLoading ? (
+          <div className="p-8 text-center text-gray-500">加载中...</div>
+        ) : emailDetail ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-gray-500">发件人:</span>{' '}
+                <span className="text-gray-900">
+                  {emailDetail.sender_name ? `${emailDetail.sender_name} <${emailDetail.sender}>` : emailDetail.sender}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-500">时间:</span>{' '}
+                <span className="text-gray-900">{formatDateTime(emailDetail.received_at)}</span>
+              </div>
+            </div>
+            <div className="text-sm">
+              <span className="text-gray-500">收件人:</span>{' '}
+              <span className="text-gray-900">{emailDetail.recipients.join(', ')}</span>
+            </div>
+            <div className="text-sm">
+              <span className="text-gray-500">主题:</span>{' '}
+              <span className="font-medium text-gray-900">{emailDetail.subject}</span>
+            </div>
+
+            <div className="border-t pt-4">
+              <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-800 whitespace-pre-wrap max-h-96 overflow-y-auto">
+                {emailDetail.body_text || '（无正文内容）'}
+              </div>
+            </div>
+
+            {emailDetail.attachments && emailDetail.attachments.length > 0 && (
+              <div className="text-sm">
+                <span className="text-gray-500">附件 ({emailDetail.attachments.length}):</span>
+                <div className="mt-1 space-y-1">
+                  {emailDetail.attachments.map((att, idx) => (
+                    <div key={idx} className="text-gray-700 bg-gray-50 px-2 py-1 rounded text-xs">
+                      {att.filename} ({(att.size_bytes / 1024).toFixed(1)} KB)
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowEmailModal(false)}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-8 text-center text-gray-500">无法加载邮件内容</div>
         )}
       </Modal>
     </div>

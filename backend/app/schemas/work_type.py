@@ -226,12 +226,26 @@ class WorkTypeSuggestionListResponse(BaseModel):
 
 
 class ReviewRequest(BaseModel):
-    """审批请求"""
+    """审批请求，支持覆盖 AI 建议的字段"""
     note: Optional[str] = Field(
         None,
         max_length=500,
         description="审批备注",
     )
+    # 以下字段可选，审批时可覆盖 AI 建议的原始值
+    code: Optional[str] = Field(None, max_length=100, description="覆盖标识码")
+    name: Optional[str] = Field(None, max_length=100, description="覆盖名称")
+    description: Optional[str] = Field(None, description="覆盖描述")
+    parent_id: Optional[str] = Field(None, description="覆盖父级 ID")
+    keywords: Optional[List[str]] = Field(None, description="覆盖关键词")
+    examples: Optional[List[str]] = Field(None, description="覆盖示例文本")
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not re.match(r'^[A-Z][A-Z0-9_]*$', v):
+            raise ValueError("code 必须是全大写英文，可包含数字和下划线，不能以数字开头")
+        return v
 
 
 # 解决循环引用

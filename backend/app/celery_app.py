@@ -111,8 +111,6 @@ def setup_periodic_tasks(sender, **kwargs):
     在 Beat 进程启动时直接从数据库加载邮箱账户并注册轮询任务，
     确保 Beat 进程自身持有完整的调度计划。
     """
-    import asyncio
-
     # 添加定期同步任务（每 5 分钟，处理运行时新增/删除的账户）
     sender.add_periodic_task(
         300.0,  # 每 5 分钟
@@ -130,29 +128,40 @@ def setup_periodic_tasks(sender, **kwargs):
 
     # 启动时立即从数据库加载邮箱账户，注册轮询任务
     # 这样 Beat 进程自身就持有这些任务，不依赖 Worker 进程的修改
+    # 注意：on_after_configure 在 Celery 信号中触发，不能使用 async 数据库连接，
+    # 因此这里用同步 psycopg2 连接直接查询
     try:
-        loop = asyncio.new_event_loop()
-        try:
-            from app.storage.email import get_active_imap_accounts
-            accounts = loop.run_until_complete(get_active_imap_accounts())
-            for account in accounts:
-                if account.id is not None:
-                    task_name = f"poll-email-{account.id}"
-                    # 用 signature 引用任务，避免循环导入
-                    task_sig = sender.signature(
-                        "app.tasks.email.poll_email_account",
-                        args=(account.id,),
-                    )
-                    sender.add_periodic_task(
-                        60.0,  # 每 60 秒
-                        task_sig,
-                        name=task_name,
-                        options={"queue": "email", "expires": 90},
-                    )
-                    logger.info(f"[Celery] 注册邮件轮询任务: {task_name}")
-            logger.info(f"[Celery] 启动时注册了 {len(accounts)} 个邮件轮询任务")
-        finally:
-            loop.close()
+        from sqlalchemy import create_engine, text
+
+        # 将 async URL 转为 sync URL（asyncpg -> psycopg2）
+        sync_url = settings.DATABASE_URL.replace(
+            "postgresql+asyncpg://", "postgresql+psycopg2://"
+        )
+        sync_engine = create_engine(sync_url)
+
+        with sync_engine.connect() as conn:
+            rows = conn.execute(text(
+                "SELECT id FROM email_accounts "
+                "WHERE is_active = true AND imap_host IS NOT NULL AND imap_host != ''"
+            )).fetchall()
+
+        sync_engine.dispose()
+
+        for row in rows:
+            account_id = row[0]
+            task_name = f"poll-email-{account_id}"
+            task_sig = sender.signature(
+                "app.tasks.email.poll_email_account",
+                args=(account_id,),
+            )
+            sender.add_periodic_task(
+                60.0,  # 每 60 秒
+                task_sig,
+                name=task_name,
+                options={"queue": "email", "expires": 90},
+            )
+            logger.info(f"[Celery] 注册邮件轮询任务: {task_name}")
+        logger.info(f"[Celery] 启动时注册了 {len(rows)} 个邮件轮询任务")
     except Exception as e:
         logger.warning(f"[Celery] 启动时注册邮件轮询任务失败（将由定期同步补充）: {e}")
 

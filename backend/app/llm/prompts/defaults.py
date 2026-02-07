@@ -208,6 +208,7 @@ Important:
         "model_hint": "claude-3-sonnet-20240229",
         "variables": {
             "work_types_list": "Formatted list of current work types",
+            "pending_suggestions_list": "Formatted list of pending work type suggestions awaiting approval",
             "sender": "Sender email address",
             "subject": "Email subject",
             "received_at": "Time received",
@@ -218,6 +219,12 @@ Important:
 ## Currently Supported Work Types
 
 {{work_types_list}}
+
+## Existing Suggestions (Pending or Rejected)
+
+The following new work types have already been suggested. Items marked [待审批] are awaiting approval, items marked [已拒绝] were rejected by admin. Do NOT suggest duplicates of any of these:
+
+{{pending_suggestions_list}}
 
 ## Email Information
 - Sender: {{sender}}
@@ -256,7 +263,8 @@ Return analysis results in JSON format:
 1. Always suggest a potential new sub-type or more specific classification, even if an existing type matches well
 2. New type codes must be uppercase English with underscores; prefix with parent code if applicable (e.g. ORDER_URGENT)
 3. The new suggestion should represent a more granular or specific category that could be useful for workflow routing
-4. Return only JSON, no other content""",
+4. If the existing suggestions list already contains a semantically similar type (same meaning, similar code or name) — whether pending or rejected — set should_suggest to false to avoid duplicates
+5. Return only JSON, no other content""",
     },
 
     # ==================== Summarizer (Tool) ====================
