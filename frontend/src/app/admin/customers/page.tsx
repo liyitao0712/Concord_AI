@@ -558,7 +558,7 @@ function CustomerDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto max-w-4xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{`客户详情 - ${data.name}`}</DialogTitle>
         </DialogHeader>
@@ -849,7 +849,7 @@ function ContactsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto max-w-4xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{`${customer.name} - 联系人管理`}</DialogTitle>
         </DialogHeader>
@@ -1183,7 +1183,7 @@ function SuggestionReviewModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto max-w-4xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>审核客户建议</DialogTitle>
         </DialogHeader>
@@ -1876,7 +1876,7 @@ export default function CustomersPage() {
 
           {/* 创建客户弹窗 */}
           <Dialog open={showCreate} onOpenChange={(open) => { if (!open) setShowCreate(false); }}>
-            <DialogContent className="max-h-[90vh] overflow-y-auto max-w-4xl">
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
               <DialogHeader>
                 <DialogTitle>新建客户</DialogTitle>
               </DialogHeader>
@@ -1890,7 +1890,7 @@ export default function CustomersPage() {
 
           {/* 编辑客户弹窗 */}
           <Dialog open={!!editingCustomer} onOpenChange={(open) => { if (!open) setEditingCustomer(null); }}>
-            <DialogContent className="max-h-[90vh] overflow-y-auto max-w-4xl">
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
               <DialogHeader>
                 <DialogTitle>{`编辑客户 - ${editingCustomer?.name || ''}`}</DialogTitle>
               </DialogHeader>

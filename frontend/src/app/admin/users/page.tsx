@@ -438,7 +438,7 @@ export default function UsersPage() {
 
       {/* 创建用户模态框 */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>创建用户</DialogTitle>
             <DialogDescription>填写用户信息以创建新账户</DialogDescription>
@@ -518,7 +518,7 @@ export default function UsersPage() {
 
       {/* 编辑用户模态框 */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>编辑用户</DialogTitle>
             <DialogDescription>修改用户信息</DialogDescription>
@@ -585,7 +585,7 @@ export default function UsersPage() {
 
       {/* 删除确认模态框 */}
       <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>删除用户</DialogTitle>
             <DialogDescription>此操作无法撤销</DialogDescription>
@@ -620,7 +620,7 @@ export default function UsersPage() {
 
       {/* 重置密码模态框 */}
       <Dialog open={showResetPasswordModal} onOpenChange={setShowResetPasswordModal}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>重置密码</DialogTitle>
             <DialogDescription>

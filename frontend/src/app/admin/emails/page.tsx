@@ -517,7 +517,7 @@ export default function EmailsPage() {
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>邮件详情</DialogTitle>
           </DialogHeader>
@@ -672,7 +672,7 @@ export default function EmailsPage() {
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>AI 路由分析</DialogTitle>
           </DialogHeader>
@@ -792,7 +792,7 @@ export default function EmailsPage() {
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>AI 邮件分析</DialogTitle>
           </DialogHeader>
@@ -1046,7 +1046,7 @@ export default function EmailsPage() {
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>工作类型分析</DialogTitle>
           </DialogHeader>

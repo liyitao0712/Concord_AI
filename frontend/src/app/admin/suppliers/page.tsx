@@ -429,7 +429,7 @@ export default function SuppliersPage() {
 
       {/* ==================== 供应商表单弹窗 ==================== */}
       <Dialog open={showForm} onOpenChange={(open) => !open && setShowForm(false)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editingSupplier ? '编辑供应商' : '新增供应商'}</DialogTitle>
           </DialogHeader>
@@ -647,7 +647,7 @@ export default function SuppliersPage() {
 
       {/* ==================== 供应商详情弹窗 ==================== */}
       <Dialog open={showDetail} onOpenChange={(open) => !open && setShowDetail(false)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-4xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
           {detailLoading || !detailData ? (
             <div className="flex justify-center py-8">
               <LoadingSpinner text="加载中..." />
@@ -768,7 +768,7 @@ export default function SuppliersPage() {
 
       {/* ==================== 联系人表单弹窗 ==================== */}
       <Dialog open={showContactForm} onOpenChange={(open) => !open && setShowContactForm(false)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingContact ? '编辑联系人' : '添加联系人'}</DialogTitle>
           </DialogHeader>

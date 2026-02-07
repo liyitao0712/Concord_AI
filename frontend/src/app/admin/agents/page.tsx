@@ -297,7 +297,7 @@ export default function AgentsPage() {
 
       {/* 编辑模态框 */}
       <Dialog open={!!editingAgent && !!currentAgent} onOpenChange={(open) => { if (!open) closeEditModal(); }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-4xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
           {/* 标题 */}
           <DialogHeader>
             <DialogTitle>

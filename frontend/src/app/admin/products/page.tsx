@@ -493,7 +493,7 @@ export default function ProductsPage() {
 
       {/* ==================== 产品表单弹窗 ==================== */}
       <Dialog open={showForm} onOpenChange={(open) => !open && setShowForm(false)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-4xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>{editingProduct ? '编辑产品' : '新增产品'}</DialogTitle>
           </DialogHeader>
@@ -713,7 +713,7 @@ export default function ProductsPage() {
 
       {/* ==================== 产品详情弹窗 ==================== */}
       <Dialog open={showDetail} onOpenChange={(open) => !open && setShowDetail(false)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-4xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
           {detailLoading || !detailData ? (
             <div className="flex justify-center py-8">
               <LoadingSpinner text="加载中..." />
@@ -853,7 +853,7 @@ export default function ProductsPage() {
 
       {/* ==================== 供应商关联弹窗 ==================== */}
       <Dialog open={showSupplierForm} onOpenChange={(open) => !open && setShowSupplierForm(false)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {editingSupplierLink ? '编辑供应商关联' : '添加供应商'}

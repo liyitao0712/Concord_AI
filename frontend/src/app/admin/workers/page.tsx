@@ -464,7 +464,7 @@ export default function WorkersPage() {
 
       {/* 创建/编辑模态框 */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
               {modalMode === 'create' ? '添加 Worker' : '编辑 Worker'}

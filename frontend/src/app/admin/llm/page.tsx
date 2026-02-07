@@ -523,7 +523,7 @@ export default function LLMConfigPage() {
 
       {/* 新增模型弹窗 */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>新增 LLM 模型</DialogTitle>
           </DialogHeader>

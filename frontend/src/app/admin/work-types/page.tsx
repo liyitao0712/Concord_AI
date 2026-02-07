@@ -561,7 +561,7 @@ export default function WorkTypesPage() {
 
       {/* 创建/编辑弹窗 */}
       <Dialog open={showEditModal} onOpenChange={(open) => !open && setShowEditModal(false)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editingItem ? '编辑工作类型' : '新增工作类型'}</DialogTitle>
           </DialogHeader>
@@ -697,7 +697,7 @@ export default function WorkTypesPage() {
 
       {/* 审批弹窗（复用新增表单样式，AI 数据预填可编辑） */}
       <Dialog open={showReviewModal} onOpenChange={(open) => !open && setShowReviewModal(false)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-4xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>审批工作类型建议</DialogTitle>
           </DialogHeader>
@@ -868,7 +868,7 @@ export default function WorkTypesPage() {
 
       {/* 邮件原文预览弹窗 */}
       <Dialog open={showEmailModal} onOpenChange={(open) => !open && setShowEmailModal(false)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>来源邮件原文</DialogTitle>
           </DialogHeader>

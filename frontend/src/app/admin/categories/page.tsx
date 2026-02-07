@@ -350,7 +350,7 @@ export default function CategoriesPage() {
 
       {/* ==================== 品类表单弹窗 ==================== */}
       <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {editingId ? '编辑品类' : '新增品类'}

@@ -773,7 +773,7 @@ function EmailAccountsTab() {
 
       {/* 新增/编辑模态框 */}
       <Dialog open={showModal} onOpenChange={(open) => !open && setShowModal(false)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editingAccount ? '编辑邮箱账户' : '新增邮箱账户'}</DialogTitle>
           </DialogHeader>
@@ -1034,7 +1034,7 @@ function EmailAccountsTab() {
 
       {/* 测试结果模态框 */}
       <Dialog open={showTestModal} onOpenChange={(open) => !open && setShowTestModal(false)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>连接测试结果</DialogTitle>
           </DialogHeader>
