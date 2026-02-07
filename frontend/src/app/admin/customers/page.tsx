@@ -22,6 +22,8 @@ import {
   ContactUpdate,
   CustomerSuggestion,
   CustomerReviewData,
+  tradeTermsApi,
+  TradeTerm,
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -122,8 +124,16 @@ function CustomerForm({
     tags: initial?.tags || [],
   });
   const [tagInput, setTagInput] = useState('');
+  const [tradeTerms, setTradeTerms] = useState<TradeTerm[]>([]);
   const [aiQuery, setAiQuery] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+
+  // 加载贸易术语
+  useEffect(() => {
+    tradeTermsApi.list({ page_size: 50, is_current: true }).then(resp => {
+      setTradeTerms(resp.items);
+    }).catch(() => {});
+  }, []);
   const [aiError, setAiError] = useState('');
 
   // AI 检索自动填充（覆盖所有字段）
@@ -201,7 +211,6 @@ function CustomerForm({
               placeholder="输入公司名称、关键词等，AI 将自动检索并填充所有字段"
               value={aiQuery}
               onChange={e => setAiQuery(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAiLookup(); } }}
             />
             <Button
               type="button"
@@ -412,12 +421,11 @@ function CustomerForm({
               onChange={e => setForm({ ...form, shipping_terms: e.target.value })}
             >
               <option value="">未设置</option>
-              <option value="FOB">FOB</option>
-              <option value="CIF">CIF</option>
-              <option value="EXW">EXW</option>
-              <option value="CFR">CFR</option>
-              <option value="DDP">DDP</option>
-              <option value="DAP">DAP</option>
+              {tradeTerms.map(t => (
+                <option key={t.id} value={t.code}>
+                  {t.code} - {t.name_zh}
+                </option>
+              ))}
             </select>
           </div>
         </div>
