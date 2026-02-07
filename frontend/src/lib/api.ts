@@ -2546,3 +2546,51 @@ export const tradeTermsApi = {
     return response.data!;
   },
 };
+
+
+// ==================== 付款方式 ====================
+
+export interface PaymentMethod {
+  id: string;
+  code: string;
+  name_en: string;
+  name_zh: string;
+  category: string;
+  description_zh: string | null;
+  description_en: string | null;
+  is_common: boolean;
+  sort_order: number;
+  created_at: string | null;
+}
+
+export interface PaymentMethodListResponse {
+  items: PaymentMethod[];
+  total: number;
+}
+
+export const paymentMethodsApi = {
+  // 获取付款方式列表
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    category?: string;
+  }): Promise<PaymentMethodListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.category) searchParams.set('category', params.category);
+    const query = searchParams.toString();
+    const response = await request<PaymentMethodListResponse>(`/admin/payment-methods${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 获取付款方式详情
+  async get(id: string): Promise<PaymentMethod> {
+    const response = await request<PaymentMethod>(`/admin/payment-methods/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+};

@@ -47,6 +47,7 @@ from app.api import categories as categories_router
 from app.api import products as products_router
 from app.api import countries as countries_router
 from app.api import trade_terms_ref as trade_terms_ref_router
+from app.api import payment_methods_ref as payment_methods_ref_router
 from app.api import upload as upload_router
 from app.api import storage as storage_router
 
@@ -458,6 +459,11 @@ app.include_router(countries_router.router)
 # - GET /admin/trade-terms - 贸易术语列表
 # - GET /admin/trade-terms/{id} - 贸易术语详情
 app.include_router(trade_terms_ref_router.router)
+
+# 付款方式路由（仅管理员，只读）
+# - GET /admin/payment-methods - 付款方式列表
+# - GET /admin/payment-methods/{id} - 付款方式详情
+app.include_router(payment_methods_ref_router.router)
 
 # 文件上传路由（仅管理员）
 # - POST /admin/upload - 通用文件上传

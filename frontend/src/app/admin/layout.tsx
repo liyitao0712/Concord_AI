@@ -31,6 +31,7 @@ import {
   Database,
   Globe,
   FileText,
+  CreditCard,
   Settings,
   LayoutDashboard,
   Users,
@@ -91,6 +92,7 @@ const navigation: NavEntry[] = [
     items: [
       { name: '国家数据库', href: '/admin/countries', icon: Globe },
       { name: '贸易术语', href: '/admin/trade-terms', icon: FileText },
+      { name: '付款方式', href: '/admin/payment-methods', icon: CreditCard },
     ],
   },
   {

@@ -23,6 +23,7 @@ from app.models.category import Category
 from app.models.product import Product, ProductSupplier
 from app.models.country import Country
 from app.models.trade_term import TradeTerm
+from app.models.payment_method import PaymentMethod
 
 # 导出所有模型（方便 Alembic 自动发现）
 __all__ = [
@@ -57,4 +58,5 @@ __all__ = [
     "ProductSupplier",
     "Country",
     "TradeTerm",
+    "PaymentMethod",
 ]

@@ -24,6 +24,8 @@ import {
   CustomerReviewData,
   tradeTermsApi,
   TradeTerm,
+  paymentMethodsApi,
+  PaymentMethod,
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -125,13 +127,17 @@ function CustomerForm({
   });
   const [tagInput, setTagInput] = useState('');
   const [tradeTerms, setTradeTerms] = useState<TradeTerm[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [aiQuery, setAiQuery] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
 
-  // 加载贸易术语
+  // 加载贸易术语和付款方式
   useEffect(() => {
     tradeTermsApi.list({ page_size: 50, is_current: true }).then(resp => {
       setTradeTerms(resp.items);
+    }).catch(() => {});
+    paymentMethodsApi.list({ page_size: 50 }).then(resp => {
+      setPaymentMethods(resp.items);
     }).catch(() => {});
   }, []);
   const [aiError, setAiError] = useState('');
@@ -406,12 +412,16 @@ function CustomerForm({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <Label className="mb-1">付款条款</Label>
-            <Input
-              type="text"
-              placeholder="如: T/T 30 days, L/C at sight"
+            <select
+              className={selectClass}
               value={form.payment_terms || ''}
               onChange={e => setForm({ ...form, payment_terms: e.target.value })}
-            />
+            >
+              <option value="">请选择付款方式</option>
+              {paymentMethods.map(pm => (
+                <option key={pm.id} value={pm.code}>{pm.code} - {pm.name_zh}</option>
+              ))}
+            </select>
           </div>
           <div>
             <Label className="mb-1">贸易术语 (Incoterms)</Label>
