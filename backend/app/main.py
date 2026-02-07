@@ -37,10 +37,10 @@ from app.api import chat
 from app.api import email_accounts
 from app.api import workers as workers_router
 from app.api import emails as emails_router
-from app.api import intents as intents_router
 from app.api import prompts as prompts_router
 from app.api import llm_models
 from app.api import work_types as work_types_router
+from app.api import customers as customers_router
 
 
 # 初始化日志系统（在应用启动前）
@@ -381,15 +381,6 @@ app.include_router(workers_router.router)
 # - POST /admin/emails/{id}/execute - 执行邮件处理
 app.include_router(emails_router.router)
 
-# 意图管理路由（仅管理员）
-# - GET/POST /admin/intents - 意图 CRUD
-# - POST /admin/intents/test - 测试路由分类
-# - GET /admin/intent-suggestions - 意图建议列表
-# - POST /admin/intent-suggestions/{id}/approve - 批准建议
-# - POST /admin/intent-suggestions/{id}/reject - 拒绝建议
-app.include_router(intents_router.router)
-app.include_router(intents_router.suggestions_router)
-
 # 工作类型管理路由（仅管理员）
 # - GET/POST /admin/work-types - 工作类型 CRUD
 # - GET /admin/work-types/tree - 树形结构
@@ -413,6 +404,14 @@ app.include_router(prompts_router.router)
 # - POST /admin/llm/models/{model_id}/test - 测试模型连接
 # - GET /admin/llm/models/stats/usage - 使用统计
 app.include_router(llm_models.router)
+
+# 客户管理路由（仅管理员）
+# - GET/POST /admin/customers - 客户 CRUD
+# - GET/PUT/DELETE /admin/customers/{id} - 客户详情/更新/删除
+# - GET/POST /admin/contacts - 联系人 CRUD
+# - GET/PUT/DELETE /admin/contacts/{id} - 联系人详情/更新/删除
+app.include_router(customers_router.router)
+app.include_router(customers_router.contacts_router)
 
 
 # ==================== 根路由 ====================

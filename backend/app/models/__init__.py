@@ -14,9 +14,10 @@ from app.models.email_account import EmailAccount, EmailPurpose
 from app.models.worker import WorkerConfig
 from app.models.email_raw import EmailRawMessage, EmailAttachment
 from app.models.email_analysis import EmailAnalysis
-from app.models.intent import Intent, IntentSuggestion
 from app.models.llm_model_config import LLMModelConfig
 from app.models.work_type import WorkType, WorkTypeSuggestion
+from app.models.customer import Customer, Contact
+from app.models.supplier import Supplier, SupplierContact
 
 # 导出所有模型（方便 Alembic 自动发现）
 __all__ = [
@@ -38,9 +39,11 @@ __all__ = [
     "EmailRawMessage",
     "EmailAttachment",
     "EmailAnalysis",
-    "Intent",
-    "IntentSuggestion",
     "LLMModelConfig",
     "WorkType",
     "WorkTypeSuggestion",
+    "Customer",
+    "Contact",
+    "Supplier",
+    "SupplierContact",
 ]

@@ -1036,188 +1036,6 @@ export interface PromptTestResult {
   missing_variables: string[];
 }
 
-// ==================== 意图管理 API ====================
-
-export interface IntentItem {
-  id: string;
-  name: string;
-  label: string;
-  description: string;
-  examples: string[];
-  keywords: string[];
-  default_handler: string;
-  handler_config: Record<string, unknown>;
-  escalation_rules: Record<string, unknown> | null;
-  escalation_workflow: string | null;
-  priority: number;
-  is_active: boolean;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface IntentListResponse {
-  items: IntentItem[];
-  total: number;
-}
-
-export interface IntentCreate {
-  name: string;
-  label: string;
-  description: string;
-  examples?: string[];
-  keywords?: string[];
-  default_handler?: string;
-  handler_config?: Record<string, unknown>;
-  escalation_rules?: Record<string, unknown>;
-  escalation_workflow?: string;
-  priority?: number;
-  is_active?: boolean;
-}
-
-export interface IntentUpdate {
-  label?: string;
-  description?: string;
-  examples?: string[];
-  keywords?: string[];
-  default_handler?: string;
-  handler_config?: Record<string, unknown>;
-  escalation_rules?: Record<string, unknown>;
-  escalation_workflow?: string;
-  priority?: number;
-  is_active?: boolean;
-}
-
-export interface RouteTestRequest {
-  content: string;
-  source?: string;
-  subject?: string;
-}
-
-export interface RouteTestResponse {
-  intent: string;
-  intent_label: string;
-  confidence: number;
-  reasoning: string;
-  action: string;
-  handler_config: Record<string, unknown>;
-  workflow_name: string | null;
-  needs_escalation: boolean;
-  escalation_reason: string | null;
-  new_suggestion: {
-    name: string;
-    label: string;
-    description: string;
-    suggested_handler: string;
-  } | null;
-}
-
-export interface IntentSuggestionItem {
-  id: string;
-  suggested_name: string;
-  suggested_label: string;
-  suggested_description: string;
-  suggested_handler: string;
-  trigger_message: string;
-  trigger_source: string;
-  status: string;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  review_note: string | null;
-  created_at: string;
-}
-
-export interface IntentSuggestionListResponse {
-  items: IntentSuggestionItem[];
-  total: number;
-}
-
-export const intentsApi = {
-  // 获取意图列表
-  async list(params?: { is_active?: boolean }): Promise<IntentListResponse> {
-    const searchParams = new URLSearchParams();
-    if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
-    const query = searchParams.toString();
-    const response = await request<IntentListResponse>(`/admin/intents${query ? `?${query}` : ''}`);
-    if (response.error) throw new Error(response.error);
-    return response.data!;
-  },
-
-  // 获取意图详情
-  async get(id: string): Promise<IntentItem> {
-    const response = await request<IntentItem>(`/admin/intents/${id}`);
-    if (response.error) throw new Error(response.error);
-    return response.data!;
-  },
-
-  // 创建意图
-  async create(data: IntentCreate): Promise<IntentItem> {
-    const response = await request<IntentItem>('/admin/intents', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    if (response.error) throw new Error(response.error);
-    return response.data!;
-  },
-
-  // 更新意图
-  async update(id: string, data: IntentUpdate): Promise<IntentItem> {
-    const response = await request<IntentItem>(`/admin/intents/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-    if (response.error) throw new Error(response.error);
-    return response.data!;
-  },
-
-  // 删除意图
-  async delete(id: string): Promise<void> {
-    const response = await request(`/admin/intents/${id}`, {
-      method: 'DELETE',
-    });
-    if (response.error) throw new Error(response.error);
-  },
-
-  // 测试路由分类
-  async test(data: RouteTestRequest): Promise<RouteTestResponse> {
-    const response = await request<RouteTestResponse>('/admin/intents/test', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    if (response.error) throw new Error(response.error);
-    return response.data!;
-  },
-
-  // 获取意图建议列表
-  async listSuggestions(params?: { status?: string }): Promise<IntentSuggestionListResponse> {
-    const searchParams = new URLSearchParams();
-    if (params?.status) searchParams.set('status', params.status);
-    const query = searchParams.toString();
-    const response = await request<IntentSuggestionListResponse>(`/admin/intent-suggestions${query ? `?${query}` : ''}`);
-    if (response.error) throw new Error(response.error);
-    return response.data!;
-  },
-
-  // 批准意图建议
-  async approveSuggestion(id: string, note?: string): Promise<IntentItem> {
-    const response = await request<IntentItem>(`/admin/intent-suggestions/${id}/approve`, {
-      method: 'POST',
-      body: JSON.stringify({ note }),
-    });
-    if (response.error) throw new Error(response.error);
-    return response.data!;
-  },
-
-  // 拒绝意图建议
-  async rejectSuggestion(id: string, note?: string): Promise<void> {
-    const response = await request(`/admin/intent-suggestions/${id}/reject`, {
-      method: 'POST',
-      body: JSON.stringify({ note }),
-    });
-    if (response.error) throw new Error(response.error);
-  },
-};
-
 export const promptsApi = {
   // 获取 Prompt 列表
   async list(params?: { category?: string; is_active?: boolean }): Promise<PromptListResponse> {
@@ -1667,6 +1485,250 @@ export const workTypesApi = {
     const response = await request(`/admin/work-type-suggestions/${id}/reject`, {
       method: 'POST',
       body: JSON.stringify({ note }),
+    });
+    if (response.error) throw new Error(response.error);
+  },
+};
+
+
+// ==================== 客户管理 ====================
+
+export interface Customer {
+  id: string;
+  name: string;
+  short_name: string | null;
+  country: string | null;
+  region: string | null;
+  industry: string | null;
+  company_size: string | null;
+  annual_revenue: string | null;
+  customer_level: string;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  address: string | null;
+  payment_terms: string | null;
+  shipping_terms: string | null;
+  is_active: boolean;
+  source: string | null;
+  notes: string | null;
+  tags: string[];
+  contact_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Contact {
+  id: string;
+  customer_id: string;
+  name: string;
+  title: string | null;
+  department: string | null;
+  email: string | null;
+  phone: string | null;
+  mobile: string | null;
+  social_media: Record<string, string>;
+  is_primary: boolean;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomerDetail extends Customer {
+  contacts: Contact[];
+}
+
+export interface CustomerCreate {
+  name: string;
+  short_name?: string;
+  country?: string;
+  region?: string;
+  industry?: string;
+  company_size?: string;
+  annual_revenue?: string;
+  customer_level?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  address?: string;
+  payment_terms?: string;
+  shipping_terms?: string;
+  is_active?: boolean;
+  source?: string;
+  notes?: string;
+  tags?: string[];
+}
+
+export interface CustomerUpdate {
+  name?: string;
+  short_name?: string;
+  country?: string;
+  region?: string;
+  industry?: string;
+  company_size?: string;
+  annual_revenue?: string;
+  customer_level?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  address?: string;
+  payment_terms?: string;
+  shipping_terms?: string;
+  is_active?: boolean;
+  source?: string;
+  notes?: string;
+  tags?: string[];
+}
+
+export interface CustomerListResponse {
+  items: Customer[];
+  total: number;
+}
+
+export interface ContactCreate {
+  customer_id: string;
+  name: string;
+  title?: string;
+  department?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  social_media?: Record<string, string>;
+  is_primary?: boolean;
+  is_active?: boolean;
+  notes?: string;
+}
+
+export interface ContactUpdate {
+  name?: string;
+  title?: string;
+  department?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  social_media?: Record<string, string>;
+  is_primary?: boolean;
+  is_active?: boolean;
+  notes?: string;
+}
+
+export interface ContactListResponse {
+  items: Contact[];
+  total: number;
+}
+
+export const customersApi = {
+  // 获取客户列表
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    country?: string;
+    customer_level?: string;
+    is_active?: boolean;
+  }): Promise<CustomerListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.country) searchParams.set('country', params.country);
+    if (params?.customer_level) searchParams.set('customer_level', params.customer_level);
+    if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
+    const query = searchParams.toString();
+    const response = await request<CustomerListResponse>(`/admin/customers${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 获取客户详情（含联系人）
+  async get(id: string): Promise<CustomerDetail> {
+    const response = await request<CustomerDetail>(`/admin/customers/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 创建客户
+  async create(data: CustomerCreate): Promise<Customer> {
+    const response = await request<Customer>('/admin/customers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 更新客户
+  async update(id: string, data: CustomerUpdate): Promise<Customer> {
+    const response = await request<Customer>(`/admin/customers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 删除客户
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/customers/${id}`, {
+      method: 'DELETE',
+    });
+    if (response.error) throw new Error(response.error);
+  },
+};
+
+export const contactsApi = {
+  // 获取联系人列表
+  async list(params?: {
+    customer_id?: string;
+    page?: number;
+    page_size?: number;
+    search?: string;
+    is_active?: boolean;
+  }): Promise<ContactListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.customer_id) searchParams.set('customer_id', params.customer_id);
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
+    const query = searchParams.toString();
+    const response = await request<ContactListResponse>(`/admin/contacts${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 获取联系人详情
+  async get(id: string): Promise<Contact> {
+    const response = await request<Contact>(`/admin/contacts/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 创建联系人
+  async create(data: ContactCreate): Promise<Contact> {
+    const response = await request<Contact>('/admin/contacts', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 更新联系人
+  async update(id: string, data: ContactUpdate): Promise<Contact> {
+    const response = await request<Contact>(`/admin/contacts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // 删除联系人
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/contacts/${id}`, {
+      method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);
   },
