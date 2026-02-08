@@ -56,6 +56,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshUser();
   }, [refreshUser]);
 
+  // 监听 token 过期事件（由 api.ts 在刷新失败时触发）
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      setUser(null);
+    };
+    window.addEventListener('auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('auth-expired', handleAuthExpired);
+  }, []);
+
   // 登录
   const login = async (data: LoginRequest) => {
     const response = await apiLogin(data);

@@ -34,6 +34,43 @@ export function clearTokens(): void {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
+// ==================== Token 自动刷新 ====================
+
+// 防止多个请求同时触发刷新
+let isRefreshing = false;
+let refreshPromise: Promise<boolean> | null = null;
+
+// 用 refresh_token 获取新的 access_token
+async function refreshAccessToken(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      setTokens(data.access_token, data.refresh_token);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// 通知 AuthContext 认证已过期
+function notifyAuthExpired(): void {
+  clearTokens();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('auth-expired'));
+  }
+}
+
 // ==================== API 请求封装 ====================
 
 interface ApiResponse<T> {
@@ -44,7 +81,8 @@ interface ApiResponse<T> {
 
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  _isRetry: boolean = false,
 ): Promise<ApiResponse<T>> {
   const url = `${API_BASE_URL}${endpoint}`;
 
@@ -76,9 +114,23 @@ async function request<T>(
     }
 
     if (!response.ok) {
-      // 如果是 401，清除 token
-      if (response.status === 401) {
-        clearTokens();
+      // 401：尝试刷新 token，刷新成功则重试原请求
+      if (response.status === 401 && !_isRetry) {
+        if (!isRefreshing) {
+          isRefreshing = true;
+          refreshPromise = refreshAccessToken().finally(() => {
+            isRefreshing = false;
+            refreshPromise = null;
+          });
+        }
+
+        const refreshed = await (refreshPromise ?? Promise.resolve(false));
+
+        if (refreshed) {
+          return request<T>(endpoint, options, true);
+        } else {
+          notifyAuthExpired();
+        }
       }
 
       return {
