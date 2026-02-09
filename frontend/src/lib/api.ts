@@ -4155,9 +4155,9 @@ export const departmentsApi = {
     const searchParams = new URLSearchParams();
     if (params?.org_id) searchParams.set('org_id', params.org_id);
     const query = searchParams.toString();
-    const response = await request<Department[]>(`/admin/departments${query ? `?${query}` : ''}`);
+    const response = await request<{ total: number; items: Department[] }>(`/admin/departments${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
-    return response.data!;
+    return response.data!.items;
   },
   async tree(params?: { org_id?: string }): Promise<Department[]> {
     const searchParams = new URLSearchParams();
