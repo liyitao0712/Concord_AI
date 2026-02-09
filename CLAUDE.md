@@ -13,9 +13,9 @@
 
 ## 重要文件
 
-- `devdoc/FINAL_TECHNICAL_SPEC.md` - 技术规格文档
+- `devdoc/README.md` - 文档中心主索引
+- `devdoc/architecture/SYSTEM_OVERVIEW.md` - 系统架构概览
 - `devdoc/DEVELOPMENT_LOG.md` - 开发日志
-- `devdoc/MVP_DEVELOPMENT_PLAN.md` - MVP 开发计划
 
 ---
 

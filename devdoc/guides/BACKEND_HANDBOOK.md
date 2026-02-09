@@ -1,6 +1,7 @@
-# Concord AI - 代码手册
+# Concord AI - 后端开发手册
 
-> 详细讲解核心代码的设计思路和使用方法
+> 后端核心代码的设计思路和使用方法
+> 拆分自: MANUAL.md §1-6, §9-13, §18-19
 
 ---
 
@@ -12,19 +13,20 @@
 4. [数据库层](#4-数据库层)
 5. [Redis 缓存层](#5-redis-缓存层)
 6. [认证系统](#6-认证系统)
-7. [LLM 服务](#7-llm-服务) - **详见 [LLM 完整手册](LLM_MANUAL.md)**
-8. [Prompt 模板](#8-prompt-模板)
-9. [API 层](#9-api-层)
-10. [依赖注入](#10-依赖注入)
-11. [存储层 (OSS)](#11-存储层-oss)
-12. [幂等性中间件](#12-幂等性中间件)
-13. [管理员后台 API](#13-管理员后台-api)
-14. [前端结构](#14-前端结构)
-15. [Temporal 工作流](#15-temporal-工作流)
-16. [运维脚本](#16-运维脚本)
-17. [系统设置](#17-系统设置)
-18. [Chat 系统](#18-chat-系统)
-19. [飞书集成](#19-飞书集成)
+7. [API 层](#7-api-层)
+8. [依赖注入](#8-依赖注入)
+9. [存储层 (OSS)](#9-存储层-oss)
+10. [幂等性中间件](#10-幂等性中间件)
+11. [管理员后台 API](#11-管理员后台-api)
+12. [Chat 系统](#12-chat-系统)
+13. [飞书集成](#13-飞书集成)
+
+**相关文档**：
+- LLM 服务 / Prompt 模板 → [LLM 管理手册](LLM_GUIDE.md)
+- Agent 架构 → [Agent 文档](../agents/README.md)
+- Celery 任务队列 → [Celery 指南](CELERY_GUIDE.md)
+- Temporal 工作流 → [Temporal 指南](TEMPORAL_GUIDE.md)
+- 运维脚本 / 系统设置 → [运维手册](OPS_SCRIPTS.md)
 
 ---
 
@@ -407,14 +409,14 @@ async def get_users(db: AsyncSession = Depends(get_db)):
 
 | 功能 | 状态 | 说明 |
 |------|------|------|
-| 连接管理 | ✅ 已实现 | connect/disconnect |
-| 基础操作 | ✅ 已实现 | get/set/delete/exists |
-| 过期控制 | ✅ 已实现 | expire/ttl |
-| 健康检查 | ✅ 已实现 | ping |
-| 缓存装饰器 | ❌ 待开发 | 自动缓存函数结果 |
-| Session 存储 | ❌ 待开发 | 用户会话管理 |
-| 分布式锁 | ❌ 待开发 | 防止并发冲突 |
-| 消息队列 | ❌ 待开发 | 简单的 pub/sub |
+| 连接管理 | 已实现 | connect/disconnect |
+| 基础操作 | 已实现 | get/set/delete/exists |
+| 过期控制 | 已实现 | expire/ttl |
+| 健康检查 | 已实现 | ping |
+| 缓存装饰器 | 待开发 | 自动缓存函数结果 |
+| Session 存储 | 待开发 | 用户会话管理 |
+| 分布式锁 | 待开发 | 防止并发冲突 |
+| 消息队列 | 待开发 | 简单的 pub/sub |
 
 ### 代码讲解
 
@@ -676,323 +678,7 @@ async def protected_route(current_user: User = Depends(get_current_user)):
 
 ---
 
-## 7. LLM 服务
-
-**文件**: `app/services/llm_service.py`
-
-### 设计思路
-
-- 使用 LiteLLM 统一封装不同的 LLM 提供商（Claude、GPT、Gemini 等）
-- 支持普通调用和流式输出
-- 自动记录 Token 消耗和延迟
-
-### 核心组件
-
-#### LLMService 类
-
-```python
-import litellm
-
-class LLMService:
-    def __init__(self):
-        self.default_model = settings.DEFAULT_LLM_MODEL
-
-    async def chat(
-        self,
-        message: str,
-        model: Optional[str] = None,
-        system_prompt: Optional[str] = None,
-        temperature: Optional[float] = None,
-    ) -> str:
-        """普通对话，返回完整响应"""
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": message})
-
-        response = await litellm.acompletion(
-            model=model or self.default_model,
-            messages=messages,
-            temperature=temperature or 0.7,
-        )
-        return response.choices[0].message.content
-
-    async def chat_stream(
-        self,
-        message: str,
-        model: Optional[str] = None,
-        system_prompt: Optional[str] = None,
-        temperature: Optional[float] = None,
-    ):
-        """流式对话，逐字返回"""
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": message})
-
-        response = await litellm.acompletion(
-            model=model or self.default_model,
-            messages=messages,
-            temperature=temperature or 0.7,
-            stream=True,  # 启用流式
-        )
-
-        async for chunk in response:
-            content = chunk.choices[0].delta.content
-            if content:
-                yield content
-```
-
-### 使用方法
-
-```python
-from app.services.llm_service import llm_service
-
-# 普通对话
-response = await llm_service.chat(
-    message="你好，请介绍一下自己",
-    system_prompt="你是一个友好的助手"
-)
-
-# 流式对话
-async for chunk in llm_service.chat_stream(message="写一首诗"):
-    print(chunk, end="", flush=True)
-```
-
-### 配置说明
-
-在 `.env` 中配置 API Key：
-```bash
-ANTHROPIC_API_KEY=sk-xxx    # Claude API
-OPENAI_API_KEY=sk-xxx       # OpenAI API（可选）
-DEFAULT_LLM_MODEL=claude-sonnet-4-20250514
-```
-
----
-
-## 8. Prompt 模板
-
-**文件**: `app/prompts/`
-
-### 设计思路
-
-- **PromptTemplate**：简单的变量替换模板
-- **SystemPrompt**：结构化的系统提示词（角色、指令、约束、示例）
-- **预定义模板**：常用的意图分类、实体提取模板
-
-### 核心组件
-
-#### 1. PromptTemplate 类
-
-```python
-class PromptTemplate:
-    """Prompt 模板类，支持变量替换"""
-
-    def __init__(self, name: str, description: str, template: str):
-        self.name = name
-        self.description = description
-        self.template = template
-
-    def render(self, **kwargs) -> str:
-        """渲染模板，替换变量"""
-        return self.template.format(**kwargs)
-
-# 示例
-INTENT_CLASSIFIER_PROMPT = PromptTemplate(
-    name="intent_classifier",
-    description="意图分类",
-    template="""请分析以下内容的意图：
-
-<content>
-{content}
-</content>
-
-请返回 JSON 格式：
-{{"intent": "意图类型", "confidence": 置信度}}"""
-)
-
-# 使用
-prompt = INTENT_CLASSIFIER_PROMPT.render(content="请问产品A价格多少？")
-```
-
-#### 2. SystemPrompt 类
-
-```python
-class SystemPrompt:
-    """结构化系统提示词"""
-
-    def __init__(
-        self,
-        role: str,
-        instructions: list = None,
-        constraints: list = None,
-        examples: list = None,
-    ):
-        self.role = role
-        self.instructions = instructions or []
-        self.constraints = constraints or []
-        self.examples = examples or []
-
-    def render(self) -> str:
-        """生成完整的系统提示词"""
-        parts = [f"你是{self.role}"]
-
-        if self.instructions:
-            parts.append("\n## 工作指令\n" + "\n".join(f"- {i}" for i in self.instructions))
-
-        if self.constraints:
-            parts.append("\n## 约束条件\n" + "\n".join(f"- {c}" for c in self.constraints))
-
-        if self.examples:
-            parts.append("\n## 示例\n" + "\n".join(self.examples))
-
-        return "\n".join(parts)
-
-# 示例
-INTENT_SYSTEM = SystemPrompt(
-    role="一个意图分类专家",
-    instructions=["分析输入内容的意图", "返回 JSON 格式"],
-    constraints=["只输出 JSON", "不要解释"],
-)
-```
-
-### 预定义模板
-
-| 模板 | 文件 | 用途 |
-|------|------|------|
-| `INTENT_CLASSIFIER_PROMPT` | intent.py | 通用意图分类 |
-| `EMAIL_INTENT_PROMPT` | intent.py | 邮件意图分类 |
-| `ENTITY_EXTRACTION_PROMPT` | extraction.py | 通用实体提取 |
-| `INQUIRY_EXTRACTION_PROMPT` | extraction.py | 询价邮件提取 |
-| `ORDER_EXTRACTION_PROMPT` | extraction.py | 订单信息提取 |
-| `CONTACT_EXTRACTION_PROMPT` | extraction.py | 联系人提取 |
-
-### 使用方法
-
-```python
-from app.prompts import INTENT_CLASSIFIER_PROMPT, INTENT_SYSTEM
-from app.services.llm_service import llm_service
-
-# 渲染 Prompt
-prompt = INTENT_CLASSIFIER_PROMPT.render(content="请问产品A价格多少？")
-
-# 调用 LLM
-response = await llm_service.chat(
-    message=prompt,
-    system_prompt=INTENT_SYSTEM.render(),
-    temperature=0.2,  # 分类任务用低温度
-)
-```
-
----
-
-## 8.5 Agent 架构
-
-**文件**: `app/agents/`
-
-### 设计思路
-
-Agent 是 LLM + Prompt + Tools 的组合，使用 LangGraph 状态机架构：
-- 统一的基类 `BaseAgent`
-- 装饰器 `@register_agent` 自动注册
-- 支持工具调用和多轮迭代
-- 支持同步和流式输出
-
-### 核心组件
-
-#### 1. BaseAgent 基类
-
-```python
-from app.agents.base import BaseAgent, AgentState, AgentResult
-
-class MyAgent(BaseAgent):
-    name = "my_agent"           # 唯一标识
-    description = "Agent 描述"
-    prompt_name = "my_prompt"   # 对应的 Prompt 模板名
-    tools = ["tool1", "tool2"]  # 可用工具列表
-    model = None                # 使用默认模型
-    max_iterations = 10         # 最大迭代次数
-
-    async def _get_system_prompt(self) -> str:
-        """返回系统提示词"""
-        return "你是一个助手..."
-
-    async def process_output(self, state: AgentState) -> dict:
-        """处理输出，返回结构化数据"""
-        return {"result": state.get("output", "")}
-```
-
-#### 2. Agent 注册机制
-
-```python
-from app.agents.registry import register_agent, agent_registry
-
-# 使用装饰器自动注册
-@register_agent
-class EmailAnalyzerAgent(BaseAgent):
-    name = "email_analyzer"
-    ...
-
-# 通过注册中心调用
-result = await agent_registry.run(
-    "email_analyzer",
-    input_text="邮件内容...",
-    input_data={"subject": "询价"},
-)
-
-# 列出所有 Agent
-agents = agent_registry.list_agents()
-```
-
-#### 3. AgentResult 返回结构
-
-```python
-@dataclass
-class AgentResult:
-    success: bool           # 是否成功
-    output: str             # 文本输出
-    data: dict              # 结构化数据
-    iterations: int         # 迭代次数
-    tool_calls: list        # 工具调用记录
-    error: Optional[str]    # 错误信息
-```
-
-### 已注册的 Agent
-
-| Agent | 名称 | 说明 |
-|-------|------|------|
-| `chat_agent` | 聊天助手 | 多轮对话，支持上下文 |
-| `email_analyzer` | 邮件分析 | 分析邮件意图和实体 |
-| `intent_classifier` | 意图分类 | 快速分类用户意图 |
-| `quote_agent` | 报价助手 | 生成报价方案 |
-
-### 添加新 Agent
-
-1. 在 `app/agents/` 创建新文件
-2. 继承 `BaseAgent` 并实现必要方法
-3. 使用 `@register_agent` 装饰器
-4. 在 `app/agents/__init__.py` 中导入
-
-```python
-# app/agents/my_agent.py
-from app.agents.base import BaseAgent
-from app.agents.registry import register_agent
-
-@register_agent
-class MyAgent(BaseAgent):
-    name = "my_agent"
-    description = "我的自定义 Agent"
-
-    async def process_output(self, state):
-        return {"custom_field": state.get("output")}
-
-# app/agents/__init__.py
-from app.agents import my_agent  # noqa: F401
-```
-
----
-
-## 9. API 层
+## 7. API 层
 
 **文件**: `app/api/`
 
@@ -1108,7 +794,7 @@ app.include_router(llm.router)
 
 ---
 
-## 10. 依赖注入
+## 8. 依赖注入
 
 FastAPI 的依赖注入系统是核心特性。通过 `Depends()` 可以自动处理资源获取和生命周期管理。
 
@@ -1205,7 +891,7 @@ async def create_user(
 
 ---
 
-## 11. 存储层 (OSS)
+## 9. 存储层 (OSS)
 
 **文件**: `app/storage/oss.py`
 
@@ -1288,7 +974,7 @@ OSS_BUCKET=concord-ai-files
 
 ---
 
-## 12. 幂等性中间件
+## 10. 幂等性中间件
 
 **文件**: `app/core/idempotency.py`
 
@@ -1367,7 +1053,7 @@ async def process_order(order_id: str):
 
 ---
 
-## 13. 管理员后台 API
+## 11. 管理员后台 API
 
 **文件**: `app/api/admin.py`
 
@@ -1433,648 +1119,15 @@ async def list_users(
 
 ---
 
-## 14. 前端结构
-
-**目录**: `frontend/src/`
-
-### 项目结构
-
-```
-frontend/src/
-├── app/                    # Next.js App Router 页面
-│   ├── layout.tsx          # 根布局（全局 Provider）
-│   ├── page.tsx            # 首页（自动重定向）
-│   ├── login/
-│   │   └── page.tsx        # 登录页
-│   └── admin/
-│       ├── layout.tsx      # 管理后台布局（侧边栏+顶栏）
-│       ├── page.tsx        # 仪表盘
-│       └── users/
-│           └── page.tsx    # 用户管理
-├── contexts/
-│   └── AuthContext.tsx     # 认证上下文（登录状态管理）
-└── lib/
-    └── api.ts              # API 工具库（封装 fetch）
-```
-
-### 认证上下文
-
-```tsx
-// contexts/AuthContext.tsx
-
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
-}
-
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // 检查 Token 并获取用户信息
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      getCurrentUser().then(setUser).finally(() => setLoading(false));
-    }
-  }, []);
-
-  const login = async (email: string, password: string) => {
-    const response = await api.login({ email, password });
-    localStorage.setItem('access_token', response.access_token);
-    const user = await getCurrentUser();
-    setUser(user);
-  };
-
-  return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-```
-
-### API 工具库
-
-```typescript
-// lib/api.ts
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('access_token');
-
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`请求失败: ${response.status}`);
-  }
-
-  return response.json();
-}
-
-// 认证 API
-export const login = (data: LoginRequest) =>
-  request<LoginResponse>('/api/auth/login', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-
-export const getCurrentUser = () =>
-  request<User>('/api/auth/me');
-
-// 管理员 API
-export const getStats = () =>
-  request<StatsResponse>('/admin/stats');
-
-export const getUsers = (params?: { page?: number; search?: string }) =>
-  request<UserListResponse>(`/admin/users?${new URLSearchParams(params)}`);
-```
-
-### 页面保护
-
-```tsx
-// app/admin/layout.tsx
-
-export default function AdminLayout({ children }) {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.replace('/login');
-    }
-    if (!loading && user && user.role !== 'admin') {
-      router.replace('/');  // 非管理员不能访问
-    }
-  }, [user, loading]);
-
-  if (loading) return <Loading />;
-  if (!user || user.role !== 'admin') return null;
-
-  return (
-    <div className="flex">
-      <Sidebar />
-      <main className="flex-1">{children}</main>
-    </div>
-  );
-}
-```
-
----
-
-## 15. Temporal 工作流
-
-**目录**: `app/workflows/`
-
-### 设计思路
-
-- 使用 Temporal 实现长时间运行的业务流程
-- Workflow 编排流程，Activity 执行实际任务
-- 支持 Signal（外部信号）和 Query（状态查询）
-- 自动重试、持久化、可视化
-
-### 目录结构
-
-```
-app/workflows/
-├── __init__.py                # 模块导出
-├── worker.py                  # Temporal Worker（监听队列执行任务）
-├── client.py                  # Temporal Client（启动/查询/发信号）
-├── activities/
-│   ├── __init__.py            # Activity 导出
-│   └── base.py                # 基础 Activity（通知、日志）
-└── definitions/
-    ├── __init__.py            # Workflow 导出
-    └── approval.py            # 审批工作流
-```
-
-### 核心概念
-
-| 概念 | 说明 |
-|------|------|
-| **Workflow** | 业务流程定义，必须是确定性代码 |
-| **Activity** | 实际执行的任务，可以包含 I/O 操作 |
-| **Worker** | 监听任务队列，执行 Workflow 和 Activity |
-| **Client** | 与 Temporal Server 交互的客户端 |
-| **Signal** | 外部发送给运行中 Workflow 的信号 |
-| **Query** | 查询运行中 Workflow 的状态（只读） |
-
-### Workflow 定义示例
-
-```python
-# workflows/definitions/approval.py
-
-from temporalio import workflow
-from datetime import timedelta
-
-@workflow.defn
-class ApprovalWorkflow:
-    def __init__(self):
-        self._status = ApprovalStatus.PENDING
-        self._approver_id = None
-
-    @workflow.run
-    async def run(self, request: ApprovalRequest) -> ApprovalResult:
-        """工作流主函数"""
-        # 1. 发送通知
-        await workflow.execute_activity(
-            send_notification,
-            args=[notification_request],
-            start_to_close_timeout=timedelta(seconds=30),
-        )
-
-        # 2. 等待审批或超时
-        await workflow.wait_condition(
-            lambda: self._status != ApprovalStatus.PENDING,
-            timeout=timedelta(hours=24),
-        )
-
-        # 3. 返回结果
-        return ApprovalResult(
-            status=self._status,
-            approver_id=self._approver_id,
-        )
-
-    @workflow.signal
-    async def approve(self, approver_id: str, comment: str):
-        """审批通过信号"""
-        self._status = ApprovalStatus.APPROVED
-        self._approver_id = approver_id
-
-    @workflow.signal
-    async def reject(self, approver_id: str, comment: str):
-        """审批拒绝信号"""
-        self._status = ApprovalStatus.REJECTED
-        self._approver_id = approver_id
-
-    @workflow.query
-    def get_status(self) -> ApprovalStatus:
-        """查询当前状态"""
-        return self._status
-```
-
-### Activity 定义示例
-
-```python
-# workflows/activities/base.py
-
-from temporalio import activity
-
-@activity.defn
-async def send_notification(request: NotificationRequest) -> bool:
-    """发送通知 Activity"""
-    info = activity.info()
-    logger.info(f"[Activity] 发送通知")
-    logger.info(f"  Workflow ID: {info.workflow_id}")
-
-    if request.type == NotificationType.EMAIL:
-        # 实际发送邮件
-        await send_email_impl(request)
-        return True
-
-    raise ValueError(f"不支持的通知类型: {request.type}")
-```
-
-### Worker 启动
-
-```python
-# workflows/worker.py
-
-from temporalio.client import Client
-from temporalio.worker import Worker
-
-async def run_worker():
-    # 连接 Temporal Server
-    client = await Client.connect("localhost:7233")
-
-    # 创建 Worker
-    worker = Worker(
-        client=client,
-        task_queue="concord-main-queue",
-        workflows=[ApprovalWorkflow],
-        activities=[send_notification, log_workflow_event],
-    )
-
-    # 开始监听任务
-    await worker.run()
-
-# 启动：python -m app.workflows.worker
-```
-
-### Client 使用
-
-```python
-# workflows/client.py
-
-from temporalio.client import Client
-
-# 启动工作流
-client = await Client.connect("localhost:7233")
-handle = await client.start_workflow(
-    ApprovalWorkflow.run,
-    args=(approval_request,),
-    id="approval-order-001",
-    task_queue="concord-main-queue",
-)
-
-# 发送信号
-await handle.signal(ApprovalWorkflow.approve, "user-001", "同意")
-
-# 查询状态
-status = await handle.query(ApprovalWorkflow.get_status)
-
-# 等待结果
-result = await handle.result()
-```
-
-### API 接口
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/workflows/approval` | 创建审批工作流 |
-| GET | `/api/workflows/{id}/status` | 查询工作流状态 |
-| POST | `/api/workflows/{id}/approve` | 审批通过 |
-| POST | `/api/workflows/{id}/reject` | 审批拒绝 |
-| POST | `/api/workflows/{id}/cancel` | 取消工作流 |
-
-### 配置
-
-```python
-# core/config.py
-TEMPORAL_HOST: str = "localhost:7233"
-TEMPORAL_NAMESPACE: str = "default"
-TEMPORAL_TASK_QUEUE: str = "concord-main-queue"
-```
-
-### 运维命令
-
-```bash
-# 启动 Temporal Server
-docker-compose up -d temporal temporal-ui
-
-# 查看 Temporal UI
-open http://localhost:8080
-
-# 启动 Worker
-cd backend && python -m app.workflows.worker
-
-# 查看 Temporal 日志
-docker-compose logs -f temporal
-```
-
-### Workflow vs Activity 选择
-
-| 操作 | 放在 Workflow | 放在 Activity |
-|------|---------------|---------------|
-| 流程控制（if/for） | ✅ | ❌ |
-| 等待（sleep/wait） | ✅ | ❌ |
-| 数据库读写 | ❌ | ✅ |
-| HTTP 请求 | ❌ | ✅ |
-| 发送邮件 | ❌ | ✅ |
-| LLM 调用 | ❌ | ✅ |
-
-### 注意事项
-
-1. **Workflow 必须是确定性的**：
-   - 不能用 `random.random()`，用 `workflow.random()`
-   - 不能用 `datetime.now()`，用 `workflow.now()`
-   - 不能直接做 I/O，用 Activity
-
-2. **Activity 设计原则**：
-   - 每个 Activity 应该是幂等的
-   - 设置合理的超时和重试策略
-   - 长时间运行的 Activity 需要发送心跳
-
-3. **Signal 注意事项**：
-   - Signal 是异步的，发送后不等待处理
-   - 多次发送相同 Signal 会多次触发
-   - Workflow 应该检查状态避免重复处理
-
----
-
-## 16. 运维脚本
-
-**目录**: `scripts/`
-
-### 脚本列表
-
-| 脚本 | 说明 |
-|------|------|
-| `setup.sh` | 一键部署（安装所有依赖） |
-| `start.sh` | 启动所有服务 |
-| `stop.sh` | 停止所有服务 |
-| `restart.sh` | 重启所有服务 |
-| `status.sh` | 查看服务状态 |
-| `logs.sh` | 查看日志 |
-| `migrate.sh` | 数据库迁移 |
-| `reset-db.sh` | 重置数据库 |
-| `create_admin.py` | 创建管理员账号 |
-
-### 一键部署
-
-```bash
-./scripts/setup.sh
-```
-
-执行步骤：
-1. 检查系统依赖（Docker、Python、Node.js）
-2. 创建 `.env` 配置文件
-3. 启动 Docker 容器（PostgreSQL、Redis、Temporal）
-4. 等待容器就绪
-5. 创建 Python 虚拟环境
-6. 安装后端依赖
-7. 执行数据库迁移
-8. 安装前端依赖
-
-### 启动服务
-
-```bash
-# 启动所有服务（API 前台运行）
-./scripts/start.sh
-
-# 所有服务后台运行
-./scripts/start.sh --bg
-
-# 只启动特定服务
-./scripts/start.sh --api       # 只启动后端 API
-./scripts/start.sh --worker    # 只启动 Temporal Worker
-./scripts/start.sh --frontend  # 只启动前端
-```
-
-启动的服务：
-- Docker 容器（PostgreSQL、Redis、Temporal、Temporal UI）
-- Temporal Worker（后台运行，日志在 `logs/worker.log`）
-- Next.js 前端（后台运行，日志在 `logs/frontend.log`）
-- FastAPI 后端（前台或后台运行）
-
-### 停止服务
-
-```bash
-# 停止所有服务（包括 Docker）
-./scripts/stop.sh
-
-# 只停止应用，保留 Docker 容器
-./scripts/stop.sh --keep
-```
-
-### 重启服务
-
-```bash
-# 重启所有服务
-./scripts/restart.sh
-
-# 后台重启
-./scripts/restart.sh --bg
-
-# 只重启特定服务
-./scripts/restart.sh --api
-./scripts/restart.sh --worker
-./scripts/restart.sh --frontend
-```
-
-### 查看状态
-
-```bash
-./scripts/status.sh
-```
-
-输出示例：
-```
-Docker 容器:
-------------------------------------------
-NAME                STATUS              PORTS
-concord-postgres    Up 2 hours          0.0.0.0:5432->5432/tcp
-concord-redis       Up 2 hours          0.0.0.0:6379->6379/tcp
-concord-temporal    Up 2 hours          0.0.0.0:7233->7233/tcp
-
-健康检查:
-------------------------------------------
-  PostgreSQL:     [运行中]
-  Redis:          [运行中]
-  Temporal:       [运行中]
-  Temporal UI:    [运行中] http://localhost:8080
-  FastAPI:        [运行中] http://localhost:8000 (PID: 12345)
-  Temporal Worker:[运行中] (PID: 12346)
-  Frontend:       [运行中] http://localhost:3000 (PID: 12347)
-```
-
-### 查看日志
-
-```bash
-# 查看所有 Docker 服务日志
-./scripts/logs.sh
-
-# 查看特定 Docker 服务
-./scripts/logs.sh postgres
-./scripts/logs.sh redis
-./scripts/logs.sh temporal
-./scripts/logs.sh temporal-ui
-
-# 查看应用日志
-./scripts/logs.sh api        # FastAPI 日志
-./scripts/logs.sh worker     # Temporal Worker 日志
-./scripts/logs.sh frontend   # 前端日志
-./scripts/logs.sh all        # 所有应用日志
-```
-
-### 数据库操作
-
-```bash
-# 执行数据库迁移
-./scripts/migrate.sh
-
-# 创建新的迁移文件
-./scripts/migrate.sh "add user table"
-
-# 重置数据库（删除所有数据）
-./scripts/reset-db.sh
-```
-
-### 创建管理员
-
-```bash
-cd backend
-source venv/bin/activate
-python ../scripts/create_admin.py
-```
-
-默认创建：
-- 邮箱: `admin@concordai.com`
-- 密码: `admin123456`
-
-### 服务地址一览
-
-| 服务 | 地址 | 说明 |
-|------|------|------|
-| 后端 API | http://localhost:8000 | FastAPI 服务 |
-| API 文档 | http://localhost:8000/docs | Swagger UI |
-| 前端 | http://localhost:3000 | Next.js 应用 |
-| Temporal UI | http://localhost:8080 | 工作流管理界面 |
-| PostgreSQL | localhost:5432 | 数据库 |
-| Redis | localhost:6379 | 缓存 |
-| Temporal | localhost:7233 | 工作流引擎（gRPC） |
-
-### 日志文件位置
-
-| 文件 | 说明 |
-|------|------|
-| `logs/api.log` | FastAPI 后端日志 |
-| `logs/worker.log` | Temporal Worker 日志 |
-| `logs/frontend.log` | Next.js 前端日志 |
-
----
-
-## 17. 系统设置
-
-管理员可以在后台界面配置系统设置，无需修改环境变量或重启服务。
-
-### 17.1 访问设置页面
-
-1. 登录管理后台: http://localhost:3000/admin
-2. 点击侧边栏 "系统设置"
-
-### 17.2 LLM 配置
-
-#### 选择默认模型
-
-系统支持以下 LLM 模型：
-
-| 模型 ID | 名称 | 提供商 | 说明 |
-|---------|------|--------|------|
-| claude-sonnet-4-20250514 | Claude Sonnet 4 | Anthropic | 推荐，性能均衡 |
-| claude-3-5-sonnet-20241022 | Claude 3.5 Sonnet | Anthropic | 高性能通用模型 |
-| claude-3-opus-20240229 | Claude 3 Opus | Anthropic | 最强大，适合复杂任务 |
-| claude-3-haiku-20240307 | Claude 3 Haiku | Anthropic | 最快速，适合简单任务 |
-| gpt-4o | GPT-4o | OpenAI | 多模态模型 |
-| gpt-4-turbo | GPT-4 Turbo | OpenAI | 更快更便宜 |
-| gpt-3.5-turbo | GPT-3.5 Turbo | OpenAI | 性价比高 |
-
-#### 配置 API Key
-
-1. **Anthropic API Key**: 从 https://console.anthropic.com 获取
-2. **OpenAI API Key**: 从 https://platform.openai.com 获取
-
-输入 API Key 后点击 "保存配置"。系统会安全存储（只显示部分字符）。
-
-#### 测试连接
-
-点击 "测试连接" 按钮验证配置是否正确。成功会显示模型名称，失败会显示错误信息。
-
-### 17.3 邮件配置
-
-#### SMTP 发件服务器
-
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| 服务器地址 | SMTP 主机名 | smtp.qq.com |
-| 端口 | 通常 465 (SSL) 或 587 (STARTTLS) | 465 |
-| 用户名 | 发件邮箱地址 | your@qq.com |
-| 密码 | 授权码（不是登录密码） | 从邮箱设置获取 |
-
-#### IMAP 收件服务器
-
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| 服务器地址 | IMAP 主机名 | imap.qq.com |
-| 端口 | 通常 993 (SSL) | 993 |
-| 用户名 | 收件邮箱地址 | your@qq.com |
-| 密码 | 授权码 | 从邮箱设置获取 |
-
-### 17.4 配置优先级
-
-设置按以下优先级生效：
-
-1. **数据库设置**（最高）- 通过管理后台配置
-2. **环境变量** - `.env` 文件中的配置
-3. **代码默认值**（最低）- 代码中的默认值
-
-这意味着管理员在后台修改设置后立即生效，无需重启服务。
-
-### 17.5 设置 API
-
-开发者可以通过 API 管理设置（注意：所有设置 API 都在 `/admin/settings` 下）：
-
-```bash
-# 获取 LLM 配置
-curl http://localhost:8000/admin/settings/llm \
-  -H "Authorization: Bearer <token>"
-
-# 更新 LLM 配置
-curl -X PUT http://localhost:8000/admin/settings/llm \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"default_model": "claude-3-haiku-20240307"}'
-
-# 测试 LLM 连接
-curl -X POST http://localhost:8000/admin/settings/llm/test \
-  -H "Authorization: Bearer <token>"
-
-# 获取邮件配置
-curl http://localhost:8000/admin/settings/email \
-  -H "Authorization: Bearer <token>"
-```
-
----
-
-## 18. Chat 系统
+## 12. Chat 系统
 
 **文件**: `app/api/chat.py`, `app/agents/chat_agent.py`, `app/models/chat.py`
 
-### 18.1 设计思路
+### 12.1 设计思路
 
 Chat 系统支持多轮对话，使用 Redis 缓存上下文，支持 SSE 流式输出。
 
-### 18.2 数据模型
+### 12.2 数据模型
 
 ```python
 # ChatSession - 会话表
@@ -2104,7 +1157,7 @@ class ChatMessage(Base):
     created_at: datetime
 ```
 
-### 18.3 Chat Agent
+### 12.3 Chat Agent
 
 ChatAgent 继承自 BaseAgent，使用 LangGraph 状态机架构：
 
@@ -2156,7 +1209,7 @@ class ChatAgent(BaseAgent):
     async def clear_context(session_id)           # 清除上下文
 ```
 
-### 18.4 SSE 流式 API
+### 12.4 SSE 流式 API
 
 ```bash
 # SSE 流式对话
@@ -2171,7 +1224,7 @@ curl -N http://localhost:8000/api/chat/stream \
 # data: {"type": "done", "session_id": "xxx", "message_id": "xxx"}
 ```
 
-### 18.5 上下文管理
+### 12.5 上下文管理
 
 Chat Agent 使用 Redis 缓存上下文，TTL 为 24 小时：
 
@@ -2187,18 +1240,18 @@ await chat_agent.clear_context(session_id)
 
 ---
 
-## 19. 飞书集成
+## 13. 飞书集成
 
 **文件**: `app/adapters/feishu.py`, `app/workers/feishu_worker.py`
 
-### 19.1 设计思路
+### 13.1 设计思路
 
 飞书集成采用 **长连接（WebSocket）** 方式，使用官方 `lark-oapi` SDK：
 - 无需公网 IP
 - 实时性好
 - 连接稳定
 
-### 19.2 飞书客户端
+### 13.2 飞书客户端
 
 ```python
 from app.adapters.feishu import FeishuClient
@@ -2223,7 +1276,7 @@ await client.reply_message(
 is_ok = await client.test_connection()
 ```
 
-### 19.3 飞书适配器
+### 13.3 飞书适配器
 
 ```python
 from app.adapters.feishu import FeishuAdapter
@@ -2237,7 +1290,7 @@ event = await adapter.to_unified_event(raw_feishu_data)
 await adapter.send_response(event, response, content="回复内容")
 ```
 
-### 19.4 统一事件模型
+### 13.4 统一事件模型
 
 ```python
 from app.schemas.event import UnifiedEvent
@@ -2252,7 +1305,7 @@ event = UnifiedEvent(
 )
 ```
 
-### 19.5 飞书 Worker 启动
+### 13.5 飞书 Worker 启动
 
 ```bash
 # 方式一：命令行启动
@@ -2271,7 +1324,7 @@ docker-compose --profile feishu up -d feishu-worker
 ./scripts/logs.sh feishu
 ```
 
-### 19.6 飞书配置
+### 13.6 飞书配置
 
 在管理后台配置飞书：
 
@@ -2299,7 +1352,7 @@ curl -X POST http://localhost:8000/admin/settings/feishu/test \
   -H "Authorization: Bearer <token>"
 ```
 
-### 19.7 飞书开放平台配置步骤
+### 13.7 飞书开放平台配置步骤
 
 1. 登录 [飞书开放平台](https://open.feishu.cn/)
 2. 创建企业自建应用
@@ -2307,10 +1360,6 @@ curl -X POST http://localhost:8000/admin/settings/feishu/test \
 4. 添加「机器人」能力
 5. 配置事件订阅（消息接收权限）
 6. 发布应用
-
----
-
-*最后更新: 2026-01-30*
 
 ---
 
@@ -2370,3 +1419,7 @@ curl -X POST http://localhost:8000/admin/settings/feishu/test \
 | GET | `/admin/settings/feishu/status` | 飞书状态 |
 | POST | `/admin/settings/feishu/start` | 启动飞书 Worker |
 | POST | `/admin/settings/feishu/stop` | 停止飞书 Worker |
+
+---
+
+*拆分自 MANUAL.md | 最后更新: 2026-02-01*

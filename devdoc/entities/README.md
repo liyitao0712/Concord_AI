@@ -21,6 +21,15 @@
 | Warehouse | 仓库 | [Warehouse.md](./Warehouse.md) |
 | Inventory | 库存 | [Inventory.md](./Inventory.md) |
 
+### 询价与报价
+
+| 实体 | 说明 | 文档 |
+|------|------|------|
+| ClientRFQ / ClientRFQLine | 客户询价单 + 明细行 | [ClientRfq.md](./ClientRfq.md) |
+| Quotation / QuotationLine | 报价单（给客户） + 明细行 | [Quotation.md](./Quotation.md) |
+| SupplierRFQ / SupplierRFQLine | 供应商询价单 + 明细行 | [SupplierRfq.md](./SupplierRfq.md) |
+| SupplierQuotation / SupplierQuotationLine | 供应商报价单 + 明细行 | [SupplierQuotation.md](./SupplierQuotation.md) |
+
 ### 合同与单据
 
 | 实体 | 说明 | 文档 |
@@ -30,6 +39,15 @@
 | InboundOrder / InboundLine | 入库单 + 明细行 | [InboundOrder.md](./InboundOrder.md) |
 | OutboundOrder / OutboundLine | 出库单 + 明细行 | [OutboundOrder.md](./OutboundOrder.md) |
 | ContractNumberRule | 合同编号规则 | [ContractNumberRule.md](./ContractNumberRule.md) |
+
+### 项目管理
+
+| 实体 | 说明 | 文档 |
+|------|------|------|
+| Project / ProjectAssociation | 项目 + 多态关联 | [Project.md](./Project.md) |
+| ProjectSuggestion | AI 项目建议（待审批） | [ProjectSuggestion.md](./ProjectSuggestion.md) |
+| Task | 任务/里程碑（支持子任务树） | [Task.md](./Task.md) |
+| Progress | 进度记录/时间线 | [Progress.md](./Progress.md) |
 
 ### 邮件处理
 
@@ -55,10 +73,13 @@
 | TradeTerm | 贸易术语 (Incoterms) | [TradeTerm.md](./TradeTerm.md) |
 | PaymentMethod | 付款方式 | [PaymentMethod.md](./PaymentMethod.md) |
 
-### 用户与权限
+### 组织与权限
 
 | 实体 | 说明 | 文档 |
 |------|------|------|
+| Organization | 组织/公司（多租户顶层） | [Organization.md](./Organization.md) |
+| Department / UserDepartment | 部门（树形） + 用户-部门关联 | [Department.md](./Department.md) |
+| Role / Permission / RolePermission / RoleDataScope | 角色 + 功能权限 + 数据范围 | [Role.md](./Role.md) |
 | User | 用户 | [User.md](./User.md) |
 
 ### 系统配置
@@ -89,7 +110,25 @@
 │                  EmailAnalysis      WorkType                 │
 │                       │                ↑                     │
 │                       ↓                │                     │
-│                CustomerSuggestion  WorkTypeSuggestion        │
+│              CustomerSuggestion  WorkTypeSuggestion          │
+│              ProjectSuggestion                               │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│                   询价 → 报价 → 合同 流转链                    │
+│                                                              │
+│  客户侧:                                                     │
+│  ClientRFQ ──→ Quotation ──→ SalesContract ──→ OutboundOrder │
+│    │               │               │                │        │
+│    └── Lines       └── Lines       └── Lines        └── Lines│
+│                                                              │
+│  供应商侧:                                                    │
+│  SupplierRFQ ──→ SupplierQuotation ──→ PurchaseContract      │
+│    │                    │                    │                │
+│    └── Lines            └── Lines            └── Lines       │
+│                                              ↓               │
+│                                          InboundOrder        │
+│                                              └── Lines       │
 └──────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────┐
@@ -101,22 +140,49 @@
 │      │                              │          │             │
 │      │                              └──── ProductSupplier ───┘
 │      │                                                       │
-│      ↓                              ↓                        │
-│  SalesContract ──→ SalesLine    PurchaseContract──→PurchaseLine│
-│      │                              │                        │
-│      ↓                              ↓                        │
-│  OutboundOrder──→OutboundLine   InboundOrder──→InboundLine   │
-│      │                              │                        │
-│      └───────→ Warehouse ←──────────┘                        │
-│                    │                                         │
-│                    ↓                                         │
-│                Inventory ←── Product                         │
+│      └──→ SalesContract           PurchaseContract            │
+│               │                        │                     │
+│               ↓                        ↓                     │
+│          OutboundOrder            InboundOrder                │
+│               │                        │                     │
+│               └───────→ Warehouse ←────┘                     │
+│                             │                                │
+│                             ↓                                │
+│                         Inventory ←── Product                │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│                        项目管理                               │
+│                                                              │
+│  ProjectSuggestion ──(审批)──→ Project                       │
+│                                   │                          │
+│                        ProjectAssociation ──→ 多种业务实体    │
+│                                   │          (Customer,      │
+│                                   │           Supplier,      │
+│                                   │           Contract, ...) │
+│                                   ↓                          │
+│                                 Task ←──→ Task (子任务树)     │
+│                                   │                          │
+│                                   ↓                          │
+│                               Progress ←── EmailRawMessage   │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│                     组织与权限体系                              │
+│                                                              │
+│  Organization ──→ Department (树形自引用)                      │
+│       │               │                                      │
+│       │               ↓                                      │
+│       │          UserDepartment ←── User                     │
+│       │                              │                       │
+│       └──→ Role ──→ RolePermission ──→ Permission            │
+│                 └──→ RoleDataScope                            │
 └──────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────┐
 │  基础数据: Country | TradeTerm | PaymentMethod               │
 │  编号规则: ContractNumberRule                                 │
-│  系统配置: User | LLMModelConfig | Prompt | SystemSetting    │
+│  系统配置: LLMModelConfig | Prompt | SystemSetting           │
 │           WorkerConfig | ChatSession | ChatMessage           │
 └──────────────────────────────────────────────────────────────┘
 ```

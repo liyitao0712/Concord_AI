@@ -2,6 +2,8 @@
 
 本目录包含系统中所有 Temporal Workflow 的详细说明文档。
 
+> 完整的 Temporal 开发与运维手册请参考: [guides/TEMPORAL_GUIDE.md](../guides/TEMPORAL_GUIDE.md)
+
 ## Workflow 列表
 
 | Workflow | 说明 | 文档 |

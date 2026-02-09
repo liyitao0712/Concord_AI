@@ -9,36 +9,44 @@
 | EmailSummarizer | 邮件摘要分析 | [EmailSummarizer.md](./EmailSummarizer.md) |
 | WorkTypeAnalyzer | 工作类型分析 | [WorkTypeAnalyzer.md](./WorkTypeAnalyzer.md) |
 | ChatAgent | 聊天对话 | [ChatAgent.md](./ChatAgent.md) |
+| CustomerExtractor | 客户信息提取 | [CustomerExtractor.md](./CustomerExtractor.md) |
+| AddNewClientHelper | 新客户信息自动填充 | [AddNewClientHelper.md](./AddNewClientHelper.md) |
+| AddNewSupplierHelper | 新供应商信息自动填充 | [AddNewSupplierHelper.md](./AddNewSupplierHelper.md) |
 
 ## 架构概述
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     Agent Layer                          │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│   ┌──────────────┐   ┌──────────────┐   ┌────────────┐  │
-│   │ EmailSummarizer│   │WorkTypeAnalyzer│   │ ChatAgent │  │
-│   └──────┬───────┘   └──────┬───────┘   └─────┬──────┘  │
-│          │                  │                  │         │
-│          └──────────────────┼──────────────────┘         │
-│                             │                            │
-│                    ┌────────┴────────┐                   │
-│                    │   BaseAgent     │                   │
-│                    │  (LangGraph)    │                   │
-│                    └────────┬────────┘                   │
-│                             │                            │
-│                    ┌────────┴────────┐                   │
-│                    │  AgentRegistry  │                   │
-│                    └─────────────────┘                   │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Agent Layer                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌────────────────┐  ┌────────────────┐  ┌──────────────┐                 │
+│   │EmailSummarizer │  │WorkTypeAnalyzer│  │  ChatAgent   │                 │
+│   └───────┬────────┘  └───────┬────────┘  └──────┬───────┘                 │
+│           │                   │                   │                         │
+│   ┌───────────────────┐  ┌───────────────────────────┐                     │
+│   │CustomerExtractor  │  │AddNewClientHelper         │                     │
+│   └───────┬───────────┘  │AddNewSupplierHelper       │                     │
+│           │              └───────────┬───────────────┘                     │
+│           │                          │                                     │
+│           └──────────┬───────────────┘                                     │
+│                      │                                                     │
+│             ┌────────┴────────┐                                            │
+│             │   BaseAgent     │                                            │
+│             │  (LangGraph)    │                                            │
+│             └────────┬────────┘                                            │
+│                      │                                                     │
+│             ┌────────┴────────┐                                            │
+│             │  AgentRegistry  │                                            │
+│             └─────────────────┘                                            │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
                               │
                               ↓
-┌─────────────────────────────────────────────────────────┐
-│                      LLM Layer                           │
-│               (LiteLLM + 多模型支持)                      │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            LLM Layer                                        │
+│           LiteLLM（通用） / Anthropic SDK（web_search Agent）               │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## 核心概念
@@ -50,6 +58,7 @@
 ```python
 class BaseAgent(ABC):
     name: str = "base"
+    display_name: str = ""
     description: str = ""
     prompt_name: str = ""
     tools: list[str] = []
@@ -95,6 +104,29 @@ result = await agent_registry.run("my_agent", "input text")
 agents = agent_registry.list_agents()
 ```
 
+## Agent 分类
+
+### 邮件处理类
+
+| Agent | 触发方式 | 说明 |
+|-------|---------|------|
+| EmailSummarizer | Dispatcher 自动调用 | 邮件摘要、意图识别、业务信息提取 |
+| WorkTypeAnalyzer | Dispatcher 自动调用 | 工作类型匹配 + 新类型建议 |
+| CustomerExtractor | Dispatcher 自动调用 | 客户信息提取 + 待审批建议 |
+
+### 表单辅助类
+
+| Agent | 触发方式 | 说明 |
+|-------|---------|------|
+| AddNewClientHelper | API 手动触发 | 新建客户时自动填充公司信息 |
+| AddNewSupplierHelper | API 手动触发 | 新建供应商时自动填充公司信息 |
+
+### 对话交互类
+
+| Agent | 触发方式 | 说明 |
+|-------|---------|------|
+| ChatAgent | API 手动触发 | 多轮对话、流式输出 |
+
 ## 并行执行
 
 使用 `asyncio.gather()` 并行执行多个 Agent：
@@ -111,12 +143,15 @@ results = await asyncio.gather(
 
 ```
 backend/app/agents/
-├── __init__.py          # 模块入口
-├── base.py              # BaseAgent 基类
-├── registry.py          # AgentRegistry
-├── chat_agent.py        # 聊天 Agent
-├── email_summarizer.py  # 邮件摘要 Agent
-└── work_type_analyzer.py # 工作类型分析 Agent
+├── __init__.py                  # 模块入口（导入所有 Agent 触发注册）
+├── base.py                      # BaseAgent 基类
+├── registry.py                  # AgentRegistry
+├── chat_agent.py                # 聊天 Agent
+├── email_summarizer.py          # 邮件摘要 Agent
+├── work_type_analyzer.py        # 工作类型分析 Agent
+├── customer_extractor.py        # 客户信息提取 Agent
+├── add_new_client_helper.py     # 新客户信息助手 Agent
+└── add_new_supplier_helper.py   # 新供应商信息助手 Agent
 ```
 
 ## API 接口
