@@ -201,7 +201,7 @@ class SupplierQuotation(Base):
     supplier: Mapped["Supplier"] = relationship("Supplier")
     contact: Mapped[Optional["SupplierContact"]] = relationship("SupplierContact")
     linked_supplier_rfq: Mapped[Optional["SupplierRFQ"]] = relationship("SupplierRFQ")
-    created_by_user: Mapped[Optional["User"]] = relationship("User")
+    created_by_user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
     lines: Mapped[List["SupplierQuotationLine"]] = relationship(
         "SupplierQuotationLine",
         back_populates="supplier_quotation",

@@ -239,7 +239,7 @@ class SalesContract(Base):
     # ==================== 关系 ====================
     customer: Mapped["Customer"] = relationship("Customer")
     contact: Mapped[Optional["Contact"]] = relationship("Contact")
-    created_by_user: Mapped[Optional["User"]] = relationship("User")
+    created_by_user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
     linked_purchase_contract: Mapped[Optional["PurchaseContract"]] = relationship(
         "PurchaseContract",
     )

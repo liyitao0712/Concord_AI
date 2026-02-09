@@ -216,7 +216,7 @@ class Quotation(Base):
     customer: Mapped["Customer"] = relationship("Customer")
     contact: Mapped[Optional["Contact"]] = relationship("Contact")
     linked_client_rfq: Mapped[Optional["ClientRFQ"]] = relationship("ClientRFQ")
-    created_by_user: Mapped[Optional["User"]] = relationship("User")
+    created_by_user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
     lines: Mapped[List["QuotationLine"]] = relationship(
         "QuotationLine",
         back_populates="quotation",

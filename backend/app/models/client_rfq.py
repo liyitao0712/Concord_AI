@@ -204,7 +204,7 @@ class ClientRFQ(Base):
     # ==================== 关系 ====================
     customer: Mapped["Customer"] = relationship("Customer")
     contact: Mapped[Optional["Contact"]] = relationship("Contact")
-    created_by_user: Mapped[Optional["User"]] = relationship("User")
+    created_by_user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
     lines: Mapped[List["ClientRFQLine"]] = relationship(
         "ClientRFQLine",
         back_populates="client_rfq",

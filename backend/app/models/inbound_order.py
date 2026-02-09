@@ -130,7 +130,7 @@ class InboundOrder(Base):
     warehouse: Mapped["Warehouse"] = relationship("Warehouse")
     purchase_contract: Mapped[Optional["PurchaseContract"]] = relationship("PurchaseContract")
     supplier: Mapped[Optional["Supplier"]] = relationship("Supplier")
-    created_by_user: Mapped[Optional["User"]] = relationship("User")
+    created_by_user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
     lines: Mapped[List["InboundLine"]] = relationship(
         "InboundLine",
         back_populates="inbound_order",

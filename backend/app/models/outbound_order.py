@@ -130,7 +130,7 @@ class OutboundOrder(Base):
     warehouse: Mapped["Warehouse"] = relationship("Warehouse")
     sales_contract: Mapped[Optional["SalesContract"]] = relationship("SalesContract")
     customer: Mapped[Optional["Customer"]] = relationship("Customer")
-    created_by_user: Mapped[Optional["User"]] = relationship("User")
+    created_by_user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
     lines: Mapped[List["OutboundLine"]] = relationship(
         "OutboundLine",
         back_populates="outbound_order",

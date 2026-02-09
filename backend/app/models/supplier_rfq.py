@@ -199,7 +199,7 @@ class SupplierRFQ(Base):
     # ==================== 关系 ====================
     supplier: Mapped["Supplier"] = relationship("Supplier")
     contact: Mapped[Optional["SupplierContact"]] = relationship("SupplierContact")
-    created_by_user: Mapped[Optional["User"]] = relationship("User")
+    created_by_user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
     lines: Mapped[List["SupplierRFQLine"]] = relationship(
         "SupplierRFQLine",
         back_populates="supplier_rfq",
