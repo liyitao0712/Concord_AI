@@ -31,6 +31,7 @@
 # └─────────────────────────────────────────────────────────────┘
 
 from datetime import datetime, timedelta
+from dataclasses import dataclass, field
 from typing import Optional
 
 from jose import JWTError, jwt
@@ -46,6 +47,24 @@ from app.core.logging import get_logger
 
 # 获取当前模块的 logger
 logger = get_logger(__name__)
+
+
+# ==================== 数据权限范围 ====================
+
+@dataclass
+class DataScope:
+    """
+    数据访问范围
+
+    由 get_data_scope 依赖注入生成，封装当前用户的权限上下文。
+    API 端点使用此对象调用 apply_data_scope 进行行级过滤。
+    """
+    user: object                                    # User ORM 对象
+    org_id: Optional[str] = None                    # 当前组织 ID
+    is_super_admin: bool = False                    # 是否超管
+    permissions: dict = field(default_factory=dict) # {resource: {action, ...}}
+    data_scopes: dict = field(default_factory=dict) # {resource: RoleDataScope}
+    user_dept_ids: list = field(default_factory=list)  # 用户关联的所有部门 ID
 
 
 # ==================== 密码加密配置 ====================
@@ -367,3 +386,205 @@ async def get_current_admin_user(
             detail="需要管理员权限"
         )
     return current_user
+
+
+# ==================== 数据权限依赖注入 ====================
+
+async def get_data_scope(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> DataScope:
+    """
+    获取当前用户的数据访问范围（FastAPI 依赖注入）
+
+    加载用户信息 + 角色权限 + 数据范围配置 + 关联部门列表，
+    封装为 DataScope 对象供 apply_data_scope 使用。
+    """
+    from app.models.user import User
+    from app.models.role import RolePermission, RoleDataScope, Permission
+    from app.models.user_department import UserDepartment
+
+    # 1. 先获取当前用户
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="无法验证凭证",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    payload = decode_token(token)
+    if payload is None or payload.get("type") != "access":
+        raise credentials_exception
+
+    user_id: str = payload.get("sub")
+    if user_id is None:
+        raise credentials_exception
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        raise credentials_exception
+
+    # 2. 超管直接返回全权限
+    if user.is_super_admin:
+        return DataScope(
+            user=user,
+            org_id=user.org_id,
+            is_super_admin=True,
+        )
+
+    # 3. 加载角色的功能权限
+    permissions: dict[str, set[str]] = {}
+    if user.role_id:
+        rp_result = await db.execute(
+            select(Permission.resource, Permission.action)
+            .join(RolePermission, RolePermission.permission_id == Permission.id)
+            .where(RolePermission.role_id == user.role_id)
+        )
+        for resource, action in rp_result:
+            permissions.setdefault(resource, set()).add(action)
+
+    # 4. 加载角色的数据范围配置
+    data_scopes: dict = {}
+    if user.role_id:
+        ds_result = await db.execute(
+            select(RoleDataScope).where(RoleDataScope.role_id == user.role_id)
+        )
+        for ds in ds_result.scalars():
+            data_scopes[ds.resource] = ds
+
+    # 5. 加载用户关联的部门
+    ud_result = await db.execute(
+        select(UserDepartment.department_id)
+        .where(UserDepartment.user_id == user.id)
+    )
+    user_dept_ids = [row[0] for row in ud_result]
+    # 如果没有 UserDepartment 记录但有 department_id，兜底
+    if not user_dept_ids and user.department_id:
+        user_dept_ids = [user.department_id]
+
+    return DataScope(
+        user=user,
+        org_id=user.org_id,
+        is_super_admin=False,
+        permissions=permissions,
+        data_scopes=data_scopes,
+        user_dept_ids=user_dept_ids,
+    )
+
+
+def check_permission(scope: DataScope, resource: str, action: str) -> bool:
+    """检查用户是否有某资源的某操作权限"""
+    if scope.is_super_admin:
+        return True
+    # 过渡期：旧 admin 角色拥有全部权限
+    if hasattr(scope.user, 'role') and scope.user.role == "admin":
+        return True
+    actions = scope.permissions.get(resource, set())
+    return action in actions
+
+
+def require_permission(resource: str, action: str):
+    """
+    FastAPI 依赖：要求特定功能权限
+
+    用法：
+        @router.get("")
+        async def list_customers(
+            scope: DataScope = Depends(require_permission("customer", "read"))
+        ):
+            ...
+    """
+    async def _checker(scope: DataScope = Depends(get_data_scope)):
+        if not check_permission(scope, resource, action):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"无权限：{resource}:{action}"
+            )
+        return scope
+    return _checker
+
+
+async def get_department_subtree(db: AsyncSession, dept_id: str) -> list[str]:
+    """获取部门及所有下级部门的 ID 列表（递归 CTE）"""
+    from sqlalchemy import text
+
+    sql = text("""
+        WITH RECURSIVE dept_tree AS (
+            SELECT id FROM departments WHERE id = :dept_id
+            UNION ALL
+            SELECT d.id FROM departments d
+            INNER JOIN dept_tree dt ON d.parent_id = dt.id
+            WHERE d.is_active = true
+        )
+        SELECT id FROM dept_tree
+    """)
+    result = await db.execute(sql, {"dept_id": dept_id})
+    return [row[0] for row in result]
+
+
+async def apply_data_scope(
+    query,
+    model,
+    resource: str,
+    scope: DataScope,
+    db: AsyncSession
+):
+    """
+    给查询自动加上组织隔离和数据范围过滤
+
+    用法：
+        query = select(Customer)
+        query = await apply_data_scope(query, Customer, "customer", scope, db)
+    """
+    # 超管看所有
+    if scope.is_super_admin:
+        return query
+
+    # 过渡期：旧 admin 角色看全部（暂不做行级过滤）
+    if hasattr(scope.user, 'role') and scope.user.role == "admin" and not scope.user.role_id:
+        # 如果有 org_id 则加公司隔离
+        if scope.org_id and hasattr(model, 'org_id'):
+            query = query.where(model.org_id == scope.org_id)
+        return query
+
+    # 公司隔离（永远生效）
+    if scope.org_id and hasattr(model, 'org_id'):
+        query = query.where(model.org_id == scope.org_id)
+
+    # 获取该资源的数据范围配置
+    ds = scope.data_scopes.get(resource)
+    if not ds:
+        # 没有配置数据范围 = 只能看自己的（最小权限原则）
+        if hasattr(model, 'owner_id'):
+            query = query.where(model.owner_id == scope.user.id)
+        return query
+
+    if ds.scope_type == "self":
+        if hasattr(model, 'owner_id'):
+            query = query.where(model.owner_id == scope.user.id)
+
+    elif ds.scope_type == "department":
+        if hasattr(model, 'owner_dept_id'):
+            query = query.where(model.owner_dept_id.in_(scope.user_dept_ids))
+
+    elif ds.scope_type == "department_tree":
+        if hasattr(model, 'owner_dept_id'):
+            all_dept_ids = set()
+            for dept_id in scope.user_dept_ids:
+                subtree = await get_department_subtree(db, dept_id)
+                all_dept_ids.update(subtree)
+            if all_dept_ids:
+                query = query.where(model.owner_dept_id.in_(list(all_dept_ids)))
+
+    elif ds.scope_type == "organization":
+        pass  # org_id 已经过滤了
+
+    elif ds.scope_type == "custom":
+        custom_ids = ds.custom_dept_ids or []
+        if hasattr(model, 'owner_dept_id') and custom_ids:
+            query = query.where(model.owner_dept_id.in_(custom_ids))
+
+    elif ds.scope_type == "all":
+        # 去掉 org_id 过滤（与超管等效，一般不用）
+        pass
+
+    return query

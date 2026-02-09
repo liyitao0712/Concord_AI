@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.core.security import get_current_user, get_current_admin_user
+from app.core.security import get_current_user, require_permission, DataScope
 from app.core.config import settings as app_settings
 from app.core.database import get_db
 from app.models.user import User
@@ -307,7 +307,7 @@ async def classify_intent(
     description="获取所有 Agent 及其配置信息",
 )
 async def list_all_agents(
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("agent", "read")),
 ) -> list[AgentListItem]:
     """
     获取所有 Agent 列表
@@ -342,7 +342,7 @@ async def list_all_agents(
 async def get_agent_config(
     agent_name: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("agent", "read")),
 ) -> AgentConfigResponse:
     """
     获取 Agent 配置
@@ -381,7 +381,7 @@ async def update_agent_config(
     agent_name: str,
     request: AgentConfigUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("agent", "update")),
 ) -> AgentConfigResponse:
     """
     更新 Agent 配置

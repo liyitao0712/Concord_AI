@@ -6,7 +6,13 @@
 // 2. 提供常用的 API 方法
 // 3. 处理错误响应
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// 自动推断 API 地址：如果没配环境变量，则使用当前页面的 hostname + 后端端口
+// 这样手机通过局域网 IP 访问时也能正确请求后端
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    : 'http://localhost:8000');
 
 // Token 存储键名
 const ACCESS_TOKEN_KEY = 'access_token';
@@ -63,11 +69,15 @@ async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
-// 通知 AuthContext 认证已过期
+// 通知 AuthContext 认证已过期，并强制跳转到登录页
 function notifyAuthExpired(): void {
   clearTokens();
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('auth-expired'));
+    // 强制跳转到登录页（避免停留在无权限页面）
+    if (!window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login';
+    }
   }
 }
 
@@ -164,14 +174,36 @@ export interface LoginResponse {
   token_type: string;
 }
 
+// 权限相关类型
+export interface UserPermission {
+  resource: string;
+  action: string;
+}
+
+export interface UserDataScope {
+  resource: string;
+  scope_type: string;
+}
+
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: string;
+  role: string;              // 旧角色字段（兼容）
   is_active: boolean;
   created_at: string;
   updated_at?: string;
+  // 权限相关字段（由 /api/auth/me 返回）
+  org_id?: string | null;
+  department_id?: string | null;
+  role_id?: string | null;
+  supervisor_id?: string | null;
+  is_super_admin?: boolean;
+  org_name?: string | null;
+  department_name?: string | null;
+  role_name?: string | null;
+  permissions?: UserPermission[];
+  data_scopes?: UserDataScope[];
 }
 
 export async function login(data: LoginRequest): Promise<ApiResponse<LoginResponse>> {
@@ -820,7 +852,39 @@ export interface EmailListResponse {
   items: EmailListItem[];
 }
 
+// 每日播报条目
+export interface BriefingItem {
+  analysis_id: string;
+  email_id: string;
+  subject: string;
+  sender: string;
+  sender_name: string | null;
+  received_at: string;
+  summary: string;
+  broadcast: string | null;
+  sender_type: string | null;
+  sender_company: string | null;
+  intent: string | null;
+  urgency: string | null;
+  sentiment: string | null;
+  priority: string | null;
+}
+
+// 当日播报响应
+export interface TodayBriefingResponse {
+  date: string;
+  total: number;
+  items: BriefingItem[];
+}
+
 export const emailsApi = {
+  // 获取当日邮件播报
+  async todayBriefing(): Promise<TodayBriefingResponse> {
+    const response = await request<TodayBriefingResponse>('/admin/emails/today-briefing');
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
   async list(params?: {
     page?: number;
     page_size?: number;
@@ -983,11 +1047,6 @@ export interface EmailAnalysisResult {
     currency: string;
     context?: string;
   }> | null;
-  trade_terms: {
-    incoterm?: string;
-    payment_terms?: string;
-    destination?: string;
-  } | null;
   deadline: string | null;
 
   // 跟进
@@ -1509,6 +1568,8 @@ export interface Customer {
   source: string | null;
   notes: string | null;
   tags: string[];
+  ai_status: string | null;
+  ai_confidence: number | null;
   contact_count: number;
   created_at: string;
   updated_at: string;
@@ -1583,6 +1644,7 @@ export interface CustomerListResponse {
 }
 
 export interface AILookupResponse {
+  name: string | null;
   short_name: string | null;
   country: string | null;
   region: string | null;
@@ -1688,9 +1750,19 @@ export const customersApi = {
     if (response.error) throw new Error(response.error);
   },
 
-  // AI 搜索公司信息
+  // AI 搜索公司信息（同步，向后兼容）
   async aiLookup(companyName: string): Promise<AILookupResponse> {
     const response = await request<AILookupResponse>('/admin/customers/ai-lookup', {
+      method: 'POST',
+      body: JSON.stringify({ company_name: companyName }),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+
+  // AI 草稿创建（异步：立即创建客户草稿，后台 AI 搜索）
+  async aiCreateDraft(companyName: string): Promise<Customer> {
+    const response = await request<Customer>('/admin/customers/ai-draft', {
       method: 'POST',
       body: JSON.stringify({ company_name: companyName }),
     });
@@ -2012,6 +2084,24 @@ export interface SupplierContactListResponse {
   total: number;
 }
 
+export interface SupplierAILookupResponse {
+  name: string | null;
+  short_name: string | null;
+  country: string | null;
+  region: string | null;
+  industry: string | null;
+  company_size: string | null;
+  main_products: string | null;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  tags: string[];
+  notes: string | null;
+  confidence: number;
+  error: string | null;
+}
+
 export const suppliersApi = {
   // 获取供应商列表
   async list(params?: {
@@ -2068,6 +2158,16 @@ export const suppliersApi = {
       method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);
+  },
+
+  // AI 搜索供应商信息
+  async aiLookup(companyName: string): Promise<SupplierAILookupResponse> {
+    const response = await request<SupplierAILookupResponse>('/admin/suppliers/ai-lookup', {
+      method: 'POST',
+      body: JSON.stringify({ company_name: companyName }),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
   },
 };
 
@@ -2528,11 +2628,13 @@ export const countriesApi = {
     page?: number;
     page_size?: number;
     search?: string;
+    sort_by?: string;
   }): Promise<CountryListResponse> {
     const searchParams = new URLSearchParams();
     if (params?.page) searchParams.set('page', params.page.toString());
     if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
     if (params?.search) searchParams.set('search', params.search);
+    if (params?.sort_by) searchParams.set('sort_by', params.sort_by);
     const query = searchParams.toString();
     const response = await request<CountryListResponse>(`/admin/countries${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
@@ -2642,6 +2744,1537 @@ export const paymentMethodsApi = {
   // 获取付款方式详情
   async get(id: string): Promise<PaymentMethod> {
     const response = await request<PaymentMethod>(`/admin/payment-methods/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+};
+
+
+// ==================== 仓库管理 ====================
+
+export interface Warehouse {
+  id: string;
+  code: string;
+  name: string;
+  address: string | null;
+  contact_person: string | null;
+  contact_phone: string | null;
+  warehouse_type: string;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WarehouseCreate {
+  code: string;
+  name: string;
+  address?: string;
+  contact_person?: string;
+  contact_phone?: string;
+  warehouse_type?: string;
+  is_active?: boolean;
+  notes?: string;
+}
+
+export interface WarehouseUpdate {
+  code?: string;
+  name?: string;
+  address?: string;
+  contact_person?: string;
+  contact_phone?: string;
+  warehouse_type?: string;
+  is_active?: boolean;
+  notes?: string;
+}
+
+export interface WarehouseListResponse {
+  items: Warehouse[];
+  total: number;
+}
+
+export const warehousesApi = {
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    warehouse_type?: string;
+    is_active?: boolean;
+  }): Promise<WarehouseListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.warehouse_type) searchParams.set('warehouse_type', params.warehouse_type);
+    if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
+    const query = searchParams.toString();
+    const response = await request<WarehouseListResponse>(`/admin/warehouses${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async get(id: string): Promise<Warehouse> {
+    const response = await request<Warehouse>(`/admin/warehouses/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: WarehouseCreate): Promise<Warehouse> {
+    const response = await request<Warehouse>('/admin/warehouses', { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async update(id: string, data: WarehouseUpdate): Promise<Warehouse> {
+    const response = await request<Warehouse>(`/admin/warehouses/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/warehouses/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+};
+
+
+// ==================== 采购合同 ====================
+
+export interface PurchaseContract {
+  id: string;
+  contract_no: string;
+  supplier_id: string;
+  contact_id: string | null;
+  trade_term: string | null;
+  payment_method: string | null;
+  payment_terms: string | null;
+  currency: string;
+  exchange_rate: number | null;
+  subtotal: number;
+  discount_amount: number;
+  tax_amount: number;
+  total_amount: number;
+  port_of_loading: string | null;
+  port_of_discharge: string | null;
+  contract_date: string | null;
+  delivery_date: string | null;
+  expected_arrival_date: string | null;
+  expiry_date: string | null;
+  status: string;
+  notes: string | null;
+  attachments: any[];
+  tags: string[];
+  created_by: string | null;
+  supplier_name: string | null;
+  line_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PurchaseContractListResponse {
+  items: PurchaseContract[];
+  total: number;
+}
+
+export interface PurchaseContractCreate {
+  contract_no?: string;
+  supplier_id: string;
+  contact_id?: string;
+  trade_term?: string;
+  payment_method?: string;
+  payment_terms?: string;
+  currency?: string;
+  exchange_rate?: number;
+  subtotal?: number;
+  discount_amount?: number;
+  tax_amount?: number;
+  total_amount?: number;
+  port_of_loading?: string;
+  port_of_discharge?: string;
+  contract_date?: string;
+  delivery_date?: string;
+  expected_arrival_date?: string;
+  expiry_date?: string;
+  status?: string;
+  notes?: string;
+  attachments?: any[];
+  tags?: string[];
+  lines?: any[];
+}
+
+export interface PurchaseContractUpdate {
+  supplier_id?: string;
+  contact_id?: string;
+  trade_term?: string;
+  payment_method?: string;
+  payment_terms?: string;
+  currency?: string;
+  exchange_rate?: number;
+  subtotal?: number;
+  discount_amount?: number;
+  tax_amount?: number;
+  total_amount?: number;
+  port_of_loading?: string;
+  port_of_discharge?: string;
+  contract_date?: string;
+  delivery_date?: string;
+  expected_arrival_date?: string;
+  expiry_date?: string;
+  notes?: string;
+  attachments?: any[];
+  tags?: string[];
+}
+
+export const purchaseContractsApi = {
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    supplier_id?: string;
+  }): Promise<PurchaseContractListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.supplier_id) searchParams.set('supplier_id', params.supplier_id);
+    const query = searchParams.toString();
+    const response = await request<PurchaseContractListResponse>(`/admin/purchase-contracts${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async get(id: string): Promise<any> {
+    const response = await request(`/admin/purchase-contracts/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: PurchaseContractCreate): Promise<any> {
+    const response = await request('/admin/purchase-contracts', { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async update(id: string, data: PurchaseContractUpdate): Promise<any> {
+    const response = await request(`/admin/purchase-contracts/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/purchase-contracts/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+  async updateStatus(id: string, status: string): Promise<any> {
+    const response = await request(`/admin/purchase-contracts/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+};
+
+
+// ==================== 销售合同 ====================
+
+export interface SalesContractItem {
+  id: string;
+  contract_no: string;
+  customer_id: string;
+  contact_id: string | null;
+  trade_term: string | null;
+  payment_method: string | null;
+  payment_terms: string | null;
+  currency: string;
+  exchange_rate: number | null;
+  subtotal: number;
+  discount_amount: number;
+  tax_amount: number;
+  total_amount: number;
+  commission_rate: number | null;
+  commission_amount: number | null;
+  port_of_loading: string | null;
+  port_of_discharge: string | null;
+  destination: string | null;
+  shipping_marks: string | null;
+  contract_date: string | null;
+  delivery_date: string | null;
+  shipping_date: string | null;
+  expiry_date: string | null;
+  status: string;
+  is_zero_stock: boolean;
+  linked_purchase_contract_id: string | null;
+  notes: string | null;
+  attachments: any[];
+  tags: string[];
+  created_by: string | null;
+  customer_name: string | null;
+  line_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SalesContractListResponse {
+  items: SalesContractItem[];
+  total: number;
+}
+
+export interface SalesContractCreate {
+  contract_no?: string;
+  customer_id: string;
+  contact_id?: string;
+  trade_term?: string;
+  payment_method?: string;
+  payment_terms?: string;
+  currency?: string;
+  exchange_rate?: number;
+  subtotal?: number;
+  discount_amount?: number;
+  tax_amount?: number;
+  total_amount?: number;
+  commission_rate?: number;
+  commission_amount?: number;
+  port_of_loading?: string;
+  port_of_discharge?: string;
+  destination?: string;
+  shipping_marks?: string;
+  contract_date?: string;
+  delivery_date?: string;
+  shipping_date?: string;
+  expiry_date?: string;
+  status?: string;
+  is_zero_stock?: boolean;
+  notes?: string;
+  attachments?: any[];
+  tags?: string[];
+  lines?: any[];
+}
+
+export interface SalesContractUpdate {
+  customer_id?: string;
+  contact_id?: string;
+  trade_term?: string;
+  payment_method?: string;
+  payment_terms?: string;
+  currency?: string;
+  exchange_rate?: number;
+  subtotal?: number;
+  discount_amount?: number;
+  tax_amount?: number;
+  total_amount?: number;
+  commission_rate?: number;
+  commission_amount?: number;
+  port_of_loading?: string;
+  port_of_discharge?: string;
+  destination?: string;
+  shipping_marks?: string;
+  contract_date?: string;
+  delivery_date?: string;
+  shipping_date?: string;
+  expiry_date?: string;
+  is_zero_stock?: boolean;
+  notes?: string;
+  attachments?: any[];
+  tags?: string[];
+}
+
+export const salesContractsApi = {
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    customer_id?: string;
+    is_zero_stock?: boolean;
+  }): Promise<SalesContractListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.customer_id) searchParams.set('customer_id', params.customer_id);
+    if (params?.is_zero_stock !== undefined) searchParams.set('is_zero_stock', params.is_zero_stock.toString());
+    const query = searchParams.toString();
+    const response = await request<SalesContractListResponse>(`/admin/sales-contracts${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async get(id: string): Promise<any> {
+    const response = await request(`/admin/sales-contracts/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: SalesContractCreate): Promise<any> {
+    const response = await request('/admin/sales-contracts', { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async update(id: string, data: SalesContractUpdate): Promise<any> {
+    const response = await request(`/admin/sales-contracts/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/sales-contracts/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+  async updateStatus(id: string, status: string): Promise<any> {
+    const response = await request(`/admin/sales-contracts/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async linkPurchase(id: string, purchaseContractId: string): Promise<any> {
+    const response = await request(`/admin/sales-contracts/${id}/link-purchase`, { method: 'POST', body: JSON.stringify({ purchase_contract_id: purchaseContractId }) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+};
+
+
+// ==================== 入仓单 ====================
+
+export interface InboundOrder {
+  id: string;
+  order_no: string;
+  warehouse_id: string;
+  purchase_contract_id: string | null;
+  supplier_id: string | null;
+  status: string;
+  expected_date: string | null;
+  actual_date: string | null;
+  notes: string | null;
+  created_by: string | null;
+  warehouse_name: string | null;
+  supplier_name: string | null;
+  purchase_contract_no: string | null;
+  line_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InboundOrderListResponse {
+  items: InboundOrder[];
+  total: number;
+}
+
+export const inboundOrdersApi = {
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    warehouse_id?: string;
+  }): Promise<InboundOrderListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.warehouse_id) searchParams.set('warehouse_id', params.warehouse_id);
+    const query = searchParams.toString();
+    const response = await request<InboundOrderListResponse>(`/admin/inbound-orders${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async get(id: string): Promise<any> {
+    const response = await request(`/admin/inbound-orders/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: any): Promise<any> {
+    const response = await request('/admin/inbound-orders', { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/inbound-orders/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+  async updateStatus(id: string, status: string): Promise<any> {
+    const response = await request(`/admin/inbound-orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async confirmReceive(id: string, data: any): Promise<any> {
+    const response = await request(`/admin/inbound-orders/${id}/confirm-receive`, { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+};
+
+
+// ==================== 出仓单 ====================
+
+export interface OutboundOrder {
+  id: string;
+  order_no: string;
+  warehouse_id: string;
+  sales_contract_id: string | null;
+  customer_id: string | null;
+  status: string;
+  expected_date: string | null;
+  actual_date: string | null;
+  notes: string | null;
+  created_by: string | null;
+  warehouse_name: string | null;
+  customer_name: string | null;
+  sales_contract_no: string | null;
+  line_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OutboundOrderListResponse {
+  items: OutboundOrder[];
+  total: number;
+}
+
+export const outboundOrdersApi = {
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    warehouse_id?: string;
+  }): Promise<OutboundOrderListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.warehouse_id) searchParams.set('warehouse_id', params.warehouse_id);
+    const query = searchParams.toString();
+    const response = await request<OutboundOrderListResponse>(`/admin/outbound-orders${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async get(id: string): Promise<any> {
+    const response = await request(`/admin/outbound-orders/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: any): Promise<any> {
+    const response = await request('/admin/outbound-orders', { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/outbound-orders/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+  async updateStatus(id: string, status: string): Promise<any> {
+    const response = await request(`/admin/outbound-orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async confirmShip(id: string, data: any): Promise<any> {
+    const response = await request(`/admin/outbound-orders/${id}/confirm-ship`, { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+};
+
+// ==================== TTS 语音合成 API ====================
+
+export type TTSProvider = 'browser' | 'edge-tts' | 'openai' | 'dashscope';
+
+export const TTS_PROVIDER_OPTIONS: { value: TTSProvider; label: string }[] = [
+  { value: 'browser', label: '浏览器语音' },
+  { value: 'edge-tts', label: '微软语音' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'dashscope', label: '阿里云语音' },
+];
+
+export const ttsApi = {
+  // 调用后端 AI TTS 合成，返回音频 Blob
+  async synthesize(text: string, provider: string, voice?: string, speed?: number): Promise<Blob> {
+    const token = getAccessToken();
+    const response = await fetch(`${API_BASE_URL}/admin/tts/synthesize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ text, provider, voice, speed }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      let detail = `TTS 合成失败: ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.detail) detail = errorJson.detail;
+      } catch { /* ignore */ }
+      throw new Error(detail);
+    }
+
+    return response.blob();
+  },
+};
+
+// ==================== 项目管理 API ====================
+
+export interface Project {
+  id: string;
+  name: string;
+  project_type: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  start_date: string | null;
+  due_date: string | null;
+  owner_id: string | null;
+  owner_name: string | null;
+  tags: string[];
+  notes: string | null;
+  created_by: string | null;
+  task_count: number;
+  association_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectAssociation {
+  id: string;
+  project_id: string;
+  entity_type: string;
+  entity_id: string;
+  entity_name: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface ProjectDetail extends Project {
+  associations: ProjectAssociation[];
+}
+
+export interface ProjectListResponse {
+  items: Project[];
+  total: number;
+}
+
+export interface ProjectCreate {
+  name: string;
+  project_type?: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  start_date?: string;
+  due_date?: string;
+  owner_id?: string;
+  tags?: string[];
+  notes?: string;
+  associations?: { entity_type: string; entity_id: string; notes?: string }[];
+}
+
+export interface ProjectUpdate {
+  name?: string;
+  project_type?: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  start_date?: string;
+  due_date?: string;
+  owner_id?: string;
+  tags?: string[];
+  notes?: string;
+}
+
+export const projectsApi = {
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    project_type?: string;
+    priority?: string;
+    owner_id?: string;
+  }): Promise<ProjectListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.project_type) searchParams.set('project_type', params.project_type);
+    if (params?.priority) searchParams.set('priority', params.priority);
+    if (params?.owner_id) searchParams.set('owner_id', params.owner_id);
+    const query = searchParams.toString();
+    const response = await request<ProjectListResponse>(`/admin/projects${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async get(id: string): Promise<ProjectDetail> {
+    const response = await request<ProjectDetail>(`/admin/projects/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: ProjectCreate): Promise<ProjectDetail> {
+    const response = await request<ProjectDetail>('/admin/projects', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async update(id: string, data: ProjectUpdate): Promise<Project> {
+    const response = await request<Project>(`/admin/projects/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/projects/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+  async updateStatus(id: string, status: string): Promise<Project> {
+    const response = await request<Project>(`/admin/projects/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async addAssociation(projectId: string, data: { entity_type: string; entity_id: string; notes?: string }): Promise<ProjectAssociation> {
+    const response = await request<ProjectAssociation>(`/admin/projects/${projectId}/associations`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async removeAssociation(projectId: string, assocId: string): Promise<void> {
+    const response = await request(`/admin/projects/${projectId}/associations/${assocId}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+};
+
+// ==================== 任务管理 API ====================
+
+export interface TaskItem {
+  id: string;
+  project_id: string;
+  parent_task_id: string | null;
+  title: string;
+  description: string | null;
+  task_type: string;
+  phase_name: string | null;
+  status: string;
+  priority: string;
+  assignee_id: string | null;
+  assignee_name: string | null;
+  sort_order: number;
+  completion_percentage: number;
+  due_date: string | null;
+  created_by: string | null;
+  sub_task_count: number;
+  progress_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskDetail extends TaskItem {
+  sub_tasks: TaskItem[];
+}
+
+export interface TaskListResponse {
+  items: TaskItem[];
+  total: number;
+}
+
+export interface TaskCreate {
+  project_id: string;
+  parent_task_id?: string;
+  title: string;
+  description?: string;
+  task_type?: string;
+  phase_name?: string;
+  status?: string;
+  priority?: string;
+  assignee_id?: string;
+  sort_order?: number;
+  completion_percentage?: number;
+  due_date?: string;
+}
+
+export interface TaskUpdate {
+  title?: string;
+  description?: string;
+  task_type?: string;
+  phase_name?: string;
+  status?: string;
+  priority?: string;
+  assignee_id?: string;
+  sort_order?: number;
+  completion_percentage?: number;
+  due_date?: string;
+}
+
+export const tasksApi = {
+  async list(params: {
+    project_id: string;
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    task_type?: string;
+    assignee_id?: string;
+    parent_task_id?: string;
+  }): Promise<TaskListResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('project_id', params.project_id);
+    if (params.page) searchParams.set('page', params.page.toString());
+    if (params.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params.search) searchParams.set('search', params.search);
+    if (params.status) searchParams.set('status', params.status);
+    if (params.task_type) searchParams.set('task_type', params.task_type);
+    if (params.assignee_id) searchParams.set('assignee_id', params.assignee_id);
+    if (params.parent_task_id) searchParams.set('parent_task_id', params.parent_task_id);
+    const query = searchParams.toString();
+    const response = await request<TaskListResponse>(`/admin/tasks?${query}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async get(id: string): Promise<TaskDetail> {
+    const response = await request<TaskDetail>(`/admin/tasks/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: TaskCreate): Promise<TaskItem> {
+    const response = await request<TaskItem>('/admin/tasks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async update(id: string, data: TaskUpdate): Promise<TaskItem> {
+    const response = await request<TaskItem>(`/admin/tasks/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/tasks/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+};
+
+// ==================== 进度记录 API ====================
+
+export interface ProgressEntry {
+  id: string;
+  task_id: string;
+  progress_type: string;
+  content: string | null;
+  old_status: string | null;
+  new_status: string | null;
+  percentage: number | null;
+  email_id: string | null;
+  attachments: Record<string, unknown>[];
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface ProgressListResponse {
+  items: ProgressEntry[];
+  total: number;
+}
+
+export interface ProgressCreate {
+  task_id: string;
+  progress_type?: string;
+  content?: string;
+  old_status?: string;
+  new_status?: string;
+  percentage?: number;
+  email_id?: string;
+  attachments?: Record<string, unknown>[];
+}
+
+export const progressApi = {
+  async list(params: {
+    task_id: string;
+    progress_type?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<ProgressListResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('task_id', params.task_id);
+    if (params.progress_type) searchParams.set('progress_type', params.progress_type);
+    if (params.page) searchParams.set('page', params.page.toString());
+    if (params.page_size) searchParams.set('page_size', params.page_size.toString());
+    const query = searchParams.toString();
+    const response = await request<ProgressListResponse>(`/admin/progress?${query}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: ProgressCreate): Promise<ProgressEntry> {
+    const response = await request<ProgressEntry>('/admin/progress', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/progress/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+};
+
+// ==================== 客户询价单 ====================
+
+export interface ClientRFQ {
+  id: string;
+  rfq_no: string;
+  customer_id: string;
+  contact_id: string | null;
+  trade_term: string | null;
+  payment_method: string | null;
+  payment_terms: string | null;
+  currency: string;
+  exchange_rate: number | null;
+  subtotal: number;
+  discount_amount: number;
+  tax_amount: number;
+  total_amount: number;
+  port_of_loading: string | null;
+  port_of_discharge: string | null;
+  destination: string | null;
+  rfq_date: string | null;
+  deadline: string | null;
+  expiry_date: string | null;
+  status: string;
+  notes: string | null;
+  attachments: any[];
+  tags: string[];
+  created_by: string | null;
+  customer_name: string | null;
+  line_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClientRFQListResponse {
+  items: ClientRFQ[];
+  total: number;
+}
+
+export interface ClientRFQCreate {
+  rfq_no?: string;
+  customer_id: string;
+  contact_id?: string;
+  trade_term?: string;
+  payment_method?: string;
+  payment_terms?: string;
+  currency?: string;
+  exchange_rate?: number;
+  subtotal?: number;
+  discount_amount?: number;
+  tax_amount?: number;
+  total_amount?: number;
+  port_of_loading?: string;
+  port_of_discharge?: string;
+  destination?: string;
+  rfq_date?: string;
+  deadline?: string;
+  expiry_date?: string;
+  status?: string;
+  notes?: string;
+  attachments?: any[];
+  tags?: string[];
+  lines?: any[];
+}
+
+export const clientRfqsApi = {
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    customer_id?: string;
+  }): Promise<ClientRFQListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.customer_id) searchParams.set('customer_id', params.customer_id);
+    const query = searchParams.toString();
+    const response = await request<ClientRFQListResponse>(`/admin/client-rfqs${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async get(id: string): Promise<any> {
+    const response = await request(`/admin/client-rfqs/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: ClientRFQCreate): Promise<any> {
+    const response = await request('/admin/client-rfqs', { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async update(id: string, data: Partial<ClientRFQCreate>): Promise<any> {
+    const response = await request(`/admin/client-rfqs/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/client-rfqs/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+  async updateStatus(id: string, status: string): Promise<any> {
+    const response = await request(`/admin/client-rfqs/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+};
+
+// ==================== 报价单 ====================
+
+export interface Quotation {
+  id: string;
+  quotation_no: string;
+  customer_id: string;
+  contact_id: string | null;
+  linked_client_rfq_id: string | null;
+  trade_term: string | null;
+  payment_method: string | null;
+  payment_terms: string | null;
+  currency: string;
+  exchange_rate: number | null;
+  subtotal: number;
+  discount_amount: number;
+  tax_amount: number;
+  total_amount: number;
+  commission_rate: number | null;
+  commission_amount: number | null;
+  port_of_loading: string | null;
+  port_of_discharge: string | null;
+  destination: string | null;
+  quotation_date: string | null;
+  valid_until: string | null;
+  status: string;
+  notes: string | null;
+  attachments: any[];
+  tags: string[];
+  created_by: string | null;
+  customer_name: string | null;
+  linked_client_rfq_no: string | null;
+  line_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuotationListResponse {
+  items: Quotation[];
+  total: number;
+}
+
+export interface QuotationCreate {
+  quotation_no?: string;
+  customer_id: string;
+  contact_id?: string;
+  linked_client_rfq_id?: string;
+  trade_term?: string;
+  payment_method?: string;
+  payment_terms?: string;
+  currency?: string;
+  exchange_rate?: number;
+  subtotal?: number;
+  discount_amount?: number;
+  tax_amount?: number;
+  total_amount?: number;
+  commission_rate?: number;
+  commission_amount?: number;
+  port_of_loading?: string;
+  port_of_discharge?: string;
+  destination?: string;
+  quotation_date?: string;
+  valid_until?: string;
+  status?: string;
+  notes?: string;
+  attachments?: any[];
+  tags?: string[];
+  lines?: any[];
+}
+
+export const quotationsApi = {
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    customer_id?: string;
+  }): Promise<QuotationListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.customer_id) searchParams.set('customer_id', params.customer_id);
+    const query = searchParams.toString();
+    const response = await request<QuotationListResponse>(`/admin/quotations${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async get(id: string): Promise<any> {
+    const response = await request(`/admin/quotations/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: QuotationCreate): Promise<any> {
+    const response = await request('/admin/quotations', { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async update(id: string, data: Partial<QuotationCreate>): Promise<any> {
+    const response = await request(`/admin/quotations/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/quotations/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+  async updateStatus(id: string, status: string): Promise<any> {
+    const response = await request(`/admin/quotations/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+};
+
+// ==================== 供应商询价单 ====================
+
+export interface SupplierRFQ {
+  id: string;
+  rfq_no: string;
+  supplier_id: string;
+  contact_id: string | null;
+  trade_term: string | null;
+  payment_method: string | null;
+  payment_terms: string | null;
+  currency: string;
+  exchange_rate: number | null;
+  subtotal: number;
+  discount_amount: number;
+  tax_amount: number;
+  total_amount: number;
+  port_of_loading: string | null;
+  port_of_discharge: string | null;
+  rfq_date: string | null;
+  deadline: string | null;
+  expiry_date: string | null;
+  status: string;
+  notes: string | null;
+  attachments: any[];
+  tags: string[];
+  created_by: string | null;
+  supplier_name: string | null;
+  line_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupplierRFQListResponse {
+  items: SupplierRFQ[];
+  total: number;
+}
+
+export interface SupplierRFQCreate {
+  rfq_no?: string;
+  supplier_id: string;
+  contact_id?: string;
+  trade_term?: string;
+  payment_method?: string;
+  payment_terms?: string;
+  currency?: string;
+  exchange_rate?: number;
+  subtotal?: number;
+  discount_amount?: number;
+  tax_amount?: number;
+  total_amount?: number;
+  port_of_loading?: string;
+  port_of_discharge?: string;
+  rfq_date?: string;
+  deadline?: string;
+  expiry_date?: string;
+  status?: string;
+  notes?: string;
+  attachments?: any[];
+  tags?: string[];
+  lines?: any[];
+}
+
+export const supplierRfqsApi = {
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    supplier_id?: string;
+  }): Promise<SupplierRFQListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.supplier_id) searchParams.set('supplier_id', params.supplier_id);
+    const query = searchParams.toString();
+    const response = await request<SupplierRFQListResponse>(`/admin/supplier-rfqs${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async get(id: string): Promise<any> {
+    const response = await request(`/admin/supplier-rfqs/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: SupplierRFQCreate): Promise<any> {
+    const response = await request('/admin/supplier-rfqs', { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async update(id: string, data: Partial<SupplierRFQCreate>): Promise<any> {
+    const response = await request(`/admin/supplier-rfqs/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/supplier-rfqs/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+  async updateStatus(id: string, status: string): Promise<any> {
+    const response = await request(`/admin/supplier-rfqs/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+};
+
+// ==================== 供应商报价单 ====================
+
+export interface SupplierQuotation {
+  id: string;
+  quotation_no: string;
+  supplier_id: string;
+  contact_id: string | null;
+  linked_supplier_rfq_id: string | null;
+  trade_term: string | null;
+  payment_method: string | null;
+  payment_terms: string | null;
+  currency: string;
+  exchange_rate: number | null;
+  subtotal: number;
+  discount_amount: number;
+  tax_amount: number;
+  total_amount: number;
+  port_of_loading: string | null;
+  port_of_discharge: string | null;
+  quotation_date: string | null;
+  valid_until: string | null;
+  status: string;
+  notes: string | null;
+  attachments: any[];
+  tags: string[];
+  created_by: string | null;
+  supplier_name: string | null;
+  linked_supplier_rfq_no: string | null;
+  line_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupplierQuotationListResponse {
+  items: SupplierQuotation[];
+  total: number;
+}
+
+export interface SupplierQuotationCreate {
+  quotation_no?: string;
+  supplier_id: string;
+  contact_id?: string;
+  linked_supplier_rfq_id?: string;
+  trade_term?: string;
+  payment_method?: string;
+  payment_terms?: string;
+  currency?: string;
+  exchange_rate?: number;
+  subtotal?: number;
+  discount_amount?: number;
+  tax_amount?: number;
+  total_amount?: number;
+  port_of_loading?: string;
+  port_of_discharge?: string;
+  quotation_date?: string;
+  valid_until?: string;
+  status?: string;
+  notes?: string;
+  attachments?: any[];
+  tags?: string[];
+  lines?: any[];
+}
+
+export const supplierQuotationsApi = {
+  async list(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    supplier_id?: string;
+  }): Promise<SupplierQuotationListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.supplier_id) searchParams.set('supplier_id', params.supplier_id);
+    const query = searchParams.toString();
+    const response = await request<SupplierQuotationListResponse>(`/admin/supplier-quotations${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async get(id: string): Promise<any> {
+    const response = await request(`/admin/supplier-quotations/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: SupplierQuotationCreate): Promise<any> {
+    const response = await request('/admin/supplier-quotations', { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async update(id: string, data: Partial<SupplierQuotationCreate>): Promise<any> {
+    const response = await request(`/admin/supplier-quotations/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/supplier-quotations/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+  async updateStatus(id: string, status: string): Promise<any> {
+    const response = await request(`/admin/supplier-quotations/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+};
+
+
+// ==================== 组织管理 ====================
+
+export interface Organization {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at?: string;
+  department_count?: number;
+  user_count?: number;
+}
+
+export interface OrganizationCreate {
+  name: string;
+  code: string;
+  description?: string;
+}
+
+export interface OrganizationUpdate {
+  name?: string;
+  code?: string;
+  description?: string;
+  is_active?: boolean;
+}
+
+export const organizationsApi = {
+  async list(params?: { page?: number; page_size?: number; search?: string }): Promise<{ total: number; items: Organization[] }> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params?.search) searchParams.set('search', params.search);
+    const query = searchParams.toString();
+    const response = await request<{ total: number; items: Organization[] }>(`/admin/organizations${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async get(id: string): Promise<Organization> {
+    const response = await request<Organization>(`/admin/organizations/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: OrganizationCreate): Promise<Organization> {
+    const response = await request<Organization>('/admin/organizations', { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async update(id: string, data: OrganizationUpdate): Promise<Organization> {
+    const response = await request<Organization>(`/admin/organizations/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/organizations/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+};
+
+// ==================== 部门管理 ====================
+
+export interface Department {
+  id: string;
+  org_id: string;
+  name: string;
+  code?: string;
+  parent_id?: string | null;
+  manager_id?: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at?: string;
+  children?: Department[];
+}
+
+export interface DepartmentCreate {
+  name: string;
+  code?: string;
+  parent_id?: string | null;
+  manager_id?: string | null;
+  sort_order?: number;
+}
+
+export interface DepartmentUpdate {
+  name?: string;
+  code?: string;
+  parent_id?: string | null;
+  manager_id?: string | null;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
+export const departmentsApi = {
+  async list(params?: { org_id?: string }): Promise<Department[]> {
+    const searchParams = new URLSearchParams();
+    if (params?.org_id) searchParams.set('org_id', params.org_id);
+    const query = searchParams.toString();
+    const response = await request<Department[]>(`/admin/departments${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async tree(params?: { org_id?: string }): Promise<Department[]> {
+    const searchParams = new URLSearchParams();
+    if (params?.org_id) searchParams.set('org_id', params.org_id);
+    const query = searchParams.toString();
+    const response = await request<Department[]>(`/admin/departments/tree${query ? `?${query}` : ''}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: DepartmentCreate): Promise<Department> {
+    const response = await request<Department>('/admin/departments', { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async update(id: string, data: DepartmentUpdate): Promise<Department> {
+    const response = await request<Department>(`/admin/departments/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/departments/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+  async sort(items: Array<{ id: string; sort_order: number; parent_id?: string | null }>): Promise<void> {
+    const response = await request('/admin/departments/sort', { method: 'PUT', body: JSON.stringify({ items }) });
+    if (response.error) throw new Error(response.error);
+  },
+};
+
+// ==================== 角色管理 ====================
+
+export interface RoleListItem {
+  id: string;
+  org_id?: string | null;
+  name: string;
+  code: string;
+  description?: string;
+  is_system: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at?: string;
+  permission_ids: string[];
+  user_count: number;
+}
+
+export interface RoleDetail extends RoleListItem {
+  data_scopes: Array<{
+    resource: string;
+    scope_type: string;
+    custom_dept_ids?: Record<string, unknown>;
+  }>;
+}
+
+export interface RoleCreate {
+  name: string;
+  code: string;
+  description?: string;
+}
+
+export interface RoleUpdate {
+  name?: string;
+  code?: string;
+  description?: string;
+  is_active?: boolean;
+}
+
+export interface PermissionItem {
+  id: string;
+  resource: string;
+  action: string;
+  description?: string;
+}
+
+export interface PermissionGroup {
+  resource: string;
+  resource_label: string;
+  permissions: PermissionItem[];
+}
+
+export const rolesApi = {
+  async list(): Promise<{ total: number; items: RoleListItem[] }> {
+    const response = await request<{ total: number; items: RoleListItem[] }>('/admin/roles');
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async get(id: string): Promise<RoleDetail> {
+    const response = await request<RoleDetail>(`/admin/roles/${id}`);
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async create(data: RoleCreate): Promise<RoleDetail> {
+    const response = await request<RoleDetail>('/admin/roles', { method: 'POST', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async update(id: string, data: RoleUpdate): Promise<RoleDetail> {
+    const response = await request<RoleDetail>(`/admin/roles/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    if (response.error) throw new Error(response.error);
+    return response.data!;
+  },
+  async delete(id: string): Promise<void> {
+    const response = await request(`/admin/roles/${id}`, { method: 'DELETE' });
+    if (response.error) throw new Error(response.error);
+  },
+  async setPermissions(id: string, permissionIds: string[]): Promise<void> {
+    const response = await request(`/admin/roles/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ permission_ids: permissionIds }) });
+    if (response.error) throw new Error(response.error);
+  },
+  async setDataScopes(id: string, scopes: Array<{ resource: string; scope_type: string }>): Promise<void> {
+    const response = await request(`/admin/roles/${id}/data-scopes`, { method: 'PUT', body: JSON.stringify({ scopes }) });
+    if (response.error) throw new Error(response.error);
+  },
+};
+
+export const permissionsApi = {
+  async list(): Promise<PermissionGroup[]> {
+    const response = await request<PermissionGroup[]>('/admin/permissions');
     if (response.error) throw new Error(response.error);
     return response.data!;
   },

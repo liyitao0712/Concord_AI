@@ -36,6 +36,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { LoadingSpinner, PageLoading } from '@/components/LoadingSpinner';
 import { ChevronRight, Plus, Pencil, Ban, CheckCircle2, Trash2, Lightbulb } from 'lucide-react';
+import { usePermission } from '@/hooks/usePermission';
 
 // ==================== 工具函数 ====================
 
@@ -65,6 +66,7 @@ function TreeNode({
   onToggle: (id: string) => void;
   level?: number;
 }) {
+  const { can } = usePermission();
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children && node.children.length > 0;
 
@@ -115,6 +117,7 @@ function TreeNode({
           <span className="text-xs text-muted-foreground">
             使用 {node.usage_count} 次
           </span>
+          {can('work_type', 'update') && (
           <Button
             variant="ghost"
             size="xs"
@@ -123,6 +126,8 @@ function TreeNode({
           >
             编辑
           </Button>
+          )}
+          {can('work_type', 'update') && (
           <Button
             variant="ghost"
             size="xs"
@@ -131,6 +136,8 @@ function TreeNode({
           >
             {node.is_active ? '禁用' : '启用'}
           </Button>
+          )}
+          {can('work_type', 'delete') && (
           <Button
             variant="ghost"
             size="xs"
@@ -139,6 +146,7 @@ function TreeNode({
           >
             删除
           </Button>
+          )}
         </div>
       </div>
 
@@ -164,6 +172,7 @@ function TreeNode({
 
 export default function WorkTypesPage() {
   const confirmDialog = useConfirm();
+  const { can } = usePermission();
 
   // Tab 状态
   const [activeTab, setActiveTab] = useState<string>('types');
@@ -469,10 +478,12 @@ export default function WorkTypesPage() {
               <div className="text-sm text-muted-foreground">
                 共 {flatList.length} 个工作类型
               </div>
+              {can('work_type', 'create') && (
               <Button onClick={handleCreate}>
                 <Plus className="size-4" />
                 新增工作类型
               </Button>
+              )}
             </div>
 
             {/* 列表 */}

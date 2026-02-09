@@ -57,6 +57,7 @@ class EmailAccountConfig:
     imap_sync_days: Optional[int] = None # 同步多少天的历史邮件（None=全部）
     imap_unseen_only: bool = False       # 是否只同步未读邮件
     imap_fetch_limit: int = 50           # 每次拉取的最大邮件数
+    org_id: Optional[str] = None         # 所属组织 ID
 
     @property
     def smtp_configured(self) -> bool:
@@ -296,6 +297,7 @@ async def get_active_imap_accounts() -> List[EmailAccountConfig]:
                     imap_sync_days=account.imap_sync_days,
                     imap_unseen_only=account.imap_unseen_only,
                     imap_fetch_limit=account.imap_fetch_limit,
+                    org_id=getattr(account, 'org_id', None),
                 ))
 
     # 如果数据库没有配置，回退到环境变量

@@ -19,10 +19,14 @@ import {
   deleteUser,
   toggleUserStatus,
   resetUserPassword,
+  rolesApi,
+  departmentsApi,
   User,
   UserListResponse,
   CreateUserRequest,
   UpdateUserRequest,
+  RoleListItem,
+  Department,
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,10 +52,12 @@ import {
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { toast } from 'sonner';
 import { Plus, Pencil, KeyRound, Trash2, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { usePermission } from '@/hooks/usePermission';
 
 // ==================== 主页面 ====================
 
 export default function UsersPage() {
+  const { can } = usePermission();
   // 用户列表状态
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
@@ -79,6 +85,16 @@ export default function UsersPage() {
   const [newPassword, setNewPassword] = useState('');
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // 角色和部门下拉数据
+  const [roleOptions, setRoleOptions] = useState<RoleListItem[]>([]);
+  const [departmentOptions, setDepartmentOptions] = useState<Department[]>([]);
+
+  // 加载角色和部门列表
+  useEffect(() => {
+    rolesApi.list().then((data) => setRoleOptions(data.items)).catch(() => {});
+    departmentsApi.list().then((data) => setDepartmentOptions(data)).catch(() => {});
+  }, []);
 
   // 加载用户列表
   const loadUsers = useCallback(async () => {
@@ -143,12 +159,16 @@ export default function UsersPage() {
     setFormError('');
     setSubmitting(true);
 
-    const updateData: UpdateUserRequest = {};
+    const updateData: UpdateUserRequest & { role_id?: string; department_id?: string } = {};
     if (formData.email !== selectedUser.email) updateData.email = formData.email;
     if (formData.name !== selectedUser.name) updateData.name = formData.name;
     if (formData.role !== selectedUser.role) updateData.role = formData.role;
+    const currentRoleId = (formData as any).role_id || '';
+    const currentDeptId = (formData as any).department_id || '';
+    if (currentRoleId !== (selectedUser.role_id || '')) updateData.role_id = currentRoleId || undefined;
+    if (currentDeptId !== (selectedUser.department_id || '')) updateData.department_id = currentDeptId || undefined;
 
-    const response = await updateUser(selectedUser.id, updateData);
+    const response = await updateUser(selectedUser.id, updateData as any);
 
     if (response.data) {
       setShowEditModal(false);
@@ -219,7 +239,9 @@ export default function UsersPage() {
       password: '',
       name: user.name,
       role: user.role,
-    });
+      role_id: user.role_id || '',
+      department_id: user.department_id || '',
+    } as any);
     setFormError('');
     setShowEditModal(true);
   };
@@ -250,6 +272,7 @@ export default function UsersPage() {
           <h1 className="text-2xl font-bold">用户管理</h1>
           <p className="mt-1 text-sm text-muted-foreground">管理系统用户账户</p>
         </div>
+        {can('user', 'create') && (
         <Button
           onClick={() => {
             setFormData({ email: '', password: '', name: '', role: 'user' });
@@ -260,6 +283,7 @@ export default function UsersPage() {
           <Plus className="h-4 w-4 mr-1" />
           创建用户
         </Button>
+        )}
       </div>
 
       {/* 搜索和筛选 */}
@@ -304,6 +328,7 @@ export default function UsersPage() {
               <TableRow>
                 <TableHead className="px-6">用户</TableHead>
                 <TableHead className="px-6">角色</TableHead>
+                <TableHead className="px-6">部门</TableHead>
                 <TableHead className="px-6">状态</TableHead>
                 <TableHead className="px-6">创建时间</TableHead>
                 <TableHead className="px-6 text-right">操作</TableHead>
@@ -312,13 +337,13 @@ export default function UsersPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="px-6 py-4 text-center">
+                  <TableCell colSpan={6} className="px-6 py-4 text-center">
                     <LoadingSpinner size="sm" text="加载中..." />
                   </TableCell>
                 </TableRow>
               ) : users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="px-6 py-4 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="px-6 py-4 text-center text-muted-foreground">
                     暂无用户
                   </TableCell>
                 </TableRow>
@@ -334,12 +359,20 @@ export default function UsersPage() {
                       </div>
                     </TableCell>
                     <TableCell className="px-6 py-4">
-                      <Badge
-                        variant={user.role === 'admin' ? 'default' : 'secondary'}
-                        className={user.role === 'admin' ? 'bg-purple-600' : ''}
-                      >
-                        {user.role === 'admin' ? '管理员' : '普通用户'}
-                      </Badge>
+                      <div className="space-y-1">
+                        <Badge
+                          variant={user.role === 'admin' ? 'default' : 'secondary'}
+                          className={user.role === 'admin' ? 'bg-purple-600' : ''}
+                        >
+                          {user.role === 'admin' ? '管理员' : '普通用户'}
+                        </Badge>
+                        {user.role_name && (
+                          <div className="text-xs text-muted-foreground">{user.role_name}</div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-6 py-4 text-sm text-muted-foreground">
+                      {user.department_name || '-'}
                     </TableCell>
                     <TableCell className="px-6 py-4">
                       <Badge
@@ -353,6 +386,7 @@ export default function UsersPage() {
                       {new Date(user.created_at).toLocaleDateString('zh-CN')}
                     </TableCell>
                     <TableCell className="px-6 py-4 text-right space-x-2">
+                      {can('user', 'update') && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -361,6 +395,8 @@ export default function UsersPage() {
                         <Pencil className="h-4 w-4 mr-1" />
                         编辑
                       </Button>
+                      )}
+                      {can('user', 'update') && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -383,6 +419,8 @@ export default function UsersPage() {
                           </>
                         )}
                       </Button>
+                      )}
+                      {can('user', 'update') && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -391,6 +429,8 @@ export default function UsersPage() {
                         <KeyRound className="h-4 w-4 mr-1" />
                         重置密码
                       </Button>
+                      )}
+                      {can('user', 'delete') && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -400,6 +440,7 @@ export default function UsersPage() {
                         <Trash2 className="h-4 w-4 mr-1" />
                         删除
                       </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
@@ -497,6 +538,37 @@ export default function UsersPage() {
                 <option value="admin">管理员</option>
               </select>
             </div>
+            <div>
+              <Label>权限角色</Label>
+              <select
+                value={(formData as any).role_id || ''}
+                onChange={(e) =>
+                  setFormData({ ...formData, role_id: e.target.value || undefined } as any)
+                }
+                className="mt-1 block w-full px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">未分配</option>
+                {roleOptions.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">决定用户的功能权限</p>
+            </div>
+            <div>
+              <Label>部门</Label>
+              <select
+                value={(formData as any).department_id || ''}
+                onChange={(e) =>
+                  setFormData({ ...formData, department_id: e.target.value || undefined } as any)
+                }
+                className="mt-1 block w-full px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">未分配</option>
+                {departmentOptions.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
             <DialogFooter className="pt-4">
               <Button
                 type="button"
@@ -562,6 +634,37 @@ export default function UsersPage() {
               >
                 <option value="user">普通用户</option>
                 <option value="admin">管理员</option>
+              </select>
+            </div>
+            <div>
+              <Label>权限角色</Label>
+              <select
+                value={(formData as any).role_id || ''}
+                onChange={(e) =>
+                  setFormData({ ...formData, role_id: e.target.value || undefined } as any)
+                }
+                className="mt-1 block w-full px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">未分配</option>
+                {roleOptions.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">决定用户的功能权限</p>
+            </div>
+            <div>
+              <Label>部门</Label>
+              <select
+                value={(formData as any).department_id || ''}
+                onChange={(e) =>
+                  setFormData({ ...formData, department_id: e.target.value || undefined } as any)
+                }
+                className="mt-1 block w-full px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">未分配</option>
+                {departmentOptions.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
               </select>
             </div>
             <DialogFooter className="pt-4">

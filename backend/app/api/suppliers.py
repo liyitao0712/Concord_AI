@@ -27,9 +27,11 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from pydantic import BaseModel, Field
+
 from app.core.database import get_db
 from app.core.logging import get_logger
-from app.core.security import get_current_admin_user
+from app.core.security import get_current_admin_user, require_permission, apply_data_scope, DataScope
 from app.models.user import User
 from app.models.supplier import Supplier, SupplierContact
 from app.schemas.supplier import (
@@ -61,14 +63,17 @@ async def list_suppliers(
     supplier_level: Optional[str] = Query(None, description="筛选等级"),
     is_active: Optional[bool] = Query(None, description="筛选状态"),
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("supplier", "read")),
 ):
     """
     获取供应商列表
 
-    支持搜索、筛选和分页
+    支持搜索、筛选和分页，按数据权限过滤
     """
     query = select(Supplier).order_by(Supplier.created_at.desc())
+
+    # 数据权限过滤
+    query = await apply_data_scope(query, Supplier, "supplier", scope, session)
 
     # 搜索：模糊匹配公司名、简称、邮箱
     if search:
@@ -128,7 +133,7 @@ async def list_suppliers(
 async def create_supplier(
     data: SupplierCreate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("supplier", "create")),
 ):
     """创建供应商"""
     supplier = Supplier(
@@ -151,13 +156,17 @@ async def create_supplier(
         source=data.source,
         notes=data.notes,
         tags=data.tags,
+        # 权限字段自动填充
+        org_id=scope.org_id,
+        owner_id=scope.user.id,
+        owner_dept_id=scope.user.department_id,
     )
 
     session.add(supplier)
     await session.commit()
     await session.refresh(supplier)
 
-    logger.info(f"[SuppliersAPI] 创建供应商: {supplier.name} by {admin.email}")
+    logger.info(f"[SuppliersAPI] 创建供应商: {supplier.name} by {scope.user.email}")
 
     resp = SupplierResponse.model_validate(supplier)
     resp.contact_count = 0
@@ -168,15 +177,17 @@ async def create_supplier(
 async def get_supplier(
     supplier_id: str,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("supplier", "read")),
 ):
     """获取供应商详情（含联系人列表）"""
-    # 预加载联系人
-    result = await session.execute(
+    # 预加载联系人，并加数据权限过滤
+    query = (
         select(Supplier)
         .options(selectinload(Supplier.contacts))
         .where(Supplier.id == supplier_id)
     )
+    query = await apply_data_scope(query, Supplier, "supplier", scope, session)
+    result = await session.execute(query)
     supplier = result.scalar_one_or_none()
 
     if not supplier:
@@ -193,10 +204,13 @@ async def update_supplier(
     supplier_id: str,
     data: SupplierUpdate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("supplier", "update")),
 ):
     """更新供应商"""
-    supplier = await session.get(Supplier, supplier_id)
+    query = select(Supplier).where(Supplier.id == supplier_id)
+    query = await apply_data_scope(query, Supplier, "supplier", scope, session)
+    result = await session.execute(query)
+    supplier = result.scalar_one_or_none()
     if not supplier:
         raise HTTPException(status_code=404, detail="供应商不存在")
 
@@ -208,7 +222,7 @@ async def update_supplier(
     await session.commit()
     await session.refresh(supplier)
 
-    logger.info(f"[SuppliersAPI] 更新供应商: {supplier.name} by {admin.email}")
+    logger.info(f"[SuppliersAPI] 更新供应商: {supplier.name} by {scope.user.email}")
 
     # 查询联系人数量
     contact_count = await session.scalar(
@@ -224,14 +238,17 @@ async def update_supplier(
 async def delete_supplier(
     supplier_id: str,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("supplier", "delete")),
 ):
     """
     删除供应商
 
     级联删除该供应商的所有联系人
     """
-    supplier = await session.get(Supplier, supplier_id)
+    query = select(Supplier).where(Supplier.id == supplier_id)
+    query = await apply_data_scope(query, Supplier, "supplier", scope, session)
+    result = await session.execute(query)
+    supplier = result.scalar_one_or_none()
     if not supplier:
         raise HTTPException(status_code=404, detail="供应商不存在")
 
@@ -244,8 +261,93 @@ async def delete_supplier(
     await session.delete(supplier)
     await session.commit()
 
-    logger.info(f"[SuppliersAPI] 删除供应商: {supplier_name} (联系人: {contact_count}) by {admin.email}")
+    logger.info(f"[SuppliersAPI] 删除供应商: {supplier_name} (联系人: {contact_count}) by {scope.user.email}")
     return {"message": "删除成功", "contacts_deleted": contact_count}
+
+
+# ==================== AI 搜索 ====================
+
+
+class SupplierAILookupRequest(BaseModel):
+    """供应商 AI 搜索请求"""
+    company_name: str = Field(..., min_length=1, description="公司全称")
+
+
+class SupplierAILookupResponse(BaseModel):
+    """供应商 AI 搜索响应"""
+    name: Optional[str] = None
+    short_name: Optional[str] = None
+    country: Optional[str] = None
+    region: Optional[str] = None
+    industry: Optional[str] = None
+    company_size: Optional[str] = None
+    main_products: Optional[str] = None
+    website: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
+    notes: Optional[str] = None
+    confidence: float = 0.0
+    error: Optional[str] = None
+
+
+@router.post(
+    "/ai-lookup",
+    response_model=SupplierAILookupResponse,
+    summary="AI 搜索供应商信息",
+    description="根据公司名称通过 AI 联网搜索自动填充供应商信息",
+)
+async def ai_lookup_supplier(
+    request: SupplierAILookupRequest,
+    session: AsyncSession = Depends(get_db),
+    scope: DataScope = Depends(require_permission("supplier", "create")),
+):
+    """
+    AI 搜索供应商信息
+
+    调用 AddNewSupplierHelper Agent 通过 LLM + Web Search 搜索供应商公开信息，
+    返回可直接用于填充供应商表单的结构化数据。
+    """
+    from app.llm import apply_llm_settings
+    from app.agents.registry import agent_registry
+
+    logger.info(f"[SuppliersAPI] AI 搜索: {request.company_name} by {scope.user.email}")
+
+    # 加载 LLM 设置
+    await apply_llm_settings(session)
+
+    # 获取 Agent 并加载配置
+    agent = agent_registry.get("add_new_supplier_helper")
+    if not agent:
+        raise HTTPException(status_code=500, detail="Agent add_new_supplier_helper 未注册")
+
+    await agent.load_config_from_db(session)
+
+    # 执行搜索
+    try:
+        result = await agent.lookup(request.company_name)
+    except Exception as e:
+        logger.error(f"[SuppliersAPI] AI 搜索失败: {e}")
+        raise HTTPException(status_code=500, detail=f"AI 搜索失败: {str(e)}")
+
+    return SupplierAILookupResponse(
+        name=result.get("name"),
+        short_name=result.get("short_name"),
+        country=result.get("country"),
+        region=result.get("region"),
+        industry=result.get("industry"),
+        company_size=result.get("company_size"),
+        main_products=result.get("main_products"),
+        website=result.get("website"),
+        email=result.get("email"),
+        phone=result.get("phone"),
+        address=result.get("address"),
+        tags=result.get("tags") or [],
+        notes=result.get("notes"),
+        confidence=result.get("confidence", 0),
+        error=result.get("error"),
+    )
 
 
 # ==================== 供应商联系人 CRUD ====================
@@ -261,12 +363,13 @@ async def list_supplier_contacts(
     search: Optional[str] = Query(None, description="搜索（姓名/邮箱）"),
     is_active: Optional[bool] = Query(None, description="筛选状态"),
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("supplier_contact", "read")),
 ):
     """获取供应商联系人列表"""
     query = select(SupplierContact).order_by(
         SupplierContact.is_primary.desc(), SupplierContact.created_at.desc()
     )
+    query = await apply_data_scope(query, SupplierContact, "supplier_contact", scope, session)
 
     if supplier_id is not None:
         query = query.where(SupplierContact.supplier_id == supplier_id)
@@ -301,7 +404,7 @@ async def list_supplier_contacts(
 async def create_supplier_contact(
     data: SupplierContactCreate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("supplier_contact", "create")),
 ):
     """创建供应商联系人"""
     # 验证供应商是否存在
@@ -326,13 +429,16 @@ async def create_supplier_contact(
         is_primary=data.is_primary,
         is_active=data.is_active,
         notes=data.notes,
+        org_id=scope.org_id,
+        owner_id=scope.user.id,
+        owner_dept_id=scope.user.department_id,
     )
 
     session.add(contact)
     await session.commit()
     await session.refresh(contact)
 
-    logger.info(f"[SupplierContactsAPI] 创建联系人: {contact.name} @ {supplier.name} by {admin.email}")
+    logger.info(f"[SupplierContactsAPI] 创建联系人: {contact.name} @ {supplier.name} by {scope.user.email}")
     return SupplierContactResponse.model_validate(contact)
 
 
@@ -340,10 +446,13 @@ async def create_supplier_contact(
 async def get_supplier_contact(
     contact_id: str,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("supplier_contact", "read")),
 ):
     """获取供应商联系人详情"""
-    contact = await session.get(SupplierContact, contact_id)
+    query = select(SupplierContact).where(SupplierContact.id == contact_id)
+    query = await apply_data_scope(query, SupplierContact, "supplier_contact", scope, session)
+    result = await session.execute(query)
+    contact = result.scalar_one_or_none()
     if not contact:
         raise HTTPException(status_code=404, detail="联系人不存在")
     return SupplierContactResponse.model_validate(contact)
@@ -354,10 +463,13 @@ async def update_supplier_contact(
     contact_id: str,
     data: SupplierContactUpdate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("supplier_contact", "update")),
 ):
     """更新供应商联系人"""
-    contact = await session.get(SupplierContact, contact_id)
+    query = select(SupplierContact).where(SupplierContact.id == contact_id)
+    query = await apply_data_scope(query, SupplierContact, "supplier_contact", scope, session)
+    result = await session.execute(query)
+    contact = result.scalar_one_or_none()
     if not contact:
         raise HTTPException(status_code=404, detail="联系人不存在")
 
@@ -374,7 +486,7 @@ async def update_supplier_contact(
     await session.commit()
     await session.refresh(contact)
 
-    logger.info(f"[SupplierContactsAPI] 更新联系人: {contact.name} by {admin.email}")
+    logger.info(f"[SupplierContactsAPI] 更新联系人: {contact.name} by {scope.user.email}")
     return SupplierContactResponse.model_validate(contact)
 
 
@@ -382,10 +494,13 @@ async def update_supplier_contact(
 async def delete_supplier_contact(
     contact_id: str,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("supplier_contact", "delete")),
 ):
     """删除供应商联系人"""
-    contact = await session.get(SupplierContact, contact_id)
+    query = select(SupplierContact).where(SupplierContact.id == contact_id)
+    query = await apply_data_scope(query, SupplierContact, "supplier_contact", scope, session)
+    result = await session.execute(query)
+    contact = result.scalar_one_or_none()
     if not contact:
         raise HTTPException(status_code=404, detail="联系人不存在")
 
@@ -393,7 +508,7 @@ async def delete_supplier_contact(
     await session.delete(contact)
     await session.commit()
 
-    logger.info(f"[SupplierContactsAPI] 删除联系人: {contact_name} by {admin.email}")
+    logger.info(f"[SupplierContactsAPI] 删除联系人: {contact_name} by {scope.user.email}")
     return {"message": "删除成功"}
 
 

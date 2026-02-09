@@ -12,9 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.core.security import get_current_admin_user
+from app.core.security import require_permission, DataScope
 from app.core.database import get_db
-from app.models.user import User
 from app.models.worker import WorkerConfig
 from app.workers import worker_manager
 
@@ -23,7 +22,6 @@ logger = get_logger(__name__)
 router = APIRouter(
     prefix="/admin/workers",
     tags=["admin-workers"],
-    dependencies=[Depends(get_current_admin_user)],
 )
 
 
@@ -82,7 +80,9 @@ class WorkerActionResponse(BaseModel):
 # ==================== API 端点 ====================
 
 @router.get("/types", response_model=list[WorkerTypeInfo])
-async def list_worker_types():
+async def list_worker_types(
+    _: DataScope = Depends(require_permission("worker", "read")),
+):
     """
     列出所有支持的 Worker 类型
     """
@@ -103,6 +103,7 @@ async def list_worker_types():
 @router.get("", response_model=list[WorkerConfigResponse])
 async def list_workers(
     db: AsyncSession = Depends(get_db),
+    _: DataScope = Depends(require_permission("worker", "read")),
 ):
     """
     列出所有 Worker 配置
@@ -135,7 +136,7 @@ async def list_workers(
 async def create_worker(
     request: WorkerConfigCreate,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("worker", "create")),
 ):
     """
     创建新的 Worker 配置
@@ -166,7 +167,7 @@ async def create_worker(
     await db.commit()
     await db.refresh(config)
 
-    logger.info(f"[WorkerAPI] 管理员 {admin.email} 创建 Worker: {config.name}")
+    logger.info(f"[WorkerAPI] 管理员 {scope.user.email} 创建 Worker: {config.name}")
 
     return WorkerConfigResponse(
         id=config.id,
@@ -188,6 +189,7 @@ async def create_worker(
 async def get_worker(
     worker_id: str,
     db: AsyncSession = Depends(get_db),
+    _: DataScope = Depends(require_permission("worker", "read")),
 ):
     """
     获取单个 Worker 配置
@@ -223,7 +225,7 @@ async def update_worker(
     worker_id: str,
     request: WorkerConfigUpdate,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("worker", "update")),
 ):
     """
     更新 Worker 配置
@@ -253,7 +255,7 @@ async def update_worker(
     await db.commit()
     await db.refresh(config)
 
-    logger.info(f"[WorkerAPI] 管理员 {admin.email} 更新 Worker: {config.name}")
+    logger.info(f"[WorkerAPI] 管理员 {scope.user.email} 更新 Worker: {config.name}")
 
     status = worker_manager.get_status(config.id)
 
@@ -277,7 +279,7 @@ async def update_worker(
 async def delete_worker(
     worker_id: str,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("worker", "delete")),
 ):
     """
     删除 Worker 配置
@@ -299,7 +301,7 @@ async def delete_worker(
     await db.delete(config)
     await db.commit()
 
-    logger.info(f"[WorkerAPI] 管理员 {admin.email} 删除 Worker: {name}")
+    logger.info(f"[WorkerAPI] 管理员 {scope.user.email} 删除 Worker: {name}")
 
     return {"message": f"Worker '{name}' 已删除"}
 
@@ -308,7 +310,7 @@ async def delete_worker(
 async def start_worker(
     worker_id: str,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("worker", "update")),
 ):
     """
     启动 Worker
@@ -316,7 +318,7 @@ async def start_worker(
     success, message = await worker_manager.start(worker_id, db)
 
     if success:
-        logger.info(f"[WorkerAPI] 管理员 {admin.email} 启动 Worker: {worker_id}")
+        logger.info(f"[WorkerAPI] 管理员 {scope.user.email} 启动 Worker: {worker_id}")
 
     return WorkerActionResponse(success=success, message=message)
 
@@ -324,7 +326,7 @@ async def start_worker(
 @router.post("/{worker_id}/stop", response_model=WorkerActionResponse)
 async def stop_worker(
     worker_id: str,
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("worker", "update")),
 ):
     """
     停止 Worker
@@ -332,7 +334,7 @@ async def stop_worker(
     success, message = await worker_manager.stop(worker_id)
 
     if success:
-        logger.info(f"[WorkerAPI] 管理员 {admin.email} 停止 Worker: {worker_id}")
+        logger.info(f"[WorkerAPI] 管理员 {scope.user.email} 停止 Worker: {worker_id}")
 
     return WorkerActionResponse(success=success, message=message)
 
@@ -341,7 +343,7 @@ async def stop_worker(
 async def restart_worker(
     worker_id: str,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("worker", "update")),
 ):
     """
     重启 Worker
@@ -349,7 +351,7 @@ async def restart_worker(
     success, message = await worker_manager.restart(worker_id, db)
 
     if success:
-        logger.info(f"[WorkerAPI] 管理员 {admin.email} 重启 Worker: {worker_id}")
+        logger.info(f"[WorkerAPI] 管理员 {scope.user.email} 重启 Worker: {worker_id}")
 
     return WorkerActionResponse(success=success, message=message)
 
@@ -358,6 +360,7 @@ async def restart_worker(
 async def test_worker_connection(
     worker_id: str,
     db: AsyncSession = Depends(get_db),
+    _: DataScope = Depends(require_permission("worker", "read")),
 ):
     """
     测试 Worker 连接
@@ -381,6 +384,7 @@ async def test_worker_connection(
 @router.post("/test")
 async def test_new_worker_connection(
     request: WorkerConfigCreate,
+    _: DataScope = Depends(require_permission("worker", "read")),
 ):
     """
     测试新 Worker 配置的连接（创建前测试）

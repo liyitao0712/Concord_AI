@@ -155,38 +155,48 @@ class ChatAgent(BaseAgent):
 
     # ========== 上下文管理 ==========
 
-    def _context_key(self, session_id: str) -> str:
+    def _context_key(self, session_id: str, org_id: str = None) -> str:
         """生成上下文缓存的 Redis Key"""
+        if org_id:
+            return f"chat:context:{org_id}:{session_id}"
         return f"chat:context:{session_id}"
 
-    async def _get_context(self, session_id: str) -> list[dict]:
+    async def _get_context(self, session_id: str, org_id: str = None) -> list[dict]:
         """
         从 Redis 获取对话上下文
 
         Args:
             session_id: 会话 ID
+            org_id: 组织 ID（可选）
 
         Returns:
             list[dict]: 消息列表
         """
-        key = self._context_key(session_id)
+        key = self._context_key(session_id, org_id)
         try:
             data = await redis_client.get(key)
             if data:
                 return json.loads(data)
+            # 向后兼容：新 key 找不到时尝试旧 key
+            if org_id:
+                old_key = self._context_key(session_id)
+                data = await redis_client.get(old_key)
+                if data:
+                    return json.loads(data)
         except Exception as e:
             logger.warning(f"[ChatAgent] 获取上下文失败: {e}")
         return []
 
-    async def _save_context(self, session_id: str, messages: list[dict]) -> None:
+    async def _save_context(self, session_id: str, messages: list[dict], org_id: str = None) -> None:
         """
         保存对话上下文到 Redis
 
         Args:
             session_id: 会话 ID
             messages: 消息列表
+            org_id: 组织 ID（可选）
         """
-        key = self._context_key(session_id)
+        key = self._context_key(session_id, org_id)
 
         # 限制消息数量
         if len(messages) > self.max_context_messages:
@@ -201,16 +211,21 @@ class ChatAgent(BaseAgent):
         except Exception as e:
             logger.warning(f"[ChatAgent] 保存上下文失败: {e}")
 
-    async def clear_context(self, session_id: str) -> None:
+    async def clear_context(self, session_id: str, org_id: str = None) -> None:
         """
         清除会话上下文
 
         Args:
             session_id: 会话 ID
+            org_id: 组织 ID（可选）
         """
-        key = self._context_key(session_id)
+        key = self._context_key(session_id, org_id)
         try:
             await redis_client.delete(key)
+            # 同时清理旧格式 key
+            if org_id:
+                old_key = self._context_key(session_id)
+                await redis_client.delete(old_key)
             logger.info(f"[ChatAgent] 清除上下文: {session_id}")
         except Exception as e:
             logger.warning(f"[ChatAgent] 清除上下文失败: {e}")
@@ -222,6 +237,7 @@ class ChatAgent(BaseAgent):
         session_id: str,
         message: str,
         *,
+        org_id: str = None,
         system_prompt: Optional[str] = None,
         model: Optional[str] = None,
         temperature: float = 0.7,
@@ -243,7 +259,7 @@ class ChatAgent(BaseAgent):
         logger.debug(f"[ChatAgent] 用户消息: {message[:100]}...")
 
         # 获取上下文
-        context_messages = await self._get_context(session_id)
+        context_messages = await self._get_context(session_id, org_id)
 
         # 添加用户消息
         context_messages.append({"role": "user", "content": message})
@@ -264,7 +280,7 @@ class ChatAgent(BaseAgent):
 
             # 保存上下文（包括助手回复）
             context_messages.append({"role": "assistant", "content": response.content})
-            await self._save_context(session_id, context_messages)
+            await self._save_context(session_id, context_messages, org_id)
 
             logger.info(f"[ChatAgent] 完成，使用 {response.usage.get('total_tokens', 0)} tokens")
 
@@ -288,6 +304,7 @@ class ChatAgent(BaseAgent):
         session_id: str,
         message: str,
         *,
+        org_id: str = None,
         system_prompt: Optional[str] = None,
         model: Optional[str] = None,
         temperature: float = 0.7,
@@ -309,7 +326,7 @@ class ChatAgent(BaseAgent):
         logger.debug(f"[ChatAgent] 用户消息: {message[:100]}...")
 
         # 获取上下文
-        context_messages = await self._get_context(session_id)
+        context_messages = await self._get_context(session_id, org_id)
 
         # 添加用户消息到上下文
         context_messages.append({"role": "user", "content": message})
@@ -335,7 +352,7 @@ class ChatAgent(BaseAgent):
 
             # 保存上下文（包括助手回复）
             context_messages.append({"role": "assistant", "content": full_response})
-            await self._save_context(session_id, context_messages)
+            await self._save_context(session_id, context_messages, org_id)
 
             logger.info(f"[ChatAgent] 流式完成")
 

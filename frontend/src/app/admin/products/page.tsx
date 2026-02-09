@@ -26,6 +26,7 @@ import {
 } from '@/lib/api';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { usePermission } from '@/hooks/usePermission';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -73,6 +74,7 @@ function getStatusBadge(status: string) {
 
 export default function ProductsPage() {
   const confirm = useConfirm();
+  const { can } = usePermission();
 
   // 列表状态
   const [products, setProducts] = useState<Product[]>([]);
@@ -365,10 +367,12 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-bold">产品管理</h1>
           <p className="mt-1 text-sm text-muted-foreground">管理外贸产品信息和供应商关联</p>
         </div>
+        {can('product', 'create') && (
         <Button onClick={openCreateForm}>
           <Plus />
           新增产品
         </Button>
+        )}
       </div>
 
       {/* 搜索和筛选 */}
@@ -449,14 +453,18 @@ export default function ProductsPage() {
                   <TableCell className="px-6 py-4 text-sm text-muted-foreground">{product.supplier_count}</TableCell>
                   <TableCell className="px-6 py-4">{getStatusBadge(product.status)}</TableCell>
                   <TableCell className="px-6 py-4 text-right space-x-1">
+                    {can('product', 'update') && (
                     <Button variant="ghost" size="sm" onClick={() => openEditForm(product)}>
                       <Pencil className="size-3.5" />
                       编辑
                     </Button>
+                    )}
+                    {can('product', 'delete') && (
                     <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDeleteProduct(product)}>
                       <Trash2 className="size-3.5" />
                       删除
                     </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -794,10 +802,12 @@ export default function ProductsPage() {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-lg font-semibold">关联供应商 ({detailData.suppliers.length})</h3>
+                  {can('product', 'update') && (
                   <Button size="sm" onClick={openAddSupplier}>
                     <Plus className="size-3.5" />
                     添加供应商
                   </Button>
+                  )}
                 </div>
 
                 {detailData.suppliers.length === 0 ? (
@@ -831,14 +841,18 @@ export default function ProductsPage() {
                             )}
                           </TableCell>
                           <TableCell className="px-4 py-2 text-right space-x-1">
+                            {can('product', 'update') && (
                             <Button variant="ghost" size="sm" onClick={() => openEditSupplierLink(link)}>
                               <Pencil className="size-3.5" />
                               编辑
                             </Button>
+                            )}
+                            {can('product', 'delete') && (
                             <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleRemoveSupplier(link)}>
                               <Trash2 className="size-3.5" />
                               移除
                             </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}

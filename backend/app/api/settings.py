@@ -18,10 +18,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_admin_user
+from app.core.security import require_permission, DataScope
 from app.core.config import settings as app_settings
 from app.core.logging import get_logger
-from app.models.user import User
 from app.models.settings import SystemSetting
 
 logger = get_logger(__name__)
@@ -183,7 +182,7 @@ class CompanyConfigUpdate(BaseModel):
 
 @router.get("/company", response_model=CompanyConfigResponse)
 async def get_company_config(
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -204,7 +203,7 @@ async def get_company_config(
 @router.put("/company")
 async def update_company_config(
     config: CompanyConfigUpdate,
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "update")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -248,7 +247,7 @@ async def update_company_config(
 
 @router.get("/email", response_model=EmailConfigResponse)
 async def get_email_config(
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """获取邮件配置"""
@@ -275,7 +274,7 @@ async def get_email_config(
 @router.put("/email")
 async def update_email_config(
     config: EmailConfigUpdate,
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "update")),
     db: AsyncSession = Depends(get_db),
 ):
     """更新邮件配置"""
@@ -327,7 +326,7 @@ async def update_email_config(
 @router.get("/all")
 async def get_all_settings(
     category: Optional[str] = None,
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -359,7 +358,7 @@ async def get_all_settings(
 
 @router.get("/feishu", response_model=FeishuConfigResponse)
 async def get_feishu_config(
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -388,7 +387,7 @@ async def get_feishu_config(
 @router.put("/feishu")
 async def update_feishu_config(
     config: FeishuConfigUpdate,
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "update")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -465,7 +464,7 @@ async def update_feishu_config(
 
 @router.get("/feishu/status")
 async def get_feishu_worker_status(
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -494,7 +493,7 @@ async def get_feishu_worker_status(
 
 @router.post("/feishu/test")
 async def test_feishu_connection(
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -543,7 +542,7 @@ async def test_feishu_connection(
 
 @router.get("/oss", response_model=OSSConfigResponse)
 async def get_oss_config(
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -574,7 +573,7 @@ async def get_oss_config(
 @router.put("/oss")
 async def update_oss_config(
     config: OSSConfigUpdate,
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "update")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -644,7 +643,7 @@ async def update_oss_config(
 
 @router.post("/oss/test")
 async def test_oss_connection(
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """

@@ -109,6 +109,12 @@ class Category(Base):
         onupdate=datetime.utcnow,
     )
 
+    # ==================== 权限字段 ====================
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True,
+        index=True, comment="所属组织"
+    )
+
     # ==================== 关系 ====================
     parent: Mapped[Optional["Category"]] = relationship(
         "Category",

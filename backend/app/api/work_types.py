@@ -29,8 +29,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.logging import get_logger
-from app.core.security import get_current_admin_user
-from app.models.user import User
+from app.core.security import require_permission, DataScope
 from app.models.work_type import WorkType, WorkTypeSuggestion
 from app.schemas.work_type import (
     WorkTypeCreate,
@@ -57,7 +56,7 @@ async def list_work_types(
     level: Optional[int] = None,
     parent_id: Optional[str] = None,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("work_type", "read")),
 ):
     """
     获取工作类型列表（扁平化）
@@ -97,7 +96,7 @@ async def list_work_types(
 async def get_work_type_tree(
     is_active: Optional[bool] = True,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("work_type", "read")),
 ):
     """
     获取工作类型树形结构
@@ -157,7 +156,7 @@ async def get_work_type_tree(
 async def create_work_type(
     data: WorkTypeCreate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("work_type", "create")),
 ):
     """
     创建工作类型
@@ -211,7 +210,7 @@ async def create_work_type(
     await session.commit()
     await session.refresh(work_type)
 
-    logger.info(f"[WorkTypesAPI] 创建工作类型: {work_type.code} by {admin.email}")
+    logger.info(f"[WorkTypesAPI] 创建工作类型: {work_type.code} by {scope.user.email}")
     return WorkTypeResponse.model_validate(work_type)
 
 
@@ -219,7 +218,7 @@ async def create_work_type(
 async def get_work_type(
     work_type_id: str,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("work_type", "read")),
 ):
     """获取工作类型详情"""
     work_type = await session.get(WorkType, work_type_id)
@@ -233,7 +232,7 @@ async def update_work_type(
     work_type_id: str,
     data: WorkTypeUpdate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("work_type", "update")),
 ):
     """
     更新工作类型
@@ -281,7 +280,7 @@ async def update_work_type(
     await session.commit()
     await session.refresh(work_type)
 
-    logger.info(f"[WorkTypesAPI] 更新工作类型: {work_type.code} by {admin.email}")
+    logger.info(f"[WorkTypesAPI] 更新工作类型: {work_type.code} by {scope.user.email}")
     return WorkTypeResponse.model_validate(work_type)
 
 
@@ -289,7 +288,7 @@ async def update_work_type(
 async def delete_work_type(
     work_type_id: str,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("work_type", "delete")),
 ):
     """
     删除工作类型
@@ -312,7 +311,7 @@ async def delete_work_type(
     await session.delete(work_type)
     await session.commit()
 
-    logger.info(f"[WorkTypesAPI] 删除工作类型: {work_type.code} by {admin.email}")
+    logger.info(f"[WorkTypesAPI] 删除工作类型: {work_type.code} by {scope.user.email}")
     return {"message": "删除成功"}
 
 
@@ -327,7 +326,7 @@ async def list_suggestions(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("work_type", "read")),
 ):
     """
     获取工作类型建议列表
@@ -362,7 +361,7 @@ async def list_suggestions(
 async def get_suggestion(
     suggestion_id: str,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("work_type", "read")),
 ):
     """获取建议详情"""
     suggestion = await session.get(WorkTypeSuggestion, suggestion_id)
@@ -376,7 +375,7 @@ async def approve_suggestion(
     suggestion_id: str,
     data: ReviewRequest,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("work_type", "create")),
 ):
     """
     批准工作类型建议
@@ -441,13 +440,13 @@ async def approve_suggestion(
         keywords=final_keywords,
         is_active=True,
         is_system=False,
-        created_by=f"ai_approved_by_{admin.id}",
+        created_by=f"ai_approved_by_{scope.user.id}",
     )
     session.add(work_type)
 
     # 更新建议状态
     suggestion.status = "approved"
-    suggestion.reviewed_by = admin.id
+    suggestion.reviewed_by = scope.user.id
     suggestion.reviewed_at = datetime.utcnow()
     suggestion.review_note = data.note
     suggestion.created_work_type_id = work_type.id
@@ -456,7 +455,7 @@ async def approve_suggestion(
     await session.refresh(work_type)
 
     logger.info(
-        f"[WorkTypesAPI] 批准建议: {final_code} -> {work_type.id} by {admin.email}"
+        f"[WorkTypesAPI] 批准建议: {final_code} -> {work_type.id} by {scope.user.email}"
     )
 
     # 如果有关联的 Temporal Workflow，发送信号让工作流正常结束
@@ -465,7 +464,7 @@ async def approve_suggestion(
             from app.temporal import approve_suggestion as temporal_approve
             await temporal_approve(
                 suggestion.workflow_id,
-                str(admin.id),
+                str(scope.user.id),
                 data.note or "",
             )
         except Exception as e:
@@ -480,7 +479,7 @@ async def reject_suggestion(
     suggestion_id: str,
     data: ReviewRequest,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("work_type", "update")),
 ):
     """
     拒绝工作类型建议
@@ -497,13 +496,13 @@ async def reject_suggestion(
 
     # 直接在本地处理
     suggestion.status = "rejected"
-    suggestion.reviewed_by = admin.id
+    suggestion.reviewed_by = scope.user.id
     suggestion.reviewed_at = datetime.utcnow()
     suggestion.review_note = data.note
 
     await session.commit()
 
-    logger.info(f"[WorkTypesAPI] 拒绝建议: {suggestion.suggested_code} by {admin.email}")
+    logger.info(f"[WorkTypesAPI] 拒绝建议: {suggestion.suggested_code} by {scope.user.email}")
 
     # 如果有关联的 Temporal Workflow，发送信号让工作流正常结束
     if suggestion.workflow_id:
@@ -511,7 +510,7 @@ async def reject_suggestion(
             from app.temporal import reject_suggestion as temporal_reject
             await temporal_reject(
                 suggestion.workflow_id,
-                str(admin.id),
+                str(scope.user.id),
                 data.note or "",
             )
         except Exception as e:

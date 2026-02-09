@@ -17,8 +17,7 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_admin_user
-from app.models.user import User
+from app.core.security import require_permission, DataScope
 from app.models.trade_term import TradeTerm
 from app.schemas.trade_term import TradeTermResponse, TradeTermListResponse
 
@@ -34,7 +33,7 @@ async def list_trade_terms(
     version: Optional[str] = Query(None, description="筛选 Incoterms 版本"),
     is_current: Optional[bool] = Query(None, description="筛选是否当前有效"),
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
 ):
     """获取贸易术语列表（只读）"""
     query = select(TradeTerm).order_by(TradeTerm.sort_order, TradeTerm.code)
@@ -75,7 +74,7 @@ async def list_trade_terms(
 async def get_trade_term(
     term_id: str,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
 ):
     """获取贸易术语详情"""
     term = await session.get(TradeTerm, term_id)

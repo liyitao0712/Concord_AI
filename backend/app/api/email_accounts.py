@@ -11,8 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.logging import get_logger
-from app.core.security import get_current_admin_user
-from app.models.user import User
+from app.core.security import require_permission, DataScope
 from app.models.email_account import EmailAccount
 from app.schemas.email_account import (
     EmailAccountCreate,
@@ -29,7 +28,6 @@ logger = get_logger(__name__)
 router = APIRouter(
     prefix="/admin/email-accounts",
     tags=["邮箱管理"],
-    dependencies=[Depends(get_current_admin_user)],
 )
 
 
@@ -65,7 +63,7 @@ def _account_to_response(account: EmailAccount) -> EmailAccountResponse:
 @router.get("", response_model=EmailAccountListResponse)
 async def list_email_accounts(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("email_account", "read")),
 ):
     """
     获取所有邮箱账户列表
@@ -84,7 +82,7 @@ async def list_email_accounts(
 async def create_email_account(
     data: EmailAccountCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("email_account", "create")),
 ):
     """
     创建新的邮箱账户
@@ -132,7 +130,7 @@ async def create_email_account(
 async def get_email_account(
     account_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("email_account", "read")),
 ):
     """
     获取单个邮箱账户详情
@@ -155,7 +153,7 @@ async def update_email_account(
     account_id: int,
     data: EmailAccountUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("email_account", "update")),
 ):
     """
     更新邮箱账户
@@ -195,7 +193,7 @@ async def update_email_account(
 async def get_email_account_stats(
     account_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("email_account", "read")),
 ):
     """
     获取邮箱账户统计信息
@@ -217,7 +215,7 @@ async def get_email_account_stats(
 async def delete_email_account(
     account_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("email_account", "delete")),
 ):
     """
     删除邮箱账户（级联删除）
@@ -263,7 +261,7 @@ async def delete_email_account(
 async def set_default_email_account(
     account_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("email_account", "update")),
 ):
     """
     设置为默认邮箱账户
@@ -298,7 +296,7 @@ async def test_email_account(
     account_id: int,
     data: EmailAccountTestRequest = EmailAccountTestRequest(),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("email_account", "read")),
 ):
     """
     测试邮箱连接
@@ -372,7 +370,7 @@ async def fetch_emails_now(
     account_id: int,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("email_account", "update")),
 ):
     """
     立即拉取该邮箱的新邮件

@@ -17,8 +17,7 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_admin_user
-from app.models.user import User
+from app.core.security import require_permission, DataScope
 from app.models.payment_method import PaymentMethod
 from app.schemas.payment_method import PaymentMethodResponse, PaymentMethodListResponse
 
@@ -33,7 +32,7 @@ async def list_payment_methods(
     search: Optional[str] = Query(None, description="搜索代码/名称"),
     category: Optional[str] = Query(None, description="筛选分类: remittance/credit/collection/other"),
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
 ):
     """获取付款方式列表（只读）"""
     query = select(PaymentMethod).order_by(PaymentMethod.sort_order, PaymentMethod.code)
@@ -71,7 +70,7 @@ async def list_payment_methods(
 async def get_payment_method(
     method_id: str,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
 ):
     """获取付款方式详情"""
     method = await session.get(PaymentMethod, method_id)

@@ -50,6 +50,26 @@ from app.api import trade_terms_ref as trade_terms_ref_router
 from app.api import payment_methods_ref as payment_methods_ref_router
 from app.api import upload as upload_router
 from app.api import storage as storage_router
+from app.api import warehouses as warehouses_router
+from app.api import inventories as inventories_router
+from app.api import purchase_contracts as purchase_contracts_router
+from app.api import sales_contracts as sales_contracts_router
+from app.api import inbound_orders as inbound_orders_router
+from app.api import outbound_orders as outbound_orders_router
+from app.api import contract_numbers as contract_numbers_router
+from app.api import tts as tts_router
+from app.api import client_rfqs as client_rfqs_router
+from app.api import quotations as quotations_router
+from app.api import supplier_rfqs as supplier_rfqs_router
+from app.api import supplier_quotations as supplier_quotations_router
+from app.api import projects as projects_router
+from app.api import tasks as tasks_router
+from app.api import progress as progress_router
+from app.api import project_suggestions as project_suggestions_router
+from app.api import permissions_api as permissions_api_router
+from app.api import organizations as organizations_router
+from app.api import departments as departments_router
+from app.api import roles as roles_router
 
 
 # 初始化日志系统（在应用启动前）
@@ -472,6 +492,133 @@ app.include_router(upload_router.router)
 # 文件下载路由（公开，通过 token 验证）
 # - GET /api/storage/download/{key} - 临时链接下载
 app.include_router(storage_router.router)
+
+# 仓库管理路由（仅管理员）
+# - GET/POST /admin/warehouses - 仓库 CRUD
+# - GET/PUT/DELETE /admin/warehouses/{id} - 仓库详情/更新/删除
+app.include_router(warehouses_router.router)
+
+# 库存管理路由（仅管理员，只读）
+# - GET /admin/inventories - 库存列表
+# - GET /admin/inventories/summary - 库存汇总
+app.include_router(inventories_router.router)
+
+# 采购合同管理路由（仅管理员）
+# - GET/POST /admin/purchase-contracts - 采购合同 CRUD
+# - GET/PUT/DELETE /admin/purchase-contracts/{id} - 详情/更新/删除
+# - PUT /admin/purchase-contracts/{id}/status - 状态变更
+# - PUT /admin/purchase-contracts/{id}/lines - 更新明细行
+app.include_router(purchase_contracts_router.router)
+
+# 销售合同管理路由（仅管理员）
+# - GET/POST /admin/sales-contracts - 销售合同 CRUD
+# - GET/PUT/DELETE /admin/sales-contracts/{id} - 详情/更新/删除
+# - PUT /admin/sales-contracts/{id}/status - 状态变更
+# - PUT /admin/sales-contracts/{id}/lines - 更新明细行
+# - POST /admin/sales-contracts/{id}/link-purchase - 绑定采购合同
+app.include_router(sales_contracts_router.router)
+
+# 入仓单管理路由（仅管理员）
+# - GET/POST /admin/inbound-orders - 入仓单 CRUD
+# - GET/PUT/DELETE /admin/inbound-orders/{id} - 详情/更新/删除
+# - PUT /admin/inbound-orders/{id}/status - 状态变更
+# - POST /admin/inbound-orders/{id}/confirm-receive - 确认收货
+app.include_router(inbound_orders_router.router)
+
+# 出仓单管理路由（仅管理员）
+# - GET/POST /admin/outbound-orders - 出仓单 CRUD
+# - GET/PUT/DELETE /admin/outbound-orders/{id} - 详情/更新/删除
+# - PUT /admin/outbound-orders/{id}/status - 状态变更
+# - POST /admin/outbound-orders/{id}/confirm-ship - 确认出仓
+app.include_router(outbound_orders_router.router)
+
+# 合同编号规则路由（仅管理员）
+# - GET /admin/contract-number-rules - 规则列表
+# - PUT /admin/contract-number-rules/{type} - 更新规则
+# - POST /admin/contract-number-rules/preview - 预览编号
+app.include_router(contract_numbers_router.router)
+
+# TTS 语音合成路由（仅管理员）
+# - POST /admin/tts/synthesize - 文本转语音
+app.include_router(tts_router.router)
+
+# 客户询价单管理路由（仅管理员）
+# - GET/POST /admin/client-rfqs - 客户询价单 CRUD
+# - GET/PUT/DELETE /admin/client-rfqs/{id} - 详情/更新/删除
+# - PUT /admin/client-rfqs/{id}/status - 状态变更
+# - PUT /admin/client-rfqs/{id}/lines - 更新明细行
+app.include_router(client_rfqs_router.router)
+
+# 报价单管理路由（仅管理员）
+# - GET/POST /admin/quotations - 报价单 CRUD
+# - GET/PUT/DELETE /admin/quotations/{id} - 详情/更新/删除
+# - PUT /admin/quotations/{id}/status - 状态变更
+# - PUT /admin/quotations/{id}/lines - 更新明细行
+app.include_router(quotations_router.router)
+
+# 供应商询价单管理路由（仅管理员）
+# - GET/POST /admin/supplier-rfqs - 供应商询价单 CRUD
+# - GET/PUT/DELETE /admin/supplier-rfqs/{id} - 详情/更新/删除
+# - PUT /admin/supplier-rfqs/{id}/status - 状态变更
+# - PUT /admin/supplier-rfqs/{id}/lines - 更新明细行
+app.include_router(supplier_rfqs_router.router)
+
+# 供应商报价单管理路由（仅管理员）
+# - GET/POST /admin/supplier-quotations - 供应商报价单 CRUD
+# - GET/PUT/DELETE /admin/supplier-quotations/{id} - 详情/更新/删除
+# - PUT /admin/supplier-quotations/{id}/status - 状态变更
+# - PUT /admin/supplier-quotations/{id}/lines - 更新明细行
+app.include_router(supplier_quotations_router.router)
+
+# 项目管理路由（仅管理员）
+# - GET/POST /admin/projects - 项目 CRUD
+# - GET/PUT/DELETE /admin/projects/{id} - 项目详情/更新/删除
+# - PUT /admin/projects/{id}/status - 状态变更
+# - POST/DELETE /admin/projects/{id}/associations - 关联管理
+# - POST /admin/projects/from-email/{email_id} - 从邮件预填
+app.include_router(projects_router.router)
+
+# 任务管理路由（仅管理员）
+# - GET/POST /admin/tasks - 任务 CRUD（列表需 project_id）
+# - GET/PUT/DELETE /admin/tasks/{id} - 任务详情/更新/删除
+app.include_router(tasks_router.router)
+
+# 进度记录路由（仅管理员）
+# - GET/POST /admin/progress - 进度 CRUD（列表需 task_id）
+# - DELETE /admin/progress/{id} - 删除进度
+app.include_router(progress_router.router)
+
+# 项目建议审批路由（仅管理员）
+# - GET /admin/project-suggestions - 建议列表
+# - GET /admin/project-suggestions/{id} - 建议详情
+# - POST /admin/project-suggestions/{id}/approve - 批准建议
+# - POST /admin/project-suggestions/{id}/reject - 拒绝建议
+app.include_router(project_suggestions_router.router)
+
+# 权限管理路由（只读，仅管理员）
+# - GET /admin/permissions - 获取所有权限（按资源分组）
+app.include_router(permissions_api_router.router)
+
+# 组织管理路由（仅超级管理员）
+# - GET/POST /admin/organizations - 组织 CRUD
+# - GET/PUT/DELETE /admin/organizations/{id} - 组织详情/更新/删除
+app.include_router(organizations_router.router)
+
+# 部门管理路由（仅管理员）
+# - GET /admin/departments - 部门列表（扁平）
+# - GET /admin/departments/tree - 部门树
+# - POST /admin/departments - 创建部门
+# - PUT /admin/departments/{id} - 更新部门
+# - DELETE /admin/departments/{id} - 删除部门
+# - PUT /admin/departments/sort - 批量更新排序
+app.include_router(departments_router.router)
+
+# 角色管理路由（仅管理员）
+# - GET/POST /admin/roles - 角色 CRUD
+# - GET/PUT/DELETE /admin/roles/{id} - 角色详情/更新/删除
+# - PUT /admin/roles/{id}/permissions - 批量设置权限
+# - PUT /admin/roles/{id}/data-scopes - 批量设置数据范围
+app.include_router(roles_router.router)
 
 
 # ==================== 根路由 ====================

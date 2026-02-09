@@ -16,9 +16,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_async_session
-from app.core.security import get_current_admin_user
+from app.core.security import require_permission, DataScope
 from app.core.logging import get_logger
-from app.models.user import User
 from app.models.customer import Customer, Contact
 from app.models.customer_suggestion import CustomerSuggestion
 from app.schemas.customer_suggestion import (
@@ -39,7 +38,7 @@ async def list_customer_suggestions(
     page_size: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
     session: AsyncSession = Depends(get_async_session),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("customer", "read")),
 ):
     """
     获取客户建议列表
@@ -85,7 +84,7 @@ async def list_customer_suggestions(
 async def get_customer_suggestion(
     suggestion_id: str,
     session: AsyncSession = Depends(get_async_session),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("customer", "read")),
 ):
     """获取客户建议详情"""
     suggestion = await session.get(CustomerSuggestion, suggestion_id)
@@ -99,7 +98,7 @@ async def approve_customer_suggestion(
     suggestion_id: str,
     data: CustomerReviewRequest,
     session: AsyncSession = Depends(get_async_session),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("customer", "create")),
 ):
     """
     批准客户建议
@@ -151,6 +150,9 @@ async def approve_customer_suggestion(
             tags=final_tags,
             source="email",
             is_active=True,
+            org_id=scope.org_id,
+            owner_id=scope.user.id,
+            owner_dept_id=scope.user.department_id,
         )
         session.add(customer)
         created_customer_id = customer.id
@@ -167,6 +169,9 @@ async def approve_customer_suggestion(
                 phone=final_contact_phone,
                 is_primary=True,
                 is_active=True,
+                org_id=scope.org_id,
+                owner_id=scope.user.id,
+                owner_dept_id=scope.user.department_id,
             )
             session.add(contact)
             created_contact_id = contact.id
@@ -199,6 +204,9 @@ async def approve_customer_suggestion(
                 phone=final_contact_phone,
                 is_primary=False,
                 is_active=True,
+                org_id=scope.org_id,
+                owner_id=scope.user.id,
+                owner_dept_id=scope.user.department_id,
             )
             session.add(contact)
             created_contact_id = contact.id
@@ -206,7 +214,7 @@ async def approve_customer_suggestion(
 
     # 更新建议状态
     suggestion.status = "approved"
-    suggestion.reviewed_by = admin.id
+    suggestion.reviewed_by = scope.user.id
     suggestion.reviewed_at = datetime.utcnow()
     suggestion.review_note = data.note
     suggestion.created_customer_id = created_customer_id
@@ -216,7 +224,7 @@ async def approve_customer_suggestion(
 
     logger.info(
         f"[CustomerSuggestions] 批准建议: {final_company_name} "
-        f"(type={suggestion.suggestion_type}) by {admin.email}"
+        f"(type={suggestion.suggestion_type}) by {scope.user.email}"
     )
 
     # 如果有关联的 Temporal Workflow，发送信号让工作流正常结束
@@ -225,7 +233,7 @@ async def approve_customer_suggestion(
             from app.temporal import approve_customer_suggestion as temporal_approve
             await temporal_approve(
                 suggestion.workflow_id,
-                str(admin.id),
+                str(scope.user.id),
                 data.note or "",
             )
         except Exception as e:
@@ -245,7 +253,7 @@ async def reject_customer_suggestion(
     suggestion_id: str,
     data: CustomerReviewRequest,
     session: AsyncSession = Depends(get_async_session),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("customer", "update")),
 ):
     """
     拒绝客户建议
@@ -262,7 +270,7 @@ async def reject_customer_suggestion(
 
     # 直接在本地处理
     suggestion.status = "rejected"
-    suggestion.reviewed_by = admin.id
+    suggestion.reviewed_by = scope.user.id
     suggestion.reviewed_at = datetime.utcnow()
     suggestion.review_note = data.note
 
@@ -270,7 +278,7 @@ async def reject_customer_suggestion(
 
     logger.info(
         f"[CustomerSuggestions] 拒绝建议: {suggestion.suggested_company_name} "
-        f"by {admin.email}"
+        f"by {scope.user.email}"
     )
 
     # 如果有关联的 Temporal Workflow，发送信号让工作流正常结束
@@ -279,7 +287,7 @@ async def reject_customer_suggestion(
             from app.temporal import reject_customer_suggestion as temporal_reject
             await temporal_reject(
                 suggestion.workflow_id,
-                str(admin.id),
+                str(scope.user.id),
                 data.note or "",
             )
         except Exception as e:

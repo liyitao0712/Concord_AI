@@ -16,8 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 
 from app.core.logging import get_logger
-from app.core.security import get_current_admin_user
-from app.models.user import User
+from app.core.security import require_permission, DataScope
 from app.storage.oss import oss_client
 from app.storage.local_file import local_storage
 
@@ -46,7 +45,7 @@ class UploadResponse(BaseModel):
 async def upload_file(
     file: UploadFile = File(...),
     directory: str = Form("images/general", description="存储目录，如 images/categories"),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("setting", "update")),
 ):
     """
     通用文件上传

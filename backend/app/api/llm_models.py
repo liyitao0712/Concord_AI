@@ -10,8 +10,7 @@ from pydantic import BaseModel
 import uuid
 
 from app.core.database import get_db
-from app.core.security import get_current_admin_user
-from app.models.user import User
+from app.core.security import require_permission, DataScope
 from app.models.llm_model_config import LLMModelConfig
 
 
@@ -81,7 +80,7 @@ async def list_models(
     is_enabled: Optional[bool] = None,
     is_configured: Optional[bool] = None,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("llm_model", "read")),
 ):
     """
     获取所有 LLM 模型配置列表
@@ -117,7 +116,7 @@ async def list_models(
 async def create_model(
     data: LLMModelConfigCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("llm_model", "create")),
 ):
     """
     创建新的 LLM 模型配置
@@ -178,7 +177,7 @@ async def create_model(
 async def get_model(
     model_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("llm_model", "read")),
 ):
     """获取单个模型配置详情"""
     query = select(LLMModelConfig).where(LLMModelConfig.model_id == model_id)
@@ -196,7 +195,7 @@ async def update_model(
     model_id: str,
     data: LLMModelConfigUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("llm_model", "update")),
 ):
     """
     更新模型配置
@@ -250,7 +249,7 @@ async def test_model(
     model_id: str,
     data: LLMModelTestRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("llm_model", "read")),
 ):
     """
     测试模型连接
@@ -346,7 +345,7 @@ async def test_model(
 @router.get("/stats/usage", response_model=dict)
 async def get_usage_stats(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("llm_model", "read")),
 ):
     """
     获取模型使用统计
@@ -381,7 +380,7 @@ async def get_usage_stats(
 async def delete_model(
     model_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("llm_model", "delete")),
 ):
     """
     删除自定义模型配置

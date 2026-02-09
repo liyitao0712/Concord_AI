@@ -7,7 +7,7 @@
 # 3. 下载原始邮件 (.eml)
 # 4. 下载附件
 
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -18,7 +18,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_async_session
-from app.core.security import get_current_admin_user, decode_token
+from app.core.security import decode_token, require_permission, apply_data_scope, DataScope
 from app.models.user import User
 from app.models.email_raw import EmailRawMessage, EmailAttachment
 from app.models.email_account import EmailAccount
@@ -200,7 +200,109 @@ class EmailListResponse(BaseModel):
     items: List[EmailListItem]
 
 
+# ==================== 每日播报 Schema ====================
+
+class BriefingItem(BaseModel):
+    """每日播报条目"""
+    analysis_id: str
+    email_id: str
+    subject: str
+    sender: str
+    sender_name: Optional[str] = None
+    received_at: datetime
+    summary: str
+    broadcast: Optional[str] = None
+    sender_type: Optional[str] = None
+    sender_company: Optional[str] = None
+    intent: Optional[str] = None
+    urgency: Optional[str] = None
+    sentiment: Optional[str] = None
+    priority: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class TodayBriefingResponse(BaseModel):
+    """当日播报响应"""
+    date: str
+    total: int
+    items: List[BriefingItem]
+
+
 # ==================== API Endpoints ====================
+
+@router.get("/today-briefing", response_model=TodayBriefingResponse)
+async def get_today_briefing(
+    session: AsyncSession = Depends(get_async_session),
+    scope: DataScope = Depends(require_permission("email", "read")),
+):
+    """
+    获取当日邮件分析播报
+
+    返回当天已分析的邮件摘要列表，按邮件接收时间倒序排列。
+    """
+    today = date.today()
+
+    # 联表查询：email_analyses + email_raw_messages，按邮件接收时间为当天筛选
+    query = (
+        select(EmailAnalysis, EmailRawMessage)
+        .join(EmailRawMessage, EmailAnalysis.email_id == EmailRawMessage.id)
+        .where(func.date(EmailRawMessage.received_at) == today)
+        .order_by(EmailRawMessage.received_at.desc())
+    )
+
+    # 去重：同一封邮件只取最新的分析结果
+    # 使用子查询获取每封邮件的最新 analysis id
+    latest_analysis_subq = (
+        select(
+            EmailAnalysis.email_id,
+            func.max(EmailAnalysis.created_at).label("max_created")
+        )
+        .group_by(EmailAnalysis.email_id)
+        .subquery()
+    )
+
+    query = (
+        select(EmailAnalysis, EmailRawMessage)
+        .join(EmailRawMessage, EmailAnalysis.email_id == EmailRawMessage.id)
+        .join(
+            latest_analysis_subq,
+            (EmailAnalysis.email_id == latest_analysis_subq.c.email_id) &
+            (EmailAnalysis.created_at == latest_analysis_subq.c.max_created)
+        )
+        .where(func.date(EmailRawMessage.received_at) == today)
+        .order_by(EmailRawMessage.received_at.desc())
+    )
+
+    result = await session.execute(query)
+    rows = result.all()
+
+    items = []
+    for analysis, email in rows:
+        items.append(BriefingItem(
+            analysis_id=analysis.id,
+            email_id=email.id,
+            subject=email.subject,
+            sender=email.sender,
+            sender_name=email.sender_name,
+            received_at=email.received_at,
+            summary=analysis.summary,
+            broadcast=analysis.broadcast,
+            sender_type=analysis.sender_type,
+            sender_company=analysis.sender_company,
+            intent=analysis.intent,
+            urgency=analysis.urgency,
+            sentiment=analysis.sentiment,
+            priority=analysis.priority,
+        ))
+
+    return TodayBriefingResponse(
+        date=today.isoformat(),
+        total=len(items),
+        items=items,
+    )
+
 
 @router.get("", response_model=EmailListResponse)
 async def list_emails(
@@ -210,7 +312,7 @@ async def list_emails(
     is_processed: Optional[bool] = None,
     search: Optional[str] = None,
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("email", "read")),
 ):
     """
     获取邮件列表
@@ -303,7 +405,7 @@ async def list_emails(
 async def get_email_detail(
     email_id: str,
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("email", "read")),
 ):
     """
     获取邮件详情
@@ -465,7 +567,7 @@ class RouteExecuteResponse(BaseModel):
 async def analyze_email(
     email_id: str,
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("email", "read")),
 ):
     """
     分析邮件意图
@@ -533,7 +635,7 @@ async def execute_email_route(
     email_id: str,
     data: RouteExecuteRequest,
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("email", "update")),
 ):
     """
     执行邮件路由
@@ -608,6 +710,7 @@ class EmailAnalysisResponse(BaseModel):
     id: str
     email_id: str
     summary: str
+    broadcast: Optional[str] = None
     key_points: Optional[List[str]] = None
     original_language: Optional[str] = None
 
@@ -626,7 +729,6 @@ class EmailAnalysisResponse(BaseModel):
     # 业务
     products: Optional[List[dict]] = None
     amounts: Optional[List[dict]] = None
-    trade_terms: Optional[dict] = None
     deadline: Optional[str] = None
 
     # 跟进
@@ -649,7 +751,7 @@ async def ai_analyze_email(
     email_id: str,
     force: bool = Query(False, description="强制重新分析"),
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("email", "update")),
 ):
     """
     AI 分析邮件
@@ -658,7 +760,7 @@ async def ai_analyze_email(
     - 摘要和关键要点
     - 发件方身份（客户/供应商）
     - 意图分类
-    - 产品、金额、贸易条款等业务信息
+    - 产品、金额等业务信息
     - 处理建议
 
     分析结果会保存到数据库，下次查询可直接返回。
@@ -697,7 +799,6 @@ async def ai_analyze_email(
                 sentiment=existing.sentiment,
                 products=existing.products,
                 amounts=existing.amounts,
-                trade_terms=existing.trade_terms,
                 deadline=existing.deadline.isoformat() if existing.deadline else None,
                 questions=existing.questions,
                 action_required=existing.action_required,
@@ -776,6 +877,7 @@ async def ai_analyze_email(
         id=str(uuid4()),
         email_id=email_id,
         summary=analysis_result.get("summary", ""),
+        broadcast=analysis_result.get("broadcast"),
         key_points=analysis_result.get("key_points"),
         original_language=analysis_result.get("original_language"),
         sender_type=analysis_result.get("sender_type"),
@@ -788,7 +890,6 @@ async def ai_analyze_email(
         sentiment=analysis_result.get("sentiment"),
         products=analysis_result.get("products"),
         amounts=analysis_result.get("amounts"),
-        trade_terms=analysis_result.get("trade_terms"),
         deadline=deadline_dt,
         questions=analysis_result.get("questions"),
         action_required=analysis_result.get("action_required"),
@@ -797,6 +898,7 @@ async def ai_analyze_email(
         cleaned_content=analysis_result.get("cleaned_content"),
         llm_model=analysis_result.get("llm_model"),
         token_used=analysis_result.get("token_used"),
+        org_id=scope.org_id,
     )
 
     session.add(analysis)
@@ -807,6 +909,7 @@ async def ai_analyze_email(
         id=analysis.id,
         email_id=analysis.email_id,
         summary=analysis.summary,
+        broadcast=analysis.broadcast,
         key_points=analysis.key_points,
         original_language=analysis.original_language,
         sender_type=analysis.sender_type,
@@ -819,7 +922,6 @@ async def ai_analyze_email(
         sentiment=analysis.sentiment,
         products=analysis.products,
         amounts=analysis.amounts,
-        trade_terms=analysis.trade_terms,
         deadline=analysis.deadline.isoformat() if analysis.deadline else None,
         questions=analysis.questions,
         action_required=analysis.action_required,
@@ -835,7 +937,7 @@ async def ai_analyze_email(
 async def get_email_analysis(
     email_id: str,
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("email", "read")),
 ):
     """
     获取邮件分析结果
@@ -856,6 +958,7 @@ async def get_email_analysis(
         id=analysis.id,
         email_id=analysis.email_id,
         summary=analysis.summary,
+        broadcast=analysis.broadcast,
         key_points=analysis.key_points,
         original_language=analysis.original_language,
         sender_type=analysis.sender_type,
@@ -868,7 +971,6 @@ async def get_email_analysis(
         sentiment=analysis.sentiment,
         products=analysis.products,
         amounts=analysis.amounts,
-        trade_terms=analysis.trade_terms,
         deadline=analysis.deadline.isoformat() if analysis.deadline else None,
         questions=analysis.questions,
         action_required=analysis.action_required,
@@ -895,7 +997,7 @@ class WorkTypeAnalyzeResponse(BaseModel):
 async def analyze_email_work_type(
     email_id: str,
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("email", "read")),
 ):
     """
     分析邮件工作类型
@@ -993,7 +1095,7 @@ class CustomerExtractResponse(BaseModel):
 async def extract_customer_from_email(
     email_id: str,
     session: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("email", "read")),
 ):
     """
     从邮件中提取客户信息

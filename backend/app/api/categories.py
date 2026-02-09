@@ -31,7 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.logging import get_logger
-from app.core.security import get_current_admin_user
+from app.core.security import get_current_admin_user, require_permission, apply_data_scope, DataScope
 from app.models.user import User
 from app.models.category import Category
 from app.models.product import Product
@@ -127,7 +127,7 @@ async def _generate_next_code(session: AsyncSession, parent_id: Optional[str]) -
 async def get_next_code(
     parent_id: Optional[str] = Query(None, description="父品类 ID，不填则生成根品类编码"),
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("category", "read")),
 ):
     """获取下一个可用的品类编码"""
     code = await _generate_next_code(session, parent_id)
@@ -137,7 +137,7 @@ async def get_next_code(
 @router.get("/tree", response_model=CategoryTreeResponse)
 async def get_category_tree(
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("category", "read")),
 ):
     """
     获取品类树形结构
@@ -145,6 +145,9 @@ async def get_category_tree(
     一次性查出所有品类，在 Python 层构建树形结构，按编码排序
     """
     query = select(Category).order_by(Category.code)
+
+    # 数据权限过滤
+    query = await apply_data_scope(query, Category, "category", scope, session)
 
     result = await session.execute(query)
     categories = list(result.scalars().all())
@@ -198,10 +201,13 @@ async def list_categories(
     search: Optional[str] = Query(None, description="搜索品类名称/编码"),
     parent_id: Optional[str] = Query(None, description="筛选父品类 ID"),
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("category", "read")),
 ):
     """获取品类列表（平铺，分页）"""
     query = select(Category).order_by(Category.code)
+
+    # 数据权限过滤
+    query = await apply_data_scope(query, Category, "category", scope, session)
 
     if search:
         search_filter = f"%{search}%"
@@ -284,7 +290,7 @@ async def list_categories(
 async def create_category(
     data: CategoryCreate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("category", "create")),
 ):
     """创建品类"""
     # 验证父品类存在
@@ -311,13 +317,14 @@ async def create_category(
         tax_rebate_rate=data.tax_rebate_rate,
         image_key=data.image_key,
         image_storage_type=data.image_storage_type,
+        org_id=scope.org_id,
     )
 
     session.add(category)
     await session.commit()
     await session.refresh(category)
 
-    logger.info(f"[CategoriesAPI] 创建品类: {category.code} {category.name} by {admin.email}")
+    logger.info(f"[CategoriesAPI] 创建品类: {category.code} {category.name} by {scope.user.email}")
 
     resp = CategoryResponse.model_validate(category)
     resp.product_count = 0
@@ -334,10 +341,13 @@ async def create_category(
 async def get_category(
     category_id: str,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("category", "read")),
 ):
     """获取品类详情"""
-    category = await session.get(Category, category_id)
+    query = select(Category).where(Category.id == category_id)
+    query = await apply_data_scope(query, Category, "category", scope, session)
+    result = await session.execute(query)
+    category = result.scalar_one_or_none()
     if not category:
         raise HTTPException(status_code=404, detail="品类不存在")
 
@@ -372,10 +382,13 @@ async def update_category(
     category_id: str,
     data: CategoryUpdate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("category", "update")),
 ):
     """更新品类"""
-    category = await session.get(Category, category_id)
+    query = select(Category).where(Category.id == category_id)
+    query = await apply_data_scope(query, Category, "category", scope, session)
+    result = await session.execute(query)
+    category = result.scalar_one_or_none()
     if not category:
         raise HTTPException(status_code=404, detail="品类不存在")
 
@@ -421,7 +434,7 @@ async def update_category(
     await session.commit()
     await session.refresh(category)
 
-    logger.info(f"[CategoriesAPI] 更新品类: {category.code} {category.name} by {admin.email}")
+    logger.info(f"[CategoriesAPI] 更新品类: {category.code} {category.name} by {scope.user.email}")
 
     product_count = await session.scalar(
         select(func.count(Product.id)).where(Product.category_id == category_id)
@@ -451,14 +464,17 @@ async def update_category(
 async def delete_category(
     category_id: str,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("category", "delete")),
 ):
     """
     删除品类
 
     如果有子品类或产品关联，拒绝删除
     """
-    category = await session.get(Category, category_id)
+    query = select(Category).where(Category.id == category_id)
+    query = await apply_data_scope(query, Category, "category", scope, session)
+    result = await session.execute(query)
+    category = result.scalar_one_or_none()
     if not category:
         raise HTTPException(status_code=404, detail="品类不存在")
 
@@ -488,5 +504,5 @@ async def delete_category(
     await session.delete(category)
     await session.commit()
 
-    logger.info(f"[CategoriesAPI] 删除品类: {category_code} {category_name} by {admin.email}")
+    logger.info(f"[CategoriesAPI] 删除品类: {category_code} {category_name} by {scope.user.email}")
     return {"message": "删除成功"}

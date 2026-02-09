@@ -22,7 +22,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import String, Text, Boolean, Float, JSON, DateTime, Index
+from sqlalchemy import String, Text, Boolean, Float, JSON, DateTime, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -219,6 +219,12 @@ class CustomerSuggestion(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+    )
+
+    # ==================== 权限字段 ====================
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True,
+        index=True, comment="所属组织"
     )
 
     __table_args__ = (

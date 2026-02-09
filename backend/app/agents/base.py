@@ -36,6 +36,10 @@ class AgentState(TypedDict, total=False):
     input: str
     input_data: dict
 
+    # 权限上下文
+    org_id: Optional[str]
+    user_id: Optional[str]
+
     # 消息历史
     messages: list[dict]
 
@@ -211,6 +215,8 @@ class BaseAgent(ABC):
         initial_state: AgentState = {
             "input": input_text,
             "input_data": input_data or {},
+            "org_id": (input_data or {}).get("org_id"),
+            "user_id": (input_data or {}).get("user_id"),
             "messages": [],
             "tool_calls": [],
             "tool_results": [],

@@ -18,6 +18,7 @@ import {
   CategoryUpdate,
   CategoryTreeNode,
 } from '@/lib/api';
+import { usePermission } from '@/hooks/usePermission';
 import { ChevronRight, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -62,6 +63,7 @@ function TreeNodeItem({
   onDelete: (node: CategoryTreeNode) => void;
   onCreateChild: (parentId: string) => void;
 }) {
+  const { can } = usePermission();
   const hasChildren = node.children.length > 0;
   const isExpanded = expandedIds.has(node.id);
 
@@ -115,15 +117,21 @@ function TreeNodeItem({
         </TableCell>
         {/* 操作 */}
         <TableCell className="text-right text-sm space-x-2">
+          {can('category', 'create') && (
           <Button variant="ghost" size="sm" onClick={() => onCreateChild(node.id)} className="text-green-600 hover:text-green-800">
             添加子品类
           </Button>
+          )}
+          {can('category', 'update') && (
           <Button variant="ghost" size="sm" onClick={() => onEdit(node)}>
             编辑
           </Button>
+          )}
+          {can('category', 'delete') && (
           <Button variant="ghost" size="sm" onClick={() => onDelete(node)} className="text-destructive hover:text-destructive">
             删除
           </Button>
+          )}
         </TableCell>
       </TableRow>
       {/* 递归渲染子节点 */}
@@ -147,6 +155,7 @@ function TreeNodeItem({
 // ==================== 主页面 ====================
 
 export default function CategoriesPage() {
+  const { can } = usePermission();
   // 树数据
   const [treeData, setTreeData] = useState<CategoryTreeNode[]>([]);
   const [flatCategories, setFlatCategories] = useState<Category[]>([]);
@@ -368,9 +377,11 @@ export default function CategoriesPage() {
           <h1 className="text-2xl font-bold">品类管理</h1>
           <p className="mt-1 text-sm text-muted-foreground">管理产品品类的树形结构，支持多级分类</p>
         </div>
+        {can('category', 'create') && (
         <Button onClick={() => openCreateForm()}>
           新增根品类
         </Button>
+        )}
       </div>
 
       {/* 错误信息 */}

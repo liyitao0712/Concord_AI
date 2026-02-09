@@ -190,6 +190,7 @@ class EventDispatcher:
             "body_html": event.metadata.get("body_html"),
             "content": event.content,
             "received_at": event.metadata.get("received_at"),
+            "org_id": event.metadata.get("org_id"),
         }
 
         # 并行执行两个 Agent
@@ -264,6 +265,7 @@ class EventDispatcher:
                 "body_text": event.content,
                 "body_html": event.metadata.get("body_html"),
                 "received_at": event.metadata.get("received_at"),
+                "org_id": event.metadata.get("org_id"),
             }
 
             # 只执行 EmailSummarizer

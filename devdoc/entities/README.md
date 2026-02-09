@@ -4,15 +4,56 @@
 
 ## 实体列表
 
-### 核心业务实体
+### 客户与供应商
 
 | 实体 | 说明 | 文档 |
 |------|------|------|
-| WorkType | 工作类型（层级结构） | [WorkType.md](./WorkType.md) |
-| Event | 统一事件 | [Event.md](./Event.md) |
+| Customer / Contact | 客户 + 联系人 | [Customer.md](./Customer.md) |
+| CustomerSuggestion | AI 客户建议（待审批） | [Customer.md](./Customer.md) |
+| Supplier / SupplierContact | 供应商 + 联系人 | [Supplier.md](./Supplier.md) |
+
+### 产品与库存
+
+| 实体 | 说明 | 文档 |
+|------|------|------|
+| Category | 品类（层级结构） | [Category.md](./Category.md) |
+| Product / ProductSupplier | 产品 + 供应商关联 | [Product.md](./Product.md) |
+| Warehouse | 仓库 | [Warehouse.md](./Warehouse.md) |
+| Inventory | 库存 | [Inventory.md](./Inventory.md) |
+
+### 合同与单据
+
+| 实体 | 说明 | 文档 |
+|------|------|------|
+| SalesContract / SalesLine | 销售合同 + 明细行 | [SalesContract.md](./SalesContract.md) |
+| PurchaseContract / PurchaseLine | 采购合同 + 明细行 | [PurchaseContract.md](./PurchaseContract.md) |
+| InboundOrder / InboundLine | 入库单 + 明细行 | [InboundOrder.md](./InboundOrder.md) |
+| OutboundOrder / OutboundLine | 出库单 + 明细行 | [OutboundOrder.md](./OutboundOrder.md) |
+| ContractNumberRule | 合同编号规则 | [ContractNumberRule.md](./ContractNumberRule.md) |
+
+### 邮件处理
+
+| 实体 | 说明 | 文档 |
+|------|------|------|
 | EmailAccount | 邮箱账户 | [EmailAccount.md](./EmailAccount.md) |
-| EmailRawMessage | 原始邮件 | [EmailRawMessage.md](./EmailRawMessage.md) |
+| EmailRawMessage / EmailAttachment | 原始邮件 + 附件 | [EmailRawMessage.md](./EmailRawMessage.md) |
+| EmailAnalysis | AI 邮件分析结果 | [EmailAnalysis.md](./EmailAnalysis.md) |
+| Event | 统一事件 | [Event.md](./Event.md) |
+
+### 工作流与分类
+
+| 实体 | 说明 | 文档 |
+|------|------|------|
+| WorkType / WorkTypeSuggestion | 工作类型 + AI 建议 | [WorkType.md](./WorkType.md) |
 | Intent | 意图定义 | [Intent.md](./Intent.md) |
+
+### 基础数据（只读预设）
+
+| 实体 | 说明 | 文档 |
+|------|------|------|
+| Country | 国家/地区 | [Country.md](./Country.md) |
+| TradeTerm | 贸易术语 (Incoterms) | [TradeTerm.md](./TradeTerm.md) |
+| PaymentMethod | 付款方式 | [PaymentMethod.md](./PaymentMethod.md) |
 
 ### 用户与权限
 
@@ -25,40 +66,59 @@
 | 实体 | 说明 | 文档 |
 |------|------|------|
 | LLMModelConfig | LLM 模型配置 | [LLMModelConfig.md](./LLMModelConfig.md) |
+| Prompt / PromptHistory | Prompt 模板 + 修改历史 | [Prompt.md](./Prompt.md) |
 | SystemSetting | 系统设置 | [SystemSetting.md](./SystemSetting.md) |
-| Prompt | Prompt 模板 | [Prompt.md](./Prompt.md) |
 | WorkerConfig | Worker 配置 | [WorkerConfig.md](./WorkerConfig.md) |
 
-### 执行记录
+### 聊天与执行记录
 
 | 实体 | 说明 | 文档 |
 |------|------|------|
-| WorkflowExecution | 工作流执行记录 | - |
-| AgentExecution | Agent 执行记录 | - |
-
-### 聊天相关
-
-| 实体 | 说明 | 文档 |
-|------|------|------|
-| ChatSession | 聊天会话 | - |
-| ChatMessage | 聊天消息 | - |
+| ChatSession / ChatMessage | 聊天会话 + 消息 | [ChatSession.md](./ChatSession.md) |
+| WorkflowExecution / AgentExecution | 工作流 + Agent 执行记录 | [Execution.md](./Execution.md) |
 
 ## 实体关系图
 
 ```
-User ─────┬───────────────────────────────────────┐
-          │                                       │
-          ↓                                       ↓
-    EmailAccount ─────→ EmailRawMessage ─────→ Event
-          │                    │                  │
-          │                    ↓                  │
-          │              EmailAnalysis            │
-          │                                       │
-          │                                       ↓
-          └──────────────────────────────→ WorkType
-                                               ↑
-                                               │
-                                    WorkTypeSuggestion
+┌──────────────────────────────────────────────────────────────┐
+│                        邮件处理链路                            │
+│                                                              │
+│  EmailAccount ──→ EmailRawMessage ──→ Event                  │
+│                       │                  │                   │
+│                       ↓                  ↓                   │
+│                  EmailAnalysis      WorkType                 │
+│                       │                ↑                     │
+│                       ↓                │                     │
+│                CustomerSuggestion  WorkTypeSuggestion        │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│                        业务主数据                              │
+│                                                              │
+│  Customer ←──→ Contact          Category ──→ Product         │
+│      │                                         │             │
+│      │                          Supplier ←──→ SupplierContact│
+│      │                              │          │             │
+│      │                              └──── ProductSupplier ───┘
+│      │                                                       │
+│      ↓                              ↓                        │
+│  SalesContract ──→ SalesLine    PurchaseContract──→PurchaseLine│
+│      │                              │                        │
+│      ↓                              ↓                        │
+│  OutboundOrder──→OutboundLine   InboundOrder──→InboundLine   │
+│      │                              │                        │
+│      └───────→ Warehouse ←──────────┘                        │
+│                    │                                         │
+│                    ↓                                         │
+│                Inventory ←── Product                         │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│  基础数据: Country | TradeTerm | PaymentMethod               │
+│  编号规则: ContractNumberRule                                 │
+│  系统配置: User | LLMModelConfig | Prompt | SystemSetting    │
+│           WorkerConfig | ChatSession | ChatMessage           │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ## 数据库迁移

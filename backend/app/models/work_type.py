@@ -136,6 +136,12 @@ class WorkType(Base):
         onupdate=datetime.utcnow,
     )
 
+    # ==================== 权限字段 ====================
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True,
+        index=True, comment="所属组织"
+    )
+
     # 自引用关系
     parent: Mapped[Optional["WorkType"]] = relationship(
         "WorkType",
@@ -319,6 +325,12 @@ class WorkTypeSuggestion(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+    )
+
+    # ==================== 权限字段 ====================
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True,
+        index=True, comment="所属组织"
     )
 
     __table_args__ = (

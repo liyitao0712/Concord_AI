@@ -128,6 +128,7 @@ class AddNewClientHelperAgent(BaseAgent):
             # 使用 Anthropic SDK 直接调用（支持 web_search 服务端工具）
             client = anthropic.AsyncAnthropic(
                 api_key=os.environ.get("ANTHROPIC_API_KEY"),
+                timeout=120.0,  # 120 秒超时，web_search 可能较慢
             )
 
             response = await client.messages.create(

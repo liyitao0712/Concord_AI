@@ -138,6 +138,8 @@ class CustomerResponse(BaseModel):
     source: Optional[str] = Field(None, description="客户来源")
     notes: Optional[str] = Field(None, description="备注")
     tags: List[str] = Field(default=[], description="标签列表")
+    ai_status: Optional[str] = Field(None, description="AI 搜索状态: searching/completed/failed")
+    ai_confidence: Optional[float] = Field(None, description="AI 搜索置信度 0.0-1.0")
     contact_count: int = Field(default=0, description="联系人数量")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")

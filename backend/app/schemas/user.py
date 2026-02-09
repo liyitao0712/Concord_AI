@@ -166,28 +166,40 @@ class UserResponse(BaseModel):
     """
     用户信息响应模式
 
-    返回给客户端的用户数据，隐藏敏感字段（如密码哈希）
-
-    属性：
-        id: 用户 ID
-        email: 邮箱
-        name: 名称
-        role: 角色
-        is_active: 是否激活
-        created_at: 创建时间
+    返回给客户端的用户数据，隐藏敏感字段（如密码哈希）。
+    包含组织、部门、角色等权限上下文信息。
     """
 
     id: str = Field(..., description="User ID")
     email: str = Field(..., description="Email")
     name: str = Field(..., description="Name")
-    role: str = Field(..., description="Role")
+    role: str = Field(..., description="旧角色字段（兼容）")
     is_active: bool = Field(..., description="Is active")
     created_at: datetime = Field(..., description="Created at")
+    # 新增权限相关字段
+    org_id: Optional[str] = Field(None, description="所属组织 ID")
+    department_id: Optional[str] = Field(None, description="主部门 ID")
+    role_id: Optional[str] = Field(None, description="角色 ID")
+    supervisor_id: Optional[str] = Field(None, description="直属上级 ID")
+    is_super_admin: bool = Field(False, description="是否超级管理员")
 
     class Config:
-        """Pydantic 配置"""
-        # 允许从 ORM 对象（如 SQLAlchemy Model）创建
         from_attributes = True
+
+
+class UserMeResponse(UserResponse):
+    """
+    /me 接口响应，包含完整权限上下文
+
+    在 UserResponse 基础上附带组织名称、部门名称、角色名称、
+    功能权限列表和数据范围配置，供前端做菜单和按钮级控制。
+    """
+
+    org_name: Optional[str] = Field(None, description="组织名称")
+    department_name: Optional[str] = Field(None, description="主部门名称")
+    role_name: Optional[str] = Field(None, description="角色名称")
+    permissions: list[dict] = Field(default_factory=list, description="功能权限列表 [{resource, action}]")
+    data_scopes: list[dict] = Field(default_factory=list, description="数据范围 [{resource, scope_type}]")
 
 
 class UserUpdate(BaseModel):

@@ -7,7 +7,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Integer, Boolean, DateTime, Text, func
+from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -106,6 +106,12 @@ class EmailAccount(Base):
         onupdate=func.now(),
         nullable=False,
         comment="更新时间"
+    )
+
+    # ==================== 权限字段 ====================
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True,
+        index=True, comment="所属组织"
     )
 
     def __repr__(self):

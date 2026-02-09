@@ -36,6 +36,7 @@ import {
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { Plus, Play, Square, FlaskConical, Pencil, Trash2 } from 'lucide-react';
+import { usePermission } from '@/hooks/usePermission';
 
 // Worker 配置类型
 interface WorkerConfig {
@@ -62,8 +63,12 @@ interface WorkerTypeInfo {
   optional_fields: string[];
 }
 
-// API 基础 URL
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// API 基础 URL（自动适配局域网访问）
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    : 'http://localhost:8000');
 
 // API 请求函数
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -122,6 +127,7 @@ export default function WorkersPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const confirm = useConfirm();
+  const { can } = usePermission();
 
   // 模态框状态
   const [showModal, setShowModal] = useState(false);
@@ -340,10 +346,12 @@ export default function WorkersPage() {
             管理消息渠道 Worker（飞书、邮件等）
           </p>
         </div>
+        {can('worker', 'create') && (
         <Button onClick={openCreateModal}>
           <Plus className="h-4 w-4 mr-1" />
           添加 Worker
         </Button>
+        )}
       </div>
 
       {/* 提示信息 */}
@@ -435,6 +443,7 @@ export default function WorkersPage() {
                           <FlaskConical className="h-4 w-4 mr-1" />
                           测试
                         </Button>
+                        {can('worker', 'update') && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -443,6 +452,8 @@ export default function WorkersPage() {
                           <Pencil className="h-4 w-4 mr-1" />
                           编辑
                         </Button>
+                        )}
+                        {can('worker', 'delete') && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -452,6 +463,7 @@ export default function WorkersPage() {
                           <Trash2 className="h-4 w-4 mr-1" />
                           删除
                         </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

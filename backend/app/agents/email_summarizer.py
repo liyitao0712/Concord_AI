@@ -370,6 +370,7 @@ class EmailSummarizerAgent(BaseAgent):
         return {
             "email_id": email_id,
             "summary": f"分析失败: {error}",
+            "broadcast": None,
             "key_points": [],
             "intent": "other",
             "intent_confidence": 0,

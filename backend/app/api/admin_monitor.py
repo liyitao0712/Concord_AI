@@ -13,9 +13,8 @@ from sqlalchemy.sql.expression import cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_admin_user
+from app.core.security import require_permission, DataScope
 from app.core.logging import get_logger
-from app.models.user import User
 from app.models.execution import WorkflowExecution, AgentExecution
 
 logger = get_logger(__name__)
@@ -60,7 +59,7 @@ class AgentStats(BaseModel):
 
 @router.get("/summary", response_model=MonitorSummary)
 async def get_monitor_summary(
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -121,7 +120,7 @@ async def get_monitor_summary(
 async def get_workflow_list(
     limit: int = 20,
     status: Optional[str] = None,
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -155,7 +154,7 @@ async def get_workflow_list(
 
 @router.get("/agents", response_model=list[AgentStats])
 async def get_agent_stats(
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -204,7 +203,7 @@ async def get_agent_stats(
 @router.get("/workflows/{workflow_id}")
 async def get_workflow_detail(
     workflow_id: str,
-    current_user: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """

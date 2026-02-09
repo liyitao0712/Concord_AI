@@ -19,6 +19,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { PageLoading } from '@/components/LoadingSpinner';
+import { usePermission } from '@/hooks/usePermission';
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<AgentListItem[]>([]);
@@ -46,6 +47,7 @@ export default function AgentsPage() {
   const [activeTab, setActiveTab] = useState<string>('config');
 
   const confirm = useConfirm();
+  const { can } = usePermission();
 
   useEffect(() => {
     loadData();
@@ -283,9 +285,11 @@ export default function AgentsPage() {
                       </div>
                     </div>
                     <div className="ml-5 flex-shrink-0">
+                      {can('agent', 'update') && (
                       <Button variant="outline" onClick={() => openEditModal(agent)}>
                         编辑配置
                       </Button>
+                      )}
                     </div>
                   </div>
                 </div>

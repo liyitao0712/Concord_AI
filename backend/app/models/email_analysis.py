@@ -3,7 +3,7 @@
 #
 # 功能说明：
 # 1. 存储 EmailSummarizerAgent 分析结果
-# 2. 支持外贸场景：客户/供应商识别、产品、金额、贸易条款等
+# 2. 支持外贸场景：客户/供应商识别、产品、金额等
 # 3. 关联 email_raw_messages 表
 
 from datetime import datetime
@@ -44,6 +44,12 @@ class EmailAnalysis(Base):
     summary: Mapped[str] = mapped_column(
         Text,
         comment="一句话摘要",
+    )
+
+    broadcast: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True,
+        comment="一句话播报，用于快速浏览和语音播报",
     )
 
     key_points: Mapped[Optional[dict]] = mapped_column(
@@ -122,12 +128,6 @@ class EmailAnalysis(Base):
         comment="金额列表 [{value, currency, context}]",
     )
 
-    trade_terms: Mapped[Optional[dict]] = mapped_column(
-        JSON,
-        nullable=True,
-        comment="贸易条款 {incoterm, payment_terms, destination}",
-    )
-
     deadline: Mapped[Optional[datetime]] = mapped_column(
         DateTime,
         nullable=True,
@@ -192,12 +192,19 @@ class EmailAnalysis(Base):
         comment="更新时间",
     )
 
+    # ==================== 权限字段 ====================
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True,
+        index=True, comment="所属组织"
+    )
+
     def to_dict(self) -> dict:
         """转换为字典"""
         return {
             "id": self.id,
             "email_id": self.email_id,
             "summary": self.summary,
+            "broadcast": self.broadcast,
             "key_points": self.key_points,
             "original_language": self.original_language,
             "sender_type": self.sender_type,
@@ -210,7 +217,6 @@ class EmailAnalysis(Base):
             "sentiment": self.sentiment,
             "products": self.products,
             "amounts": self.amounts,
-            "trade_terms": self.trade_terms,
             "deadline": self.deadline.isoformat() if self.deadline else None,
             "questions": self.questions,
             "action_required": self.action_required,

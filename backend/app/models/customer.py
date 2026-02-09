@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Optional, List
 from uuid import uuid4
 
-from sqlalchemy import String, Text, Boolean, JSON, DateTime, Index, ForeignKey
+from sqlalchemy import String, Text, Boolean, JSON, DateTime, Float, Index, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -143,6 +143,20 @@ class Customer(Base):
         comment="标签列表，如 ['putty_knife', 'taping_knife']",
     )
 
+    # ==================== AI 搜索状态 ====================
+    ai_status: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        nullable=True,
+        default=None,
+        comment="AI 搜索状态: searching/completed/failed, null=非AI创建",
+    )
+    ai_confidence: Mapped[Optional[float]] = mapped_column(
+        Float,
+        nullable=True,
+        default=None,
+        comment="AI 搜索置信度 0.0-1.0",
+    )
+
     # ==================== 时间戳 ====================
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -152,6 +166,20 @@ class Customer(Base):
         DateTime,
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
+    )
+
+    # ==================== 权限字段 ====================
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True,
+        index=True, comment="所属组织"
+    )
+    owner_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True,
+        index=True, comment="负责人"
+    )
+    owner_dept_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("departments.id"), nullable=True,
+        index=True, comment="负责人部门"
     )
 
     # ==================== 关系 ====================
@@ -263,6 +291,20 @@ class Contact(Base):
         DateTime,
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
+    )
+
+    # ==================== 权限字段 ====================
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True,
+        index=True, comment="所属组织"
+    )
+    owner_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True,
+        index=True, comment="负责人"
+    )
+    owner_dept_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("departments.id"), nullable=True,
+        index=True, comment="负责人部门"
     )
 
     # ==================== 关系 ====================

@@ -2,110 +2,34 @@
 // 管理后台布局
 //
 // 功能说明：
-// 1. 侧边栏分组导航（可折叠）
-// 2. 顶部栏（用户信息、登出）
-// 3. 权限验证（仅管理员可访问）
+// 1. 桌面端：侧边栏分组导航（可折叠）
+// 2. 移动端：顶部汉堡菜单 + Sheet 抽屉导航
+// 3. 顶部栏（用户信息、登出）
+// 4. 权限验证（仅管理员可访问）
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDevice } from '@/lib/device';
+import { navigation } from '@/lib/navigation';
+import type { NavItem, NavEntry } from '@/lib/navigation';
+import { hasPermission, hasAnyPermission } from '@/lib/permissions';
+import { MobileNav } from '@/components/MobileNav';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { PageLoading } from '@/components/LoadingSpinner';
 import {
-  Mail,
-  Building2,
-  Factory,
-  FolderTree,
-  Package,
-  Bot,
-  Cpu,
-  Brain,
-  Tags,
-  Plug,
-  Database,
-  Globe,
-  FileText,
-  CreditCard,
-  Settings,
-  LayoutDashboard,
-  Users,
-  ScrollText,
-  MailCheck,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   LogOut,
-  type LucideIcon,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-
-// 导航项
-interface NavItem {
-  name: string;
-  href: string;
-  icon: LucideIcon;
-}
-
-// 导航分组
-interface NavGroup {
-  label: string;
-  icon: LucideIcon;
-  items: NavItem[];
-}
-
-// 顶级导航项（不在分组内）
-interface NavTopLevel {
-  topLevel: true;
-  name: string;
-  href: string;
-  icon: LucideIcon;
-}
-
-type NavEntry = NavGroup | NavTopLevel;
-
-// 导航菜单配置
-const navigation: NavEntry[] = [
-  { topLevel: true, name: '邮件记录', href: '/admin/emails', icon: Mail },
-  { topLevel: true, name: '客户管理', href: '/admin/customers', icon: Building2 },
-  { topLevel: true, name: '供应商管理', href: '/admin/suppliers', icon: Factory },
-  { topLevel: true, name: '品类管理', href: '/admin/categories', icon: FolderTree },
-  { topLevel: true, name: '产品管理', href: '/admin/products', icon: Package },
-  {
-    label: 'AI 设置',
-    icon: Bot,
-    items: [
-      { name: 'LLM 配置', href: '/admin/llm', icon: Cpu },
-      { name: 'Agent 管理', href: '/admin/agents', icon: Brain },
-      { name: '工作类型', href: '/admin/work-types', icon: Tags },
-      { name: 'Worker 管理', href: '/admin/workers', icon: Plug },
-    ],
-  },
-  {
-    label: '基础数据',
-    icon: Database,
-    items: [
-      { name: '国家数据库', href: '/admin/countries', icon: Globe },
-      { name: '贸易术语', href: '/admin/trade-terms', icon: FileText },
-      { name: '付款方式', href: '/admin/payment-methods', icon: CreditCard },
-    ],
-  },
-  {
-    label: '系统设置',
-    icon: Settings,
-    items: [
-      { name: '系统仪表板', href: '/admin', icon: LayoutDashboard },
-      { name: '用户管理', href: '/admin/users', icon: Users },
-      { name: '系统日志', href: '/admin/logs', icon: ScrollText },
-      { name: '邮箱管理', href: '/admin/settings', icon: MailCheck },
-    ],
-  },
-];
 
 export default function AdminLayout({
   children,
@@ -115,6 +39,7 @@ export default function AdminLayout({
   const router = useRouter();
   const pathname = usePathname();
   const { user, isLoading, isAuthenticated, isAdmin, logout } = useAuth();
+  const { isMobile } = useDevice();
 
   // 权限验证：未登录或非管理员跳转到登录页
   useEffect(() => {
@@ -155,6 +80,39 @@ export default function AdminLayout({
   const isGroupActive = (items: NavItem[]) =>
     items.some((item) => isItemActive(item.href));
 
+  // 按权限过滤导航菜单
+  const filteredNavigation = useMemo(() => {
+    return navigation
+      .map((entry) => {
+        if ('topLevel' in entry) {
+          // 超管限定项
+          if ('superAdminOnly' in entry && entry.superAdminOnly && !user?.is_super_admin) return null;
+          // 权限检查
+          if (entry.requiredPermission) {
+            if (!hasPermission(user, entry.requiredPermission.resource, entry.requiredPermission.action)) return null;
+          }
+          if (entry.requiredPermissions) {
+            if (!hasAnyPermission(user, entry.requiredPermissions)) return null;
+          }
+          return entry;
+        }
+        // 分组：过滤子项，空组隐藏
+        const filteredItems = entry.items.filter((item) => {
+          if ('superAdminOnly' in item && item.superAdminOnly && !user?.is_super_admin) return false;
+          if (item.requiredPermission) {
+            return hasPermission(user, item.requiredPermission.resource, item.requiredPermission.action);
+          }
+          if (item.requiredPermissions) {
+            return hasAnyPermission(user, item.requiredPermissions);
+          }
+          return true;
+        });
+        if (filteredItems.length === 0) return null;
+        return { ...entry, items: filteredItems };
+      })
+      .filter(Boolean) as NavEntry[];
+  }, [user]);
+
   // 加载中或无权限时显示空白
   if (isLoading || !isAuthenticated || !isAdmin) {
     return <PageLoading />;
@@ -163,8 +121,8 @@ export default function AdminLayout({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="min-h-screen bg-muted/40">
-        {/* 侧边栏 */}
-        <aside className={`fixed inset-y-0 left-0 bg-slate-950 border-r border-slate-800 transition-all duration-300 ${collapsed ? 'w-16' : 'w-64'}`}>
+        {/* 桌面端侧边栏（移动端隐藏） */}
+        <aside className={`hidden md:block fixed inset-y-0 left-0 bg-slate-950 border-r border-slate-800 transition-all duration-300 ${collapsed ? 'w-16' : 'w-64'}`}>
           {/* Logo */}
           <div className="flex items-center justify-center h-16 border-b border-slate-800">
             {collapsed ? (
@@ -177,7 +135,7 @@ export default function AdminLayout({
           {/* 导航菜单 */}
           <ScrollArea className="h-[calc(100vh-4rem)]">
             <nav className={`mt-2 space-y-1 ${collapsed ? 'px-2' : 'px-3'}`}>
-              {navigation.map((entry) => {
+              {filteredNavigation.map((entry) => {
                 // 顶级导航项
                 if ('topLevel' in entry) {
                   const active = isItemActive(entry.href);
@@ -299,35 +257,41 @@ export default function AdminLayout({
           {/* 收起/展开按钮 */}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="absolute -right-3 top-20 z-40 flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+            className="absolute -right-3 top-20 z-40 hidden md:flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
           >
             {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
           </button>
         </aside>
 
         {/* 主内容区域 */}
-        <div className={`transition-all duration-300 ${collapsed ? 'pl-16' : 'pl-64'}`}>
+        <div className={`transition-all duration-300 ${isMobile ? 'pl-0' : (collapsed ? 'pl-16' : 'pl-64')}`}>
           {/* 顶部栏 */}
           <header className="sticky top-0 z-30 bg-background border-b">
-            <div className="flex items-center justify-between h-14 px-6">
-              <div className="text-lg font-semibold">
-                管理后台
+            <div className="flex items-center justify-between h-14 px-4 md:px-6">
+              <div className="flex items-center gap-3">
+                {/* 移动端汉堡菜单 */}
+                <MobileNav navigation={filteredNavigation} />
+                <div className="text-lg font-semibold">
+                  管理后台
+                </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground">
+                <span className="text-sm text-muted-foreground hidden sm:inline">
                   {user?.name}
                 </span>
-                <Badge variant="secondary">管理员</Badge>
+                <Badge variant="secondary" className="hidden sm:inline-flex">
+                  {user?.role_name || (user?.is_super_admin ? '超级管理员' : '管理员')}
+                </Badge>
                 <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground">
-                  <LogOut className="h-4 w-4 mr-1" />
-                  退出
+                  <LogOut className="h-4 w-4 md:mr-1" />
+                  <span className="hidden md:inline">退出</span>
                 </Button>
               </div>
             </div>
           </header>
 
           {/* 页面内容 */}
-          <main className="p-6">
+          <main className="p-4 md:p-6">
             {children}
           </main>
         </div>

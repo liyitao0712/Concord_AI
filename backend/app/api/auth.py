@@ -37,6 +37,7 @@ from app.schemas.user import (
     UserCreate,
     UserLogin,
     UserResponse,
+    UserMeResponse,
     Token,
     TokenRefresh,
     MessageResponse,
@@ -321,39 +322,93 @@ async def refresh_token(
 
 @router.get(
     "/me",
-    response_model=UserResponse,
+    response_model=UserMeResponse,
     summary="Get Current User",
-    description="Get current logged-in user details, requires authentication"
+    description="获取当前用户信息及完整权限上下文"
 )
 async def get_me(
-    current_user: User = Depends(get_current_user)
-) -> UserResponse:
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> UserMeResponse:
     """
     获取当前用户信息接口
 
-    返回当前登录用户的详细信息
-    需要在请求头中携带有效的 access_token
-
-    Args:
-        current_user: 当前用户（由 get_current_user 依赖注入）
-
-    Returns:
-        UserResponse: 当前用户信息
-
-    请求示例：
-        GET /api/auth/me
-        Headers:
-            Authorization: Bearer <access_token>
-
-    响应示例：
-        {
-            "id": "uuid",
-            "email": "user@example.com",
-            "name": "张三",
-            "role": "user",
-            "is_active": true,
-            "created_at": "2026-01-30T12:00:00"
-        }
+    返回用户基本信息 + 组织/部门/角色名称 + 功能权限列表 + 数据范围配置。
+    前端用此接口做菜单显示、按钮级权限控制。
     """
+    from app.models.organization import Organization
+    from app.models.department import Department
+    from app.models.role import Role, RolePermission, Permission, RoleDataScope
+    from app.models.user_department import UserDepartment
+
     logger.debug(f"获取当前用户信息: {current_user.email}")
-    return current_user
+
+    # 基础信息
+    data = {
+        "id": current_user.id,
+        "email": current_user.email,
+        "name": current_user.name,
+        "role": current_user.role,
+        "is_active": current_user.is_active,
+        "created_at": current_user.created_at,
+        "org_id": current_user.org_id,
+        "department_id": current_user.department_id,
+        "role_id": current_user.role_id,
+        "supervisor_id": current_user.supervisor_id,
+        "is_super_admin": current_user.is_super_admin,
+        "org_name": None,
+        "department_name": None,
+        "role_name": None,
+        "permissions": [],
+        "data_scopes": [],
+    }
+
+    # 组织名称
+    if current_user.org_id:
+        org_result = await db.execute(
+            select(Organization.name).where(Organization.id == current_user.org_id)
+        )
+        org_name = org_result.scalar_one_or_none()
+        data["org_name"] = org_name
+
+    # 部门名称
+    if current_user.department_id:
+        dept_result = await db.execute(
+            select(Department.name).where(Department.id == current_user.department_id)
+        )
+        dept_name = dept_result.scalar_one_or_none()
+        data["department_name"] = dept_name
+
+    # 角色名称 + 权限
+    if current_user.role_id:
+        role_result = await db.execute(
+            select(Role.name).where(Role.id == current_user.role_id)
+        )
+        role_name = role_result.scalar_one_or_none()
+        data["role_name"] = role_name
+
+        # 功能权限
+        perm_result = await db.execute(
+            select(Permission.resource, Permission.action)
+            .join(RolePermission, RolePermission.permission_id == Permission.id)
+            .where(RolePermission.role_id == current_user.role_id)
+        )
+        data["permissions"] = [
+            {"resource": r, "action": a} for r, a in perm_result
+        ]
+
+        # 数据范围
+        ds_result = await db.execute(
+            select(RoleDataScope.resource, RoleDataScope.scope_type)
+            .where(RoleDataScope.role_id == current_user.role_id)
+        )
+        data["data_scopes"] = [
+            {"resource": r, "scope_type": s} for r, s in ds_result
+        ]
+
+    # 超管拥有全部权限（前端特殊处理）
+    if current_user.is_super_admin:
+        data["permissions"] = [{"resource": "*", "action": "*"}]
+        data["data_scopes"] = [{"resource": "*", "scope_type": "all"}]
+
+    return UserMeResponse(**data)

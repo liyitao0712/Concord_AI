@@ -27,7 +27,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.logging import get_logger
-from app.core.security import get_current_admin_user
+from app.core.security import get_current_admin_user, require_permission, apply_data_scope, DataScope
 from app.models.user import User
 from app.models.category import Category
 from app.models.product import Product, ProductSupplier
@@ -59,14 +59,17 @@ async def list_products(
     category_id: Optional[str] = Query(None, description="筛选品类"),
     status: Optional[str] = Query(None, description="筛选状态"),
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("product", "read")),
 ):
     """
     获取产品列表
 
-    支持搜索、筛选和分页
+    支持搜索、筛选和分页，按数据权限过滤
     """
     query = select(Product).order_by(Product.created_at.desc())
+
+    # 数据权限过滤
+    query = await apply_data_scope(query, Product, "product", scope, session)
 
     # 搜索：品名、型号、HS编码
     if search:
@@ -135,7 +138,7 @@ async def list_products(
 async def create_product(
     data: ProductCreate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("product", "create")),
 ):
     """创建产品"""
     # 验证品类存在
@@ -163,13 +166,16 @@ async def create_product(
         tags=data.tags,
         status=data.status,
         notes=data.notes,
+        org_id=scope.org_id,
+        owner_id=scope.user.id,
+        owner_dept_id=scope.user.department_id,
     )
 
     session.add(product)
     await session.commit()
     await session.refresh(product)
 
-    logger.info(f"[ProductsAPI] 创建产品: {product.name} by {admin.email}")
+    logger.info(f"[ProductsAPI] 创建产品: {product.name} by {scope.user.email}")
 
     # 查询品类名称
     category_name = None
@@ -188,14 +194,16 @@ async def create_product(
 async def get_product(
     product_id: str,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("product", "read")),
 ):
     """获取产品详情（含关联供应商列表）"""
-    result = await session.execute(
+    query = (
         select(Product)
         .options(selectinload(Product.product_suppliers))
         .where(Product.id == product_id)
     )
+    query = await apply_data_scope(query, Product, "product", scope, session)
+    result = await session.execute(query)
     product = result.scalar_one_or_none()
 
     if not product:
@@ -237,10 +245,13 @@ async def update_product(
     product_id: str,
     data: ProductUpdate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("product", "update")),
 ):
     """更新产品"""
-    product = await session.get(Product, product_id)
+    query = select(Product).where(Product.id == product_id)
+    query = await apply_data_scope(query, Product, "product", scope, session)
+    result = await session.execute(query)
+    product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="产品不存在")
 
@@ -259,7 +270,7 @@ async def update_product(
     await session.commit()
     await session.refresh(product)
 
-    logger.info(f"[ProductsAPI] 更新产品: {product.name} by {admin.email}")
+    logger.info(f"[ProductsAPI] 更新产品: {product.name} by {scope.user.email}")
 
     # 查询品类名称和供应商数量
     category_name = None
@@ -282,10 +293,13 @@ async def update_product(
 async def delete_product(
     product_id: str,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("product", "delete")),
 ):
     """删除产品（级联删除供应商关联）"""
-    product = await session.get(Product, product_id)
+    query = select(Product).where(Product.id == product_id)
+    query = await apply_data_scope(query, Product, "product", scope, session)
+    result = await session.execute(query)
+    product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="产品不存在")
 
@@ -293,7 +307,7 @@ async def delete_product(
     await session.delete(product)
     await session.commit()
 
-    logger.info(f"[ProductsAPI] 删除产品: {product_name} by {admin.email}")
+    logger.info(f"[ProductsAPI] 删除产品: {product_name} by {scope.user.email}")
     return {"message": "删除成功"}
 
 
@@ -305,7 +319,7 @@ async def add_product_supplier(
     product_id: str,
     data: ProductSupplierCreate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("product", "update")),
 ):
     """添加产品-供应商关联"""
     # 验证产品存在
@@ -349,7 +363,7 @@ async def add_product_supplier(
     await session.refresh(ps)
 
     logger.info(
-        f"[ProductsAPI] 产品 {product.name} 关联供应商 {supplier.name} by {admin.email}"
+        f"[ProductsAPI] 产品 {product.name} 关联供应商 {supplier.name} by {scope.user.email}"
     )
 
     resp = ProductSupplierResponse.model_validate(ps)
@@ -363,7 +377,7 @@ async def update_product_supplier(
     supplier_id: str,
     data: ProductSupplierUpdate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("product", "update")),
 ):
     """更新产品-供应商关联"""
     result = await session.execute(
@@ -392,7 +406,7 @@ async def update_product_supplier(
     # 查询供应商名称
     supplier = await session.get(Supplier, supplier_id)
 
-    logger.info(f"[ProductsAPI] 更新产品供应商关联 by {admin.email}")
+    logger.info(f"[ProductsAPI] 更新产品供应商关联 by {scope.user.email}")
 
     resp = ProductSupplierResponse.model_validate(ps)
     resp.supplier_name = supplier.name if supplier else None
@@ -404,7 +418,7 @@ async def remove_product_supplier(
     product_id: str,
     supplier_id: str,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("product", "update")),
 ):
     """移除产品-供应商关联"""
     result = await session.execute(
@@ -420,7 +434,7 @@ async def remove_product_supplier(
     await session.delete(ps)
     await session.commit()
 
-    logger.info(f"[ProductsAPI] 移除产品供应商关联 by {admin.email}")
+    logger.info(f"[ProductsAPI] 移除产品供应商关联 by {scope.user.email}")
     return {"message": "移除成功"}
 
 

@@ -154,6 +154,20 @@ class Supplier(Base):
         onupdate=datetime.utcnow,
     )
 
+    # ==================== 权限字段 ====================
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True,
+        index=True, comment="所属组织"
+    )
+    owner_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True,
+        index=True, comment="负责人"
+    )
+    owner_dept_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("departments.id"), nullable=True,
+        index=True, comment="负责人部门"
+    )
+
     # ==================== 关系 ====================
     contacts: Mapped[List["SupplierContact"]] = relationship(
         "SupplierContact",
@@ -263,6 +277,20 @@ class SupplierContact(Base):
         DateTime,
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
+    )
+
+    # ==================== 权限字段 ====================
+    org_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("organizations.id"), nullable=True,
+        index=True, comment="所属组织"
+    )
+    owner_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True,
+        index=True, comment="负责人"
+    )
+    owner_dept_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("departments.id"), nullable=True,
+        index=True, comment="负责人部门"
     )
 
     # ==================== 关系 ====================

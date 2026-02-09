@@ -59,7 +59,7 @@ Please provide valuable answers based on the user's questions.""",
 
 Your role:
 - Analyze incoming business emails related to international trade
-- Extract structured information including intent, products, amounts, and trade terms
+- Extract structured information including intent, products, and amounts
 - Return analysis results strictly in the requested JSON format
 - Output the "summary" field in Chinese
 - Output the "suggested_reply" field in the same language as the original email
@@ -100,6 +100,8 @@ Return analysis results in JSON format with the following fields:
 ```json
 {
     "summary": "One-sentence summary of the email core content (in Chinese, max 100 characters)",
+
+    "broadcast": "Ultra-short broadcast for quick glance (in Chinese, max 50 characters, format: [发件方] + 核心动作/事件, e.g. '巴西客户询价3000吨大豆' or '货代通知提单已签发')",
 
     "key_points": ["Key point 1", "Key point 2", "Key point 3"],
 
@@ -154,12 +156,6 @@ Return analysis results in JSON format with the following fields:
         }
     ],
 
-    "trade_terms": {
-        "incoterm": "Trade term FOB/CIF/EXW/DDP etc., null if not mentioned",
-        "payment_terms": "Payment method T/T, L/C, D/P etc., null if not mentioned",
-        "destination": "Destination / destination port, null if not mentioned"
-    },
-
     "deadline": "Deadline or delivery requirement in ISO format e.g. 2024-03-15, null if none",
 
     "questions": ["Question raised by sender 1", "Question raised by sender 2"],
@@ -175,7 +171,7 @@ Return analysis results in JSON format with the following fields:
 ## Important Notes
 1. Fill all fields; use null or empty array [] for unrecognizable information
 2. The "summary" field must be in Chinese; the "suggested_reply" field must follow the original email language
-3. Carefully identify product information, amounts, and trade terms
+3. Carefully identify product information and amounts
 4. Assess urgency and priority based on email content
 5. Return only JSON, no other content""",
     },
@@ -367,360 +363,6 @@ Analyze the email and extract customer/contact information. Return results in JS
 7. Return only JSON, no other content""",
     },
 
-    # ==================== Summarizer (Tool) ====================
-    "summarizer": {
-        "display_name": "Summarizer",
-        "category": "tool",
-        "description": "Generate text summaries",
-        "model_hint": "claude-3-haiku-20240307",
-        "variables": {
-            "content": "Content to summarize",
-            "max_length": "Maximum length (optional)",
-        },
-        "content": """Generate a concise summary of the following content.
-
-## Content:
-{{content}}
-
-## Requirements:
-- Preserve key information
-- Be concise
-- Maximum length: {{max_length}} characters
-
-Output the summary directly, no additional explanation needed.""",
-    },
-
-    # ==================== Translator (Tool) ====================
-    "translator": {
-        "display_name": "Translator",
-        "category": "tool",
-        "description": "Translate text to target language",
-        "model_hint": "claude-3-haiku-20240307",
-        "variables": {
-            "content": "Content to translate",
-            "target_language": "Target language",
-        },
-        "content": """Translate the following content into {{target_language}}.
-
-## Original text:
-{{content}}
-
-## Requirements:
-- Preserve the original meaning
-- Use natural and fluent language
-- Translate professional terminology accurately
-
-Output the translation directly.""",
-    },
-
-    # ==================== Entity Extraction (Tool) ====================
-    "entity_extraction": {
-        "display_name": "Entity Extraction",
-        "category": "tool",
-        "description": "Extract structured information from text (customers, products, orders, etc.)",
-        "model_hint": "claude-3-sonnet-20240229",
-        "variables": {
-            "content": "Content to extract information from",
-        },
-        "content": """You are an information extraction expert specializing in extracting structured data from text.
-
-Extract key information from the following content:
-
-<content>
-{{content}}
-</content>
-
-Extract the following types of information and return in JSON format:
-
-{
-    "customer": {
-        "name": "Customer name",
-        "company": "Company name",
-        "email": "Email",
-        "phone": "Phone"
-    },
-    "products": [
-        {
-            "name": "Product name",
-            "model": "Model number",
-            "specification": "Specification",
-            "quantity": numeric_quantity,
-            "unit": "Unit",
-            "price": unit_price
-        }
-    ],
-    "requirements": {
-        "delivery_date": "Delivery date",
-        "delivery_address": "Delivery address",
-        "payment_terms": "Payment terms",
-        "notes": "Other notes"
-    },
-    "dates": [
-        {
-            "date": "Date",
-            "type": "Type (delivery/expiry/other)",
-            "original_text": "Original text"
-        }
-    ]
-}
-
-Extraction rules:
-1. Use null for fields that cannot be determined
-2. Use empty array [] for products and dates if no relevant information exists
-3. Keep quantities and prices in numeric format; use the higher value for ranges
-4. For relative dates (e.g., "next Monday"), preserve the original text
-5. Do not guess; mark uncertain information as null
-
-Return only JSON, no additional content.""",
-    },
-
-    # ==================== Inquiry Extraction (Tool) ====================
-    "inquiry_extraction": {
-        "display_name": "Inquiry Extraction",
-        "category": "tool",
-        "description": "Extract structured information from inquiry emails",
-        "model_hint": "claude-3-sonnet-20240229",
-        "variables": {
-            "subject": "Email subject",
-            "sender": "Sender",
-            "body": "Email body",
-        },
-        "content": """You are an inquiry email analysis expert. Extract key information from the following inquiry email:
-
-<email>
-Subject: {{subject}}
-Sender: {{sender}}
-Content:
-{{body}}
-</email>
-
-Extract inquiry-related information and return in JSON format:
-
-{
-    "customer": {
-        "name": "Customer name (infer from email signature or content)",
-        "company": "Company name",
-        "email": "{{sender}}",
-        "phone": "Phone (if available)",
-        "contact_preference": "Preferred contact method"
-    },
-    "products": [
-        {
-            "name": "Product name",
-            "model": "Model (if available)",
-            "specification": "Specification requirements",
-            "quantity": numeric_quantity,
-            "unit": "Unit",
-            "target_price": "Target price (if mentioned by customer)"
-        }
-    ],
-    "requirements": {
-        "delivery_date": "Expected delivery date",
-        "delivery_address": "Delivery address",
-        "quality_requirements": "Quality requirements",
-        "packaging_requirements": "Packaging requirements",
-        "other_requirements": "Other requirements"
-    },
-    "urgency": "Urgency level (high/normal/low)",
-    "summary": "One-sentence summary of the inquiry"
-}
-
-Extraction rules:
-1. Try to infer customer name (from signature, salutation, etc.)
-2. Determine urgency based on wording ("urgent", "ASAP" = high)
-3. Use null for fields that cannot be determined
-
-Return only JSON, no additional content.""",
-    },
-
-    # ==================== Order Extraction (Tool) ====================
-    "order_extraction": {
-        "display_name": "Order Extraction",
-        "category": "tool",
-        "description": "Extract order-related information from text",
-        "model_hint": "claude-3-sonnet-20240229",
-        "variables": {
-            "content": "Content containing order information",
-        },
-        "content": """You are an order information extraction expert. Extract order information from the following content:
-
-<content>
-{{content}}
-</content>
-
-Extract order-related information and return in JSON format:
-
-{
-    "order_info": {
-        "order_number": "Order number (if provided by customer)",
-        "order_date": "Order date",
-        "customer_po": "Customer PO number"
-    },
-    "customer": {
-        "name": "Customer name",
-        "company": "Company name",
-        "email": "Email",
-        "phone": "Phone",
-        "shipping_address": "Shipping address",
-        "billing_address": "Billing address"
-    },
-    "items": [
-        {
-            "product_name": "Product name",
-            "model": "Model",
-            "specification": "Specification",
-            "quantity": numeric_quantity,
-            "unit": "Unit",
-            "unit_price": unit_price,
-            "total_price": total_price,
-            "notes": "Notes"
-        }
-    ],
-    "payment": {
-        "method": "Payment method",
-        "terms": "Payment terms",
-        "currency": "Currency"
-    },
-    "delivery": {
-        "requested_date": "Requested delivery date",
-        "shipping_method": "Shipping method",
-        "incoterms": "Trade terms"
-    },
-    "total_amount": total_order_amount,
-    "notes": "Order notes"
-}
-
-Extraction rules:
-1. Keep amounts in numeric format and preserve currency information
-2. Convert dates to YYYY-MM-DD format where possible
-3. Use an array if there are multiple shipping addresses
-4. Use null for fields that cannot be determined
-
-Return only JSON, no additional content.""",
-    },
-
-    # ==================== Contact Extraction (Tool) ====================
-    "contact_extraction": {
-        "display_name": "Contact Extraction",
-        "category": "tool",
-        "description": "Extract contact information from text",
-        "model_hint": "claude-3-haiku-20240307",
-        "variables": {
-            "content": "Content containing contact information",
-        },
-        "content": """You are a contact information extraction expert. Extract contact information from the following content:
-
-<content>
-{{content}}
-</content>
-
-Extract all contact information and return in JSON format:
-
-{
-    "contacts": [
-        {
-            "name": "Name",
-            "title": "Job title",
-            "company": "Company",
-            "department": "Department",
-            "email": "Email",
-            "phone": "Phone",
-            "mobile": "Mobile",
-            "fax": "Fax",
-            "address": "Address",
-            "social": {
-                "wechat": "WeChat",
-                "linkedin": "LinkedIn"
-            },
-            "role": "Role (decision maker/contact person/technical liaison/etc.)"
-        }
-    ]
-}
-
-Extraction rules:
-1. Extract all contacts if there are multiple
-2. Keep phone numbers in their original format
-3. Try to extract information from signatures and sign-offs
-4. Use null for fields that cannot be determined
-
-Return only JSON, no additional content.""",
-    },
-
-    # ==================== Email Intent Classification (Tool) ====================
-    "email_intent": {
-        "display_name": "Email Intent Classification",
-        "category": "tool",
-        "description": "Analyze email intent (with subject, sender, and body)",
-        "model_hint": "claude-3-haiku-20240307",
-        "variables": {
-            "subject": "Email subject",
-            "sender": "Sender",
-            "body": "Email body",
-        },
-        "content": """You are an intent classification expert. Analyze the intent of the following email:
-
-<email>
-Subject: {{subject}}
-Sender: {{sender}}
-Content:
-{{body}}
-</email>
-
-Determine the intent type of this email and return the result in JSON format.
-
-Intent types:
-- inquiry: Price inquiry (asking for prices, requesting quotes, product consultation)
-- order: Order (placing order, purchasing, clear purchase intent)
-- support: Support (technical issues, after-sales service, product usage problems)
-- feedback: Feedback (complaints, suggestions, reviews, opinions)
-- general: General (greetings, thanks, no specific business intent)
-- unknown: Unidentifiable
-
-Return format:
-{
-    "intent": "Intent type",
-    "confidence": confidence_score,
-    "keywords": ["keyword1", "keyword2"],
-    "summary": "One-sentence summary of the email content",
-    "priority": "high/normal/low"
-}
-
-Priority criteria:
-- high: Urgent orders, important customers, clear purchase intent
-- normal: General inquiries, routine questions
-- low: Casual conversation, non-urgent feedback
-
-Notes:
-1. confidence is a number between 0.0-1.0 indicating certainty
-2. keywords is a list of supporting keywords for the classification
-3. Return only JSON, no additional content""",
-    },
-
-    # ==================== Batch Intent Classification (Tool) ====================
-    "batch_intent": {
-        "display_name": "Batch Intent Classification",
-        "category": "tool",
-        "description": "Batch intent classification for multiple content items",
-        "model_hint": "claude-3-haiku-20240307",
-        "variables": {
-            "items": "List of content items to classify (JSON or text)",
-        },
-        "content": """You are an intent classification expert. Analyze the intent of the following multiple content items:
-
-<items>
-{{items}}
-</items>
-
-Classify each content item and return results in JSON array format.
-
-Return format:
-[
-    {"id": "item_id", "intent": "intent_type", "confidence": confidence_score},
-    ...
-]
-
-Return only the JSON array, no additional content.""",
-    },
 
     # ==================== Add New Client Helper ====================
     "add_new_client_helper_system": {
@@ -744,7 +386,8 @@ Important:
 - company_size must be one of: small, medium, large, enterprise (based on employee count or revenue)
 - region must be a continent/geographic region like: Asia, Europe, North America, South America, Africa, Oceania, Middle East
 - Tags should include relevant keywords like product categories, certifications, or industry focus areas
-- Notes should be a brief company description in Chinese (1-2 sentences)""",
+- Notes should be a brief company description in Chinese (1-2 sentences)
+- name must be the company's full official registered name (公司全称), not an abbreviation""",
     },
 
     "add_new_client_helper": {
@@ -772,6 +415,7 @@ Return the results as a JSON object with the following fields:
 
 ```json
 {
+    "name": "Full official registered name of the company (公司全称)",
     "short_name": "Common abbreviation or short name of the company, null if none",
     "country": "Country where the company is headquartered",
     "region": "Geographic region: Asia/Europe/North America/South America/Africa/Oceania/Middle East",
@@ -794,6 +438,86 @@ Return the results as a JSON object with the following fields:
 4. Prefer official sources (company website, LinkedIn, Bloomberg, etc.)
 5. The notes field must be in Chinese
 6. Tags should include product categories, certifications, or industry keywords""",
+    },
+    # ==================== Add New Supplier Helper ====================
+    "add_new_supplier_helper_system": {
+        "display_name": "Add New Supplier Helper - System Prompt",
+        "category": "agent",
+        "description": "System prompt for the add new supplier helper agent that researches supplier/manufacturer info via web search",
+        "model_hint": "claude-3-sonnet-20240229",
+        "variables": {},
+        "content": """You are a professional supplier/manufacturer information research assistant.
+
+Your role:
+- Search the web for supplier/manufacturer/factory information based on the provided company name
+- Find official website, contact details, industry, location, main products, and other public business information
+- Return structured data that can be used to populate a CRM supplier record
+- Be accurate and only include information you can verify from reliable sources
+
+Important:
+- Use web search to find the company's official website, LinkedIn page, Alibaba/1688 page, and other public profiles
+- Focus on manufacturing capabilities, main products, certifications (ISO, CE, etc.), and production capacity
+- Only return valid JSON, no additional text or explanation
+- Use null for any field you cannot find or verify
+- company_size must be one of: small, medium, large, enterprise (based on employee count or revenue)
+- region must be a continent/geographic region like: Asia, Europe, North America, South America, Africa, Oceania, Middle East
+- supplier_level must be one of: potential, normal, important, strategic
+- Tags should include relevant keywords like product categories, certifications, or manufacturing specialties
+- Notes should be a brief company description in Chinese (1-2 sentences), focusing on manufacturing capabilities
+- name must be the company's full official registered name (公司全称), not an abbreviation
+- main_products should describe the supplier's primary product lines""",
+    },
+
+    "add_new_supplier_helper": {
+        "display_name": "Add New Supplier Helper",
+        "category": "agent",
+        "description": "Researches supplier/manufacturer information via web search to auto-fill supplier records",
+        "model_hint": "claude-3-sonnet-20240229",
+        "variables": {
+            "company_name": "The full company name to research",
+        },
+        "content": """Search the web for information about the following supplier/manufacturer and extract structured business data.
+
+## Company Name
+{{company_name}}
+
+## Research Instructions
+1. Search for the company's official website and business profiles (Alibaba, 1688, Made-in-China, etc.)
+2. Find company contact information (email, phone, address)
+3. Determine the company's industry, size, location, and main products
+4. Look for manufacturing capabilities, certifications, and product lines
+
+## Required Output Format
+
+Return the results as a JSON object with the following fields:
+
+```json
+{
+    "name": "Full official registered name of the company (公司全称)",
+    "short_name": "Common abbreviation or short name of the company, null if none",
+    "country": "Country where the company is headquartered",
+    "region": "Geographic region: Asia/Europe/North America/South America/Africa/Oceania/Middle East",
+    "industry": "Primary industry or business sector",
+    "company_size": "One of: small/medium/large/enterprise (based on employee count: <50=small, 50-500=medium, 500-5000=large, >5000=enterprise)",
+    "main_products": "Description of the supplier's main product lines and manufacturing capabilities",
+    "website": "Official company website URL",
+    "email": "General company email or sales contact email",
+    "phone": "Company phone number with country code",
+    "address": "Full company headquarters or factory address",
+    "tags": ["relevant", "business", "keywords", "certifications"],
+    "notes": "Brief company description in Chinese (1-2 sentences), focusing on manufacturing capabilities and main products",
+    "confidence": 0.0
+}
+```
+
+## Important Notes
+1. Return only valid JSON, no other content
+2. Use null for fields that cannot be found or verified
+3. The confidence field should be 0.0-1.0 indicating overall data reliability
+4. Prefer official sources (company website, LinkedIn, Alibaba, Bloomberg, etc.)
+5. The notes field must be in Chinese
+6. Tags should include product categories, certifications (ISO, CE, etc.), or manufacturing keywords
+7. main_products should be a descriptive text about the supplier's product lines""",
     },
 }
 

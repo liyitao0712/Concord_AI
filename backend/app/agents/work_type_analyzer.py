@@ -14,7 +14,7 @@ import re
 from typing import Optional
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from langgraph.graph import StateGraph, END
 
@@ -139,10 +139,11 @@ class WorkTypeAnalyzerAgent(BaseAgent):
         content = input_data.get("content", "")
         received_at = input_data.get("received_at")
         session = input_data.get("_session")
+        org_id = input_data.get("org_id")
 
         # 1. 查询工作类型列表 + 待审批建议列表
-        work_types_list = await self._get_work_types_list(session)
-        pending_suggestions_list = await self._get_pending_suggestions_list(session)
+        work_types_list = await self._get_work_types_list(session, org_id=org_id)
+        pending_suggestions_list = await self._get_pending_suggestions_list(session, org_id=org_id)
 
         # 2. 格式化收件时间
         if hasattr(received_at, "strftime"):
@@ -175,6 +176,7 @@ class WorkTypeAnalyzerAgent(BaseAgent):
         state["messages"] = [{"role": "user", "content": prompt}]
         state["output_data"] = {
             "email_id": email_id,
+            "org_id": org_id,
         }
 
         logger.info(f"[WorkTypeAnalyzer] 预处理完成: {email_id}")
@@ -290,11 +292,13 @@ class WorkTypeAnalyzerAgent(BaseAgent):
         # 后处理：如果建议新类型，创建建议
         if result.success and result.data.get("new_suggestion", {}).get("should_suggest"):
             session = input_data.get("_session")
+            org_id = input_data.get("org_id")
             suggestion_id = await self.create_suggestion_if_needed(
                 result=result.data,
                 email_id=input_data.get("email_id", ""),
                 trigger_content=input_text[:200],
                 session=session,
+                org_id=org_id,
             )
             result.data["suggestion_id"] = suggestion_id
 
@@ -355,20 +359,20 @@ class WorkTypeAnalyzerAgent(BaseAgent):
 
     # ========== 数据库查询 ==========
 
-    async def _get_work_types_list(self, session: Optional[AsyncSession] = None) -> str:
+    async def _get_work_types_list(self, session: Optional[AsyncSession] = None, org_id: str = None) -> str:
         """
         获取当前所有启用的工作类型列表（格式化为 Prompt 可用的文本）
         """
         if session is None:
             async with async_session_maker() as session:
-                return await self._get_work_types_list(session)
+                return await self._get_work_types_list(session, org_id=org_id)
 
         # 查询所有启用的工作类型
-        result = await session.execute(
-            select(WorkType)
-            .where(WorkType.is_active == True)
-            .order_by(WorkType.level, WorkType.code)
-        )
+        query = select(WorkType).where(WorkType.is_active == True)
+        if org_id:
+            query = query.where(or_(WorkType.org_id == org_id, WorkType.org_id.is_(None)))
+        query = query.order_by(WorkType.level, WorkType.code)
+        result = await session.execute(query)
         work_types = list(result.scalars().all())
 
         if not work_types:
@@ -386,7 +390,7 @@ class WorkTypeAnalyzerAgent(BaseAgent):
 
         return "\n".join(lines)
 
-    async def _get_pending_suggestions_list(self, session: Optional[AsyncSession] = None) -> str:
+    async def _get_pending_suggestions_list(self, session: Optional[AsyncSession] = None, org_id: str = None) -> str:
         """
         获取待审批和已拒绝的工作类型建议（格式化为 Prompt 可用的文本）
 
@@ -394,13 +398,15 @@ class WorkTypeAnalyzerAgent(BaseAgent):
         """
         if session is None:
             async with async_session_maker() as session:
-                return await self._get_pending_suggestions_list(session)
+                return await self._get_pending_suggestions_list(session, org_id=org_id)
 
-        result = await session.execute(
-            select(WorkTypeSuggestion)
-            .where(WorkTypeSuggestion.status.in_(["pending", "rejected"]))
-            .order_by(WorkTypeSuggestion.status, WorkTypeSuggestion.created_at.desc())
+        query = select(WorkTypeSuggestion).where(
+            WorkTypeSuggestion.status.in_(["pending", "rejected"])
         )
+        if org_id:
+            query = query.where(WorkTypeSuggestion.org_id == org_id)
+        query = query.order_by(WorkTypeSuggestion.status, WorkTypeSuggestion.created_at.desc())
+        result = await session.execute(query)
         suggestions = list(result.scalars().all())
 
         if not suggestions:
@@ -426,6 +432,7 @@ class WorkTypeAnalyzerAgent(BaseAgent):
         email_id: str,
         trigger_content: str,
         session: Optional[AsyncSession] = None,
+        org_id: str = None,
     ) -> Optional[str]:
         """
         如果分析结果建议新类型，创建 WorkTypeSuggestion 并启动 Temporal 审批流
@@ -462,11 +469,11 @@ class WorkTypeAnalyzerAgent(BaseAgent):
         if session is None:
             async with async_session_maker() as session:
                 return await self._create_suggestion(
-                    session, suggestion_data, email_id, trigger_content
+                    session, suggestion_data, email_id, trigger_content, org_id
                 )
 
         return await self._create_suggestion(
-            session, suggestion_data, email_id, trigger_content
+            session, suggestion_data, email_id, trigger_content, org_id
         )
 
     async def _create_suggestion(
@@ -475,6 +482,7 @@ class WorkTypeAnalyzerAgent(BaseAgent):
         suggestion_data: dict,
         email_id: str,
         trigger_content: str,
+        org_id: str = None,
     ) -> Optional[str]:
         """创建建议记录并启动审批流程"""
         from uuid import uuid4
@@ -530,6 +538,7 @@ class WorkTypeAnalyzerAgent(BaseAgent):
             trigger_email_id=email_id,
             trigger_content=trigger_content[:500],  # 限制长度
             status="pending",
+            org_id=org_id,
         )
 
         session.add(suggestion)

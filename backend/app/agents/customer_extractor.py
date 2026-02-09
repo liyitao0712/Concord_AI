@@ -138,6 +138,7 @@ class CustomerExtractorAgent(BaseAgent):
         content = input_data.get("content", "")
         email_analysis = input_data.get("email_analysis") or {}
         session = input_data.get("_session")
+        org_id = input_data.get("org_id")
 
         # 1. 提取邮箱域名
         email_domain = self._extract_domain(sender)
@@ -156,9 +157,11 @@ class CustomerExtractorAgent(BaseAgent):
 
         # 3. 查询已有客户列表和 pending 建议（用于 prompt 上下文）
         existing_customers_text = await self._get_existing_customers_context(
-            email_domain, session
+            email_domain, session, org_id=org_id
         )
-        pending_suggestions_text = await self._get_pending_suggestions_context(session)
+        pending_suggestions_text = await self._get_pending_suggestions_context(
+            session, org_id=org_id
+        )
 
         # 4. 构建 email_analysis 上下文
         analysis_context = self._format_analysis_context(email_analysis)
@@ -185,6 +188,7 @@ class CustomerExtractorAgent(BaseAgent):
         state["output_data"] = {
             "email_id": email_id,
             "email_domain": email_domain,
+            "org_id": org_id,
         }
 
         logger.info(f"[CustomerExtractor] 预处理完成: {email_id}, domain={email_domain}")
@@ -283,11 +287,13 @@ class CustomerExtractorAgent(BaseAgent):
         # 后处理：创建建议
         if result.success and not result.data.get("skip_extraction"):
             session = input_data.get("_session")
+            org_id = input_data.get("org_id")
             suggestion_id = await self.create_suggestion_if_needed(
                 result=result.data,
                 email_id=input_data.get("email_id", ""),
                 trigger_content=f"{input_data.get('subject', '')} - {input_text[:200]}",
                 session=session,
+                org_id=org_id,
             )
             result.data["suggestion_id"] = suggestion_id
 
@@ -348,19 +354,19 @@ class CustomerExtractorAgent(BaseAgent):
         self,
         email_domain: Optional[str],
         session: Optional[AsyncSession] = None,
+        org_id: str = None,
     ) -> str:
         """获取已有客户列表（格式化为 Prompt 上下文）"""
         if session is None:
             async with async_session_maker() as session:
-                return await self._get_existing_customers_context(email_domain, session)
+                return await self._get_existing_customers_context(email_domain, session, org_id=org_id)
 
         # 查询最近 100 个活跃客户
-        result = await session.execute(
-            select(Customer)
-            .where(Customer.is_active == True)
-            .order_by(Customer.created_at.desc())
-            .limit(100)
-        )
+        query = select(Customer).where(Customer.is_active == True)
+        if org_id:
+            query = query.where(Customer.org_id == org_id)
+        query = query.order_by(Customer.created_at.desc()).limit(100)
+        result = await session.execute(query)
         customers = list(result.scalars().all())
 
         if not customers:
@@ -383,18 +389,18 @@ class CustomerExtractorAgent(BaseAgent):
     async def _get_pending_suggestions_context(
         self,
         session: Optional[AsyncSession] = None,
+        org_id: str = None,
     ) -> str:
         """获取待审批的客户建议列表（避免重复建议）"""
         if session is None:
             async with async_session_maker() as session:
-                return await self._get_pending_suggestions_context(session)
+                return await self._get_pending_suggestions_context(session, org_id=org_id)
 
-        result = await session.execute(
-            select(CustomerSuggestion)
-            .where(CustomerSuggestion.status == "pending")
-            .order_by(CustomerSuggestion.created_at.desc())
-            .limit(50)
-        )
+        query = select(CustomerSuggestion).where(CustomerSuggestion.status == "pending")
+        if org_id:
+            query = query.where(CustomerSuggestion.org_id == org_id)
+        query = query.order_by(CustomerSuggestion.created_at.desc()).limit(50)
+        result = await session.execute(query)
         suggestions = list(result.scalars().all())
 
         if not suggestions:
@@ -418,6 +424,7 @@ class CustomerExtractorAgent(BaseAgent):
         email_id: str,
         trigger_content: str,
         session: Optional[AsyncSession] = None,
+        org_id: str = None,
     ) -> Optional[str]:
         """
         如果分析结果需要创建客户建议，创建 CustomerSuggestion + Temporal 审批流
@@ -439,11 +446,11 @@ class CustomerExtractorAgent(BaseAgent):
         if session is None:
             async with async_session_maker() as session:
                 return await self._create_suggestion(
-                    session, result, email_id, trigger_content, email_domain
+                    session, result, email_id, trigger_content, email_domain, org_id
                 )
 
         return await self._create_suggestion(
-            session, result, email_id, trigger_content, email_domain
+            session, result, email_id, trigger_content, email_domain, org_id
         )
 
     async def _create_suggestion(
@@ -453,6 +460,7 @@ class CustomerExtractorAgent(BaseAgent):
         email_id: str,
         trigger_content: str,
         email_domain: Optional[str],
+        org_id: str = None,
     ) -> Optional[str]:
         """创建建议记录并启动审批流程"""
         company_data = result.get("company", {})
@@ -507,6 +515,7 @@ class CustomerExtractorAgent(BaseAgent):
             email_domain=email_domain,
             matched_customer_id=matched_customer_id,
             status="pending",
+            org_id=org_id,
         )
 
         session.add(suggestion)

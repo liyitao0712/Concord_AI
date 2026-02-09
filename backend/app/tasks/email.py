@@ -36,10 +36,18 @@ class AsyncTask(Task):
     """
 
     def __call__(self, *args, **kwargs):
-        """执行任务时使用 Worker 进程的持久 event loop"""
-        # 使用 Worker 进程初始化时创建的持久 event loop
-        # 所有任务共享同一个 loop，避免 loop 反复创建/销毁导致的问题
+        """使用 Worker 进程的持久 event loop，带防御性关闭检测"""
+        # 正常情况下使用 worker_process_init 创建的持久 loop，
+        # 保留 DB 连接池和 Redis 客户端的正确绑定。
+        # 仅在 loop 被意外关闭时才创建新的（此时 DB/Redis 连接需重新建立）。
         loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            import os
+            logger.warning(
+                f"[AsyncTask] 持久 event loop 已关闭，重新创建: PID={os.getpid()}"
+            )
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         return loop.run_until_complete(self.run(*args, **kwargs))
 
     async def run(self, *args, **kwargs):
@@ -146,6 +154,7 @@ async def poll_email_account(self, account_id: int):
                 process_email.delay(
                     email_data=email.to_dict(include_raw_bytes=True),
                     account_id=account_id,
+                    org_id=getattr(account, 'org_id', None),
                 )
                 queued += 1
             except Exception as e:
@@ -183,7 +192,7 @@ async def poll_email_account(self, account_id: int):
     default_retry_delay=120,  # 失败后 2 分钟重试
     queue="email",
 )
-async def process_email(self, email_data: dict, account_id: int):
+async def process_email(self, email_data: dict, account_id: int, org_id: str = None):
     """
     处理单封邮件
 
@@ -250,6 +259,8 @@ async def process_email(self, email_data: dict, account_id: int):
         # 4. 添加元数据（使用缓存的 account）
         event.metadata["email_account_id"] = account_id
         event.metadata["email_account_name"] = account.name
+        if org_id:
+            event.metadata["org_id"] = org_id
 
         if raw_record:
             event.metadata["email_raw_id"] = raw_record.id

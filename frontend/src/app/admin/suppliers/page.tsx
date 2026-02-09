@@ -3,7 +3,7 @@
 //
 // 功能说明：
 // 1. 供应商列表（搜索、筛选、分页）
-// 2. 新建/编辑供应商
+// 2. 新建/编辑供应商（分区表单 + AI 检索）
 // 3. 供应商详情 + 联系人管理
 // 4. 联系人新建/编辑
 
@@ -13,6 +13,8 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   suppliersApi,
   supplierContactsApi,
+  tradeTermsApi,
+  paymentMethodsApi,
   Supplier,
   SupplierDetail,
   SupplierContact,
@@ -20,10 +22,13 @@ import {
   SupplierUpdate,
   SupplierContactCreate,
   SupplierContactUpdate,
+  TradeTerm,
+  PaymentMethod,
 } from '@/lib/api';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { Plus, Pencil, Trash2, X } from 'lucide-react';
+import { usePermission } from '@/hooks/usePermission';
+import { Plus, Pencil, Trash2, X, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -50,12 +55,12 @@ import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 // ==================== 供应商等级配置 ====================
 
-const SUPPLIER_LEVELS = [
-  { value: 'potential', label: '潜在', color: 'bg-gray-100 text-gray-800' },
-  { value: 'normal', label: '普通', color: 'bg-blue-100 text-blue-800' },
-  { value: 'important', label: '重要', color: 'bg-orange-100 text-orange-800' },
-  { value: 'strategic', label: '战略', color: 'bg-red-100 text-red-800' },
-];
+const SUPPLIER_LEVELS: Record<string, { label: string; color: string }> = {
+  potential: { label: '潜在', color: 'bg-gray-100 text-gray-800' },
+  normal: { label: '普通', color: 'bg-blue-100 text-blue-800' },
+  important: { label: '重要', color: 'bg-orange-100 text-orange-800' },
+  strategic: { label: '战略', color: 'bg-red-100 text-red-800' },
+};
 
 const SUPPLIER_SOURCES = [
   { value: 'email', label: '邮件' },
@@ -66,8 +71,11 @@ const SUPPLIER_SOURCES = [
   { value: 'other', label: '其他' },
 ];
 
+// select 样式统一
+const selectClass = "px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring";
+
 function getLevelBadge(level: string) {
-  const config = SUPPLIER_LEVELS.find((l) => l.value === level);
+  const config = SUPPLIER_LEVELS[level];
   if (!config) return null;
   return (
     <Badge variant="outline" className={config.color}>
@@ -76,10 +84,431 @@ function getLevelBadge(level: string) {
   );
 }
 
+// ==================== 供应商表单 ====================
+
+function SupplierForm({
+  initial,
+  onSubmit,
+  onCancel,
+  loading,
+}: {
+  initial?: Partial<Supplier>;
+  onSubmit: (data: SupplierCreate | SupplierUpdate) => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  const isCreateMode = !initial;
+  const [form, setForm] = useState<SupplierCreate>({
+    name: initial?.name || '',
+    short_name: initial?.short_name || '',
+    country: initial?.country || '',
+    region: initial?.region || '',
+    industry: initial?.industry || '',
+    company_size: initial?.company_size || '',
+    main_products: initial?.main_products || '',
+    supplier_level: initial?.supplier_level || 'normal',
+    email: initial?.email || '',
+    phone: initial?.phone || '',
+    website: initial?.website || '',
+    address: initial?.address || '',
+    payment_terms: initial?.payment_terms || '',
+    shipping_terms: initial?.shipping_terms || '',
+    is_active: initial?.is_active ?? true,
+    source: initial?.source || '',
+    notes: initial?.notes || '',
+    tags: initial?.tags || [],
+  });
+  const [tagInput, setTagInput] = useState('');
+  const [tradeTerms, setTradeTerms] = useState<TradeTerm[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [aiQuery, setAiQuery] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+
+  // 加载贸易术语和付款方式
+  useEffect(() => {
+    tradeTermsApi.list({ page_size: 50, is_current: true }).then(resp => {
+      setTradeTerms(resp.items);
+    }).catch(() => {});
+    paymentMethodsApi.list({ page_size: 50 }).then(resp => {
+      setPaymentMethods(resp.items);
+    }).catch(() => {});
+  }, []);
+
+  // AI 检索自动填充
+  const handleAiLookup = async () => {
+    if (!aiQuery.trim()) return;
+    setAiLoading(true);
+    setAiError('');
+    try {
+      const result = await suppliersApi.aiLookup(aiQuery.trim());
+      if (result.error) {
+        setAiError(result.error);
+        return;
+      }
+      setForm(prev => ({
+        ...prev,
+        name: result.name || aiQuery.trim(),
+        short_name: result.short_name || '',
+        country: result.country || '',
+        region: result.region || '',
+        industry: result.industry || '',
+        company_size: result.company_size || '',
+        main_products: result.main_products || '',
+        email: result.email || '',
+        phone: result.phone || '',
+        website: result.website || '',
+        address: result.address || '',
+        notes: result.notes || '',
+        tags: result.tags || [],
+      }));
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'AI 检索失败');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // 清理空字符串为 undefined（用于 update）
+    const cleaned: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(form)) {
+      if (value === '' || value === null) {
+        if (key === 'name' || key === 'is_active' || key === 'supplier_level') {
+          cleaned[key] = value;
+        }
+      } else {
+        cleaned[key] = value;
+      }
+    }
+    onSubmit(cleaned as unknown as SupplierCreate);
+  };
+
+  const addTag = () => {
+    const tag = tagInput.trim();
+    if (tag && !form.tags!.includes(tag)) {
+      setForm({ ...form, tags: [...(form.tags || []), tag] });
+      setTagInput('');
+    }
+  };
+
+  const removeTag = (tag: string) => {
+    setForm({ ...form, tags: (form.tags || []).filter(t => t !== tag) });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* AI 供应商检索 */}
+      {isCreateMode && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <Label className="mb-1">AI 供应商检索</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="text"
+              className="flex-1"
+              placeholder="输入公司名称、关键词等，AI 将自动检索并填充所有字段"
+              value={aiQuery}
+              onChange={e => setAiQuery(e.target.value)}
+            />
+            <Button
+              type="button"
+              onClick={handleAiLookup}
+              disabled={aiLoading || !aiQuery.trim()}
+              className="bg-purple-600 hover:bg-purple-700 whitespace-nowrap"
+            >
+              {aiLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  AI 检索中...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  AI 填充
+                </>
+              )}
+            </Button>
+          </div>
+          {aiError && (
+            <p className="mt-1 text-xs text-destructive">{aiError}</p>
+          )}
+        </div>
+      )}
+
+      {/* 基本信息 */}
+      <div>
+        <h4 className="text-sm font-semibold text-foreground mb-3">基本信息</h4>
+        <Separator className="mb-3" />
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <Label className="mb-1">公司全称 *</Label>
+            <Input
+              type="text"
+              required
+              value={form.name}
+              onChange={e => setForm({ ...form, name: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label className="mb-1">简称/别名</Label>
+            <Input
+              type="text"
+              value={form.short_name || ''}
+              onChange={e => setForm({ ...form, short_name: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label className="mb-1">国家</Label>
+            <Input
+              type="text"
+              value={form.country || ''}
+              onChange={e => setForm({ ...form, country: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label className="mb-1">地区/洲</Label>
+            <Input
+              type="text"
+              value={form.region || ''}
+              onChange={e => setForm({ ...form, region: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label className="mb-1">行业</Label>
+            <Input
+              type="text"
+              value={form.industry || ''}
+              onChange={e => setForm({ ...form, industry: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label className="mb-1">供应商等级</Label>
+            <select
+              className={`w-full ${selectClass}`}
+              value={form.supplier_level}
+              onChange={e => setForm({ ...form, supplier_level: e.target.value })}
+            >
+              {Object.entries(SUPPLIER_LEVELS).map(([value, { label }]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* 业务信息 */}
+      <div>
+        <h4 className="text-sm font-semibold text-foreground mb-3">业务信息</h4>
+        <Separator className="mb-3" />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label className="mb-1">公司规模</Label>
+            <select
+              className={`w-full ${selectClass}`}
+              value={form.company_size || ''}
+              onChange={e => setForm({ ...form, company_size: e.target.value })}
+            >
+              <option value="">未设置</option>
+              <option value="small">小型</option>
+              <option value="medium">中型</option>
+              <option value="large">大型</option>
+              <option value="enterprise">企业级</option>
+            </select>
+          </div>
+          <div>
+            <Label className="mb-1">供应商来源</Label>
+            <select
+              className={`w-full ${selectClass}`}
+              value={form.source || ''}
+              onChange={e => setForm({ ...form, source: e.target.value })}
+            >
+              <option value="">未设置</option>
+              {SUPPLIER_SOURCES.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="col-span-2">
+            <Label className="mb-1">主营产品</Label>
+            <Textarea
+              rows={2}
+              value={form.main_products || ''}
+              onChange={e => setForm({ ...form, main_products: e.target.value })}
+              placeholder="描述供应商的主要产品线"
+            />
+          </div>
+          <div className="flex items-end">
+            <div className="flex items-center space-x-2 cursor-pointer">
+              <Checkbox
+                id="is_active"
+                checked={form.is_active}
+                onCheckedChange={(checked) => setForm({ ...form, is_active: !!checked })}
+              />
+              <Label htmlFor="is_active" className="cursor-pointer">活跃供应商</Label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 联系信息 */}
+      <div>
+        <h4 className="text-sm font-semibold text-foreground mb-3">联系信息</h4>
+        <Separator className="mb-3" />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label className="mb-1">公司邮箱</Label>
+            <Input
+              type="email"
+              value={form.email || ''}
+              onChange={e => setForm({ ...form, email: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label className="mb-1">公司电话</Label>
+            <Input
+              type="text"
+              value={form.phone || ''}
+              onChange={e => setForm({ ...form, phone: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label className="mb-1">公司网站</Label>
+            <Input
+              type="text"
+              value={form.website || ''}
+              onChange={e => setForm({ ...form, website: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label className="mb-1">公司地址</Label>
+            <Input
+              type="text"
+              value={form.address || ''}
+              onChange={e => setForm({ ...form, address: e.target.value })}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 贸易信息 */}
+      <div>
+        <h4 className="text-sm font-semibold text-foreground mb-3">贸易信息</h4>
+        <Separator className="mb-3" />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label className="mb-1">付款条款</Label>
+            <select
+              className={selectClass}
+              value={form.payment_terms || ''}
+              onChange={e => setForm({ ...form, payment_terms: e.target.value })}
+            >
+              <option value="">请选择付款方式</option>
+              {paymentMethods.map(pm => (
+                <option key={pm.id} value={pm.code}>{pm.code} - {pm.name_zh}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label className="mb-1">贸易术语 (Incoterms)</Label>
+            <select
+              className={`w-full ${selectClass}`}
+              value={form.shipping_terms || ''}
+              onChange={e => setForm({ ...form, shipping_terms: e.target.value })}
+            >
+              <option value="">未设置</option>
+              {tradeTerms.map(t => (
+                <option key={t.id} value={t.code}>
+                  {t.code} - {t.name_zh}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* 标签和备注 */}
+      <div>
+        <h4 className="text-sm font-semibold text-foreground mb-3">其他</h4>
+        <Separator className="mb-3" />
+        <div className="space-y-4">
+          <div>
+            <Label className="mb-1">标签</Label>
+            <div className="flex items-center gap-2 mb-2">
+              <Input
+                type="text"
+                placeholder="输入标签后按回车或点击添加"
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addTag}
+                className="whitespace-nowrap"
+              >
+                添加
+              </Button>
+            </div>
+            {form.tags && form.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {form.tags.map(tag => (
+                  <Badge
+                    key={tag}
+                    variant="secondary"
+                    className="bg-blue-100 text-blue-800"
+                  >
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => removeTag(tag)}
+                      className="ml-1 hover:text-blue-900"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <Label className="mb-1">备注</Label>
+            <Textarea
+              rows={3}
+              value={form.notes || ''}
+              onChange={e => setForm({ ...form, notes: e.target.value })}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 按钮 */}
+      <Separator />
+      <div className="flex justify-end space-x-3 pt-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+        >
+          取消
+        </Button>
+        <Button
+          type="submit"
+          disabled={loading || !form.name.trim()}
+        >
+          {loading ? '保存中...' : '保存'}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 // ==================== 主页面 ====================
 
 export default function SuppliersPage() {
   const confirm = useConfirm();
+  const { can } = usePermission();
 
   // 列表状态
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -93,9 +522,7 @@ export default function SuppliersPage() {
   // 供应商表单弹窗
   const [showForm, setShowForm] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const [formData, setFormData] = useState<SupplierCreate>({ name: '' });
   const [formLoading, setFormLoading] = useState(false);
-  const [tagsText, setTagsText] = useState('');
 
   // 详情弹窗
   const [showDetail, setShowDetail] = useState(false);
@@ -142,45 +569,21 @@ export default function SuppliersPage() {
 
   const openCreateForm = () => {
     setEditingSupplier(null);
-    setFormData({ name: '', supplier_level: 'normal' });
-    setTagsText('');
     setShowForm(true);
   };
 
   const openEditForm = (supplier: Supplier) => {
     setEditingSupplier(supplier);
-    setFormData({
-      name: supplier.name,
-      short_name: supplier.short_name || undefined,
-      country: supplier.country || undefined,
-      region: supplier.region || undefined,
-      industry: supplier.industry || undefined,
-      company_size: supplier.company_size || undefined,
-      main_products: supplier.main_products || undefined,
-      supplier_level: supplier.supplier_level,
-      email: supplier.email || undefined,
-      phone: supplier.phone || undefined,
-      website: supplier.website || undefined,
-      address: supplier.address || undefined,
-      payment_terms: supplier.payment_terms || undefined,
-      shipping_terms: supplier.shipping_terms || undefined,
-      source: supplier.source || undefined,
-      notes: supplier.notes || undefined,
-      tags: supplier.tags,
-    });
-    setTagsText(supplier.tags.join(', '));
     setShowForm(true);
   };
 
-  const handleSubmitSupplier = async () => {
-    if (!formData.name.trim()) return;
+  const handleSubmitSupplier = async (data: SupplierCreate | SupplierUpdate) => {
     setFormLoading(true);
     try {
-      const data = { ...formData, tags: tagsText ? tagsText.split(',').map((t) => t.trim()).filter(Boolean) : [] };
       if (editingSupplier) {
         await suppliersApi.update(editingSupplier.id, data as SupplierUpdate);
       } else {
-        await suppliersApi.create(data);
+        await suppliersApi.create(data as SupplierCreate);
       }
       setShowForm(false);
       loadSuppliers();
@@ -308,10 +711,12 @@ export default function SuppliersPage() {
           <h1 className="text-2xl font-bold">供应商管理</h1>
           <p className="mt-1 text-sm text-muted-foreground">管理供应商信息和联系人</p>
         </div>
+        {can('supplier', 'create') && (
         <Button onClick={openCreateForm}>
           <Plus />
           新增供应商
         </Button>
+        )}
       </div>
 
       {/* 搜索和筛选 */}
@@ -326,11 +731,11 @@ export default function SuppliersPage() {
         <select
           value={levelFilter}
           onChange={(e) => { setLevelFilter(e.target.value); setPage(1); }}
-          className="px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className={selectClass}
         >
           <option value="">全部等级</option>
-          {SUPPLIER_LEVELS.map((l) => (
-            <option key={l.value} value={l.value}>{l.label}</option>
+          {Object.entries(SUPPLIER_LEVELS).map(([value, { label }]) => (
+            <option key={value} value={value}>{label}</option>
           ))}
         </select>
       </div>
@@ -385,14 +790,18 @@ export default function SuppliersPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="px-6 py-4 text-right space-x-1">
+                    {can('supplier', 'update') && (
                     <Button variant="ghost" size="sm" onClick={() => openEditForm(supplier)}>
                       <Pencil className="size-3.5" />
                       编辑
                     </Button>
+                    )}
+                    {can('supplier', 'delete') && (
                     <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDeleteSupplier(supplier)}>
                       <Trash2 className="size-3.5" />
                       删除
                     </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -433,215 +842,12 @@ export default function SuppliersPage() {
           <DialogHeader>
             <DialogTitle>{editingSupplier ? '编辑供应商' : '新增供应商'}</DialogTitle>
           </DialogHeader>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* 公司全称 */}
-            <div className="col-span-2">
-              <Label>公司全称 *</Label>
-              <Input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="请输入公司全称"
-                className="mt-1"
-              />
-            </div>
-
-            {/* 简称 */}
-            <div>
-              <Label>简称</Label>
-              <Input
-                type="text"
-                value={formData.short_name || ''}
-                onChange={(e) => setFormData({ ...formData, short_name: e.target.value || undefined })}
-                className="mt-1"
-              />
-            </div>
-
-            {/* 等级 */}
-            <div>
-              <Label>供应商等级</Label>
-              <select
-                value={formData.supplier_level || 'normal'}
-                onChange={(e) => setFormData({ ...formData, supplier_level: e.target.value })}
-                className="mt-1 w-full px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {SUPPLIER_LEVELS.map((l) => (
-                  <option key={l.value} value={l.value}>{l.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* 国家 */}
-            <div>
-              <Label>国家</Label>
-              <Input
-                type="text"
-                value={formData.country || ''}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value || undefined })}
-                placeholder="如 China"
-                className="mt-1"
-              />
-            </div>
-
-            {/* 地区 */}
-            <div>
-              <Label>地区</Label>
-              <Input
-                type="text"
-                value={formData.region || ''}
-                onChange={(e) => setFormData({ ...formData, region: e.target.value || undefined })}
-                placeholder="如 East Asia"
-                className="mt-1"
-              />
-            </div>
-
-            {/* 行业 */}
-            <div>
-              <Label>行业</Label>
-              <Input
-                type="text"
-                value={formData.industry || ''}
-                onChange={(e) => setFormData({ ...formData, industry: e.target.value || undefined })}
-                className="mt-1"
-              />
-            </div>
-
-            {/* 来源 */}
-            <div>
-              <Label>来源</Label>
-              <select
-                value={formData.source || ''}
-                onChange={(e) => setFormData({ ...formData, source: e.target.value || undefined })}
-                className="mt-1 w-full px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">请选择</option>
-                {SUPPLIER_SOURCES.map((s) => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* 主营产品 */}
-            <div className="col-span-2">
-              <Label>主营产品</Label>
-              <Textarea
-                value={formData.main_products || ''}
-                onChange={(e) => setFormData({ ...formData, main_products: e.target.value || undefined })}
-                rows={2}
-                placeholder="描述供应商的主要产品"
-                className="mt-1"
-              />
-            </div>
-
-            <Separator className="col-span-2" />
-
-            {/* 邮箱 */}
-            <div>
-              <Label>邮箱</Label>
-              <Input
-                type="email"
-                value={formData.email || ''}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value || undefined })}
-                className="mt-1"
-              />
-            </div>
-
-            {/* 电话 */}
-            <div>
-              <Label>电话</Label>
-              <Input
-                type="text"
-                value={formData.phone || ''}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value || undefined })}
-                className="mt-1"
-              />
-            </div>
-
-            {/* 网站 */}
-            <div>
-              <Label>网站</Label>
-              <Input
-                type="text"
-                value={formData.website || ''}
-                onChange={(e) => setFormData({ ...formData, website: e.target.value || undefined })}
-                className="mt-1"
-              />
-            </div>
-
-            {/* 付款条款 */}
-            <div>
-              <Label>付款条款</Label>
-              <Input
-                type="text"
-                value={formData.payment_terms || ''}
-                onChange={(e) => setFormData({ ...formData, payment_terms: e.target.value || undefined })}
-                placeholder="如 T/T 30 days"
-                className="mt-1"
-              />
-            </div>
-
-            {/* 贸易术语 */}
-            <div>
-              <Label>贸易术语</Label>
-              <Input
-                type="text"
-                value={formData.shipping_terms || ''}
-                onChange={(e) => setFormData({ ...formData, shipping_terms: e.target.value || undefined })}
-                placeholder="如 FOB, CIF"
-                className="mt-1"
-              />
-            </div>
-
-            {/* 地址 */}
-            <div className="col-span-2">
-              <Label>地址</Label>
-              <Input
-                type="text"
-                value={formData.address || ''}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value || undefined })}
-                className="mt-1"
-              />
-            </div>
-
-            <Separator className="col-span-2" />
-
-            {/* 标签 */}
-            <div className="col-span-2">
-              <Label>标签（逗号分隔）</Label>
-              <Input
-                type="text"
-                value={tagsText}
-                onChange={(e) => setTagsText(e.target.value)}
-                placeholder="如 五金, 工具, 刀具"
-                className="mt-1"
-              />
-            </div>
-
-            {/* 备注 */}
-            <div className="col-span-2">
-              <Label>备注</Label>
-              <Textarea
-                value={formData.notes || ''}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value || undefined })}
-                rows={2}
-                className="mt-1"
-              />
-            </div>
-          </div>
-
-          {/* 按钮 */}
-          <div className="flex justify-end gap-3 mt-2">
-            <Button variant="outline" onClick={() => setShowForm(false)}>
-              取消
-            </Button>
-            <Button
-              onClick={handleSubmitSupplier}
-              disabled={formLoading || !formData.name.trim()}
-            >
-              {formLoading ? '提交中...' : editingSupplier ? '保存' : '创建'}
-            </Button>
-          </div>
+          <SupplierForm
+            initial={editingSupplier || undefined}
+            onSubmit={handleSubmitSupplier}
+            onCancel={() => setShowForm(false)}
+            loading={formLoading}
+          />
         </DialogContent>
       </Dialog>
 
@@ -718,10 +924,12 @@ export default function SuppliersPage() {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-lg font-semibold">联系人 ({detailData.contacts.length})</h3>
+                  {can('supplier', 'create') && (
                   <Button size="sm" onClick={openCreateContact}>
                     <Plus className="size-3.5" />
                     添加联系人
                   </Button>
+                  )}
                 </div>
 
                 {detailData.contacts.length === 0 ? (
@@ -747,14 +955,18 @@ export default function SuppliersPage() {
                           </div>
                         </div>
                         <div className="flex gap-1">
+                          {can('supplier', 'update') && (
                           <Button variant="ghost" size="sm" onClick={() => openEditContact(contact)}>
                             <Pencil className="size-3.5" />
                             编辑
                           </Button>
+                          )}
+                          {can('supplier', 'delete') && (
                           <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDeleteContact(contact)}>
                             <Trash2 className="size-3.5" />
                             删除
                           </Button>
+                          )}
                         </div>
                       </div>
                     ))}

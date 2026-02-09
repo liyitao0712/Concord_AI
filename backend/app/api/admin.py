@@ -6,7 +6,8 @@
 # 2. 系统统计（用户数量、活跃用户等）
 #
 # 权限要求：
-# 所有接口都需要管理员权限（role=admin）
+# 使用 require_permission 进行细粒度权限控制，
+# 非超管只能访问本组织的用户数据。
 #
 # API 列表：
 # ┌─────────────────────────────────────────────────────────────┐
@@ -31,9 +32,17 @@ from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_admin_user, hash_password
+from app.core.security import (
+    get_current_admin_user,
+    hash_password,
+    require_permission,
+    DataScope,
+    apply_data_scope,
+)
 from app.core.logging import get_logger
 from app.models.user import User
+from app.models.role import Role
+from app.models.department import Department
 
 # 获取当前模块的 logger
 logger = get_logger(__name__)
@@ -42,8 +51,6 @@ logger = get_logger(__name__)
 router = APIRouter(
     prefix="/admin",
     tags=["Admin"],
-    # 所有路由都需要管理员权限
-    dependencies=[Depends(get_current_admin_user)]
 )
 
 
@@ -57,6 +64,13 @@ class UserListItem(BaseModel):
     role: str = Field(..., description="User role")
     is_active: bool = Field(..., description="Is active")
     created_at: datetime = Field(..., description="Created time")
+    org_id: Optional[str] = Field(None, description="组织 ID")
+    department_id: Optional[str] = Field(None, description="部门 ID")
+    role_id: Optional[str] = Field(None, description="角色 ID")
+    supervisor_id: Optional[str] = Field(None, description="上级 ID")
+    is_super_admin: bool = Field(False, description="超管")
+    role_name: Optional[str] = Field(None, description="角色名")
+    department_name: Optional[str] = Field(None, description="部门名")
 
     model_config = {"from_attributes": True}
 
@@ -72,6 +86,9 @@ class CreateUserRequest(BaseModel):
     password: str = Field(..., min_length=6, description="Password (min 6 chars)")
     name: str = Field(..., min_length=1, description="User name")
     role: str = Field("user", description="User role: admin or user")
+    role_id: Optional[str] = Field(None, description="角色 ID")
+    department_id: Optional[str] = Field(None, description="主部门 ID")
+    supervisor_id: Optional[str] = Field(None, description="直属上级 ID")
 
 
 class UpdateUserRequest(BaseModel):
@@ -79,6 +96,9 @@ class UpdateUserRequest(BaseModel):
     email: Optional[EmailStr] = Field(None, description="New email")
     name: Optional[str] = Field(None, description="New name")
     role: Optional[str] = Field(None, description="New role")
+    role_id: Optional[str] = Field(None, description="角色 ID")
+    department_id: Optional[str] = Field(None, description="主部门 ID")
+    supervisor_id: Optional[str] = Field(None, description="直属上级 ID")
 
 
 class ResetPasswordRequest(BaseModel):
@@ -107,6 +127,27 @@ class MessageResponse(BaseModel):
     message: str = Field(..., description="Response message")
 
 
+# ==================== 辅助函数 ====================
+
+def _org_filter(scope: DataScope):
+    """返回组织隔离条件列表（非超管且有 org_id 时生效）"""
+    if not scope.is_super_admin and scope.org_id:
+        return [User.org_id == scope.org_id]
+    return []
+
+
+def _check_user_org(scope: DataScope, user: User):
+    """
+    检查目标用户是否属于当前操作者的组织。
+    非超管时，如果目标用户不在同一组织则抛 404。
+    """
+    if not scope.is_super_admin and scope.org_id and user.org_id != scope.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+
+
 # ==================== API 路由 ====================
 
 @router.get(
@@ -117,7 +158,7 @@ class MessageResponse(BaseModel):
 )
 async def get_stats(
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user)
+    scope: DataScope = Depends(require_permission("user", "read"))
 ):
     """
     获取系统统计信息
@@ -128,31 +169,40 @@ async def get_stats(
     - 管理员数量
     - 今日新增用户数
     """
-    logger.info(f"管理员 {admin.email} 获取系统统计")
+    logger.info(f"管理员 {scope.user.email} 获取系统统计")
+
+    # 组织隔离条件
+    org_conditions = _org_filter(scope)
 
     # 总用户数
-    total_result = await db.execute(select(func.count(User.id)))
+    total_q = select(func.count(User.id))
+    for cond in org_conditions:
+        total_q = total_q.where(cond)
+    total_result = await db.execute(total_q)
     total_users = total_result.scalar()
 
     # 活跃用户数
-    active_result = await db.execute(
-        select(func.count(User.id)).where(User.is_active == True)
-    )
+    active_q = select(func.count(User.id)).where(User.is_active == True)
+    for cond in org_conditions:
+        active_q = active_q.where(cond)
+    active_result = await db.execute(active_q)
     active_users = active_result.scalar()
 
     # 管理员数量
-    admin_result = await db.execute(
-        select(func.count(User.id)).where(User.role == "admin")
-    )
+    admin_q = select(func.count(User.id)).where(User.role == "admin")
+    for cond in org_conditions:
+        admin_q = admin_q.where(cond)
+    admin_result = await db.execute(admin_q)
     admin_users = admin_result.scalar()
 
     # 今日新增用户
     today = datetime.utcnow().date()
-    today_result = await db.execute(
-        select(func.count(User.id)).where(
-            func.date(User.created_at) == today
-        )
+    today_q = select(func.count(User.id)).where(
+        func.date(User.created_at) == today
     )
+    for cond in org_conditions:
+        today_q = today_q.where(cond)
+    today_result = await db.execute(today_q)
     today_new_users = today_result.scalar()
 
     return StatsResponse(
@@ -176,7 +226,7 @@ async def get_users(
     role: Optional[str] = Query(None, description="Filter by role"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user)
+    scope: DataScope = Depends(require_permission("user", "read"))
 ):
     """
     获取用户列表（分页）
@@ -186,10 +236,15 @@ async def get_users(
     - role: 按角色筛选
     - is_active: 按激活状态筛选
     """
-    logger.info(f"管理员 {admin.email} 获取用户列表，页码: {page}")
+    logger.info(f"管理员 {scope.user.email} 获取用户列表，页码: {page}")
 
     # 构建查询
     query = select(User)
+
+    # 非超管只能看到本组织的用户
+    if not scope.is_super_admin:
+        if scope.org_id:
+            query = query.where(User.org_id == scope.org_id)
 
     # 搜索条件
     if search:
@@ -219,11 +274,40 @@ async def get_users(
     result = await db.execute(query)
     users = result.scalars().all()
 
+    # 批量获取角色名和部门名（避免 N+1 查询）
+    role_ids = {u.role_id for u in users if u.role_id}
+    dept_ids = {u.department_id for u in users if u.department_id}
+
+    role_name_map = {}
+    dept_name_map = {}
+
+    if role_ids:
+        role_result = await db.execute(
+            select(Role.id, Role.name).where(Role.id.in_(role_ids))
+        )
+        for rid, rname in role_result:
+            role_name_map[rid] = rname
+
+    if dept_ids:
+        dept_result = await db.execute(
+            select(Department.id, Department.name).where(Department.id.in_(dept_ids))
+        )
+        for did, dname in dept_result:
+            dept_name_map[did] = dname
+
+    # 构建响应，附带角色名和部门名
+    user_items = []
+    for u in users:
+        item = UserListItem.model_validate(u)
+        item.role_name = role_name_map.get(u.role_id) if u.role_id else None
+        item.department_name = dept_name_map.get(u.department_id) if u.department_id else None
+        user_items.append(item)
+
     return UserListResponse(
         total=total,
         page=page,
         page_size=page_size,
-        users=[UserListItem.model_validate(u) for u in users]
+        users=user_items
     )
 
 
@@ -236,12 +320,12 @@ async def get_users(
 async def get_user(
     user_id: str,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user)
+    scope: DataScope = Depends(require_permission("user", "read"))
 ):
     """
     获取单个用户详情
     """
-    logger.info(f"管理员 {admin.email} 获取用户详情: {user_id}")
+    logger.info(f"管理员 {scope.user.email} 获取用户详情: {user_id}")
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
@@ -251,6 +335,9 @@ async def get_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="用户不存在"
         )
+
+    # 非超管只能查看本组织的用户
+    _check_user_org(scope, user)
 
     return UserDetail.model_validate(user)
 
@@ -265,14 +352,14 @@ async def get_user(
 async def create_user(
     request: CreateUserRequest,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user)
+    scope: DataScope = Depends(require_permission("user", "create"))
 ):
     """
     创建新用户
 
     管理员可以直接创建用户，包括创建其他管理员
     """
-    logger.info(f"管理员 {admin.email} 创建新用户: {request.email}")
+    logger.info(f"管理员 {scope.user.email} 创建新用户: {request.email}")
 
     # 检查邮箱是否已存在
     result = await db.execute(select(User).where(User.email == request.email))
@@ -295,7 +382,11 @@ async def create_user(
         password_hash=hash_password(request.password),
         name=request.name,
         role=request.role,
-        is_active=True
+        is_active=True,
+        org_id=scope.org_id,  # 新建用户归入当前组织
+        role_id=request.role_id,
+        department_id=request.department_id,
+        supervisor_id=request.supervisor_id,
     )
 
     db.add(user)
@@ -316,14 +407,14 @@ async def update_user(
     user_id: str,
     request: UpdateUserRequest,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user)
+    scope: DataScope = Depends(require_permission("user", "update"))
 ):
     """
     更新用户信息
 
     可更新的字段：邮箱、名称、角色
     """
-    logger.info(f"管理员 {admin.email} 更新用户: {user_id}")
+    logger.info(f"管理员 {scope.user.email} 更新用户: {user_id}")
 
     # 查找用户
     result = await db.execute(select(User).where(User.id == user_id))
@@ -334,6 +425,9 @@ async def update_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="用户不存在"
         )
+
+    # 非超管只能操作本组织的用户
+    _check_user_org(scope, user)
 
     # 更新邮箱（需要检查唯一性）
     if request.email and request.email != user.email:
@@ -360,6 +454,14 @@ async def update_user(
             )
         user.role = request.role
 
+    # 更新角色关联
+    if request.role_id is not None:
+        user.role_id = request.role_id
+    if request.department_id is not None:
+        user.department_id = request.department_id
+    if request.supervisor_id is not None:
+        user.supervisor_id = request.supervisor_id
+
     await db.commit()
     await db.refresh(user)
 
@@ -376,7 +478,7 @@ async def update_user(
 async def delete_user(
     user_id: str,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user)
+    scope: DataScope = Depends(require_permission("user", "delete"))
 ):
     """
     删除用户
@@ -384,10 +486,10 @@ async def delete_user(
     注意：这是永久删除操作，无法恢复！
     如果只是想禁用用户，请使用 toggle 接口
     """
-    logger.info(f"管理员 {admin.email} 删除用户: {user_id}")
+    logger.info(f"管理员 {scope.user.email} 删除用户: {user_id}")
 
     # 不能删除自己
-    if user_id == admin.id:
+    if user_id == scope.user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="不能删除自己"
@@ -402,6 +504,9 @@ async def delete_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="用户不存在"
         )
+
+    # 非超管只能操作本组织的用户
+    _check_user_org(scope, user)
 
     # 删除用户
     await db.delete(user)
@@ -420,7 +525,7 @@ async def delete_user(
 async def toggle_user_status(
     user_id: str,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user)
+    scope: DataScope = Depends(require_permission("user", "update"))
 ):
     """
     启用/禁用用户
@@ -429,10 +534,10 @@ async def toggle_user_status(
     - 如果当前是激活状态，则禁用
     - 如果当前是禁用状态，则激活
     """
-    logger.info(f"管理员 {admin.email} 切换用户状态: {user_id}")
+    logger.info(f"管理员 {scope.user.email} 切换用户状态: {user_id}")
 
     # 不能禁用自己
-    if user_id == admin.id:
+    if user_id == scope.user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="不能禁用自己"
@@ -447,6 +552,9 @@ async def toggle_user_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="用户不存在"
         )
+
+    # 非超管只能操作本组织的用户
+    _check_user_org(scope, user)
 
     # 切换状态
     user.is_active = not user.is_active
@@ -468,14 +576,14 @@ async def reset_user_password(
     user_id: str,
     request: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user)
+    scope: DataScope = Depends(require_permission("user", "update"))
 ):
     """
     重置用户密码
 
     管理员可以为任何用户重置密码
     """
-    logger.info(f"管理员 {admin.email} 重置用户密码: {user_id}")
+    logger.info(f"管理员 {scope.user.email} 重置用户密码: {user_id}")
 
     # 查找用户
     result = await db.execute(select(User).where(User.id == user_id))
@@ -486,6 +594,9 @@ async def reset_user_password(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="用户不存在"
         )
+
+    # 非超管只能操作本组织的用户
+    _check_user_org(scope, user)
 
     # 更新密码
     user.password_hash = hash_password(request.new_password)

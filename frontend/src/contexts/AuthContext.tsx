@@ -10,6 +10,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User, getCurrentUser, login as apiLogin, logout as apiLogout, getAccessToken, LoginRequest } from '@/lib/api';
+import { hasPermission, hasAnyPermission } from '@/lib/permissions';
 
 // ==================== 类型定义 ====================
 
@@ -18,6 +19,9 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
+  hasPermission: (resource: string, action: string) => boolean;
+  hasAnyPermission: (checks: Array<{ resource: string; action: string }>) => boolean;
   login: (data: LoginRequest) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -83,7 +87,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // 计算属性
   const isAuthenticated = !!user;
-  const isAdmin = user?.role === 'admin';
+  const isSuperAdmin = user?.is_super_admin === true;
+  const isAdmin = isAuthenticated && (isSuperAdmin || user?.role === 'admin' || (user?.permissions?.length ?? 0) > 0);
 
   return (
     <AuthContext.Provider
@@ -92,6 +97,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthenticated,
         isAdmin,
+        isSuperAdmin,
+        hasPermission: (resource: string, action: string) => hasPermission(user, resource, action),
+        hasAnyPermission: (checks: Array<{ resource: string; action: string }>) => hasAnyPermission(user, checks),
         login,
         logout,
         refreshUser,

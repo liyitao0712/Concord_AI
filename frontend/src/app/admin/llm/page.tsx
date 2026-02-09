@@ -21,6 +21,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { PageLoading } from '@/components/LoadingSpinner';
+import { usePermission } from '@/hooks/usePermission';
 
 interface ProviderGroup {
   id: string;
@@ -63,6 +64,7 @@ export default function LLMConfigPage() {
   const [creating, setCreating] = useState(false);
 
   const confirm = useConfirm();
+  const { can } = usePermission();
 
   useEffect(() => {
     loadModels();
@@ -282,9 +284,11 @@ export default function LLMConfigPage() {
             配置各个 AI 模型的 API Key 和参数
           </p>
         </div>
+        {can('llm_model', 'create') && (
         <Button onClick={() => setShowCreateModal(true)}>
           新增模型
         </Button>
+        )}
       </div>
 
       {/* 统计信息 */}
@@ -430,6 +434,7 @@ export default function LLMConfigPage() {
                             {/* 操作按钮 */}
                             <div className="flex items-center space-x-2">
                               {/* 删除按钮 */}
+                              {can('llm_model', 'delete') && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -439,6 +444,7 @@ export default function LLMConfigPage() {
                               >
                                 <Trash2 className="w-5 h-5" />
                               </Button>
+                              )}
 
                               {/* 启用/禁用开关 */}
                               <Switch

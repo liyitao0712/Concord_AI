@@ -24,8 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.logging import get_logger
-from app.core.security import get_current_admin_user
-from app.models.user import User
+from app.core.security import require_permission, DataScope
 from app.models.prompt import Prompt
 
 logger = get_logger(__name__)
@@ -87,7 +86,7 @@ async def list_prompts(
     category: Optional[str] = None,
     is_active: Optional[bool] = None,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("prompt", "read")),
 ):
     """获取 Prompt 列表"""
     query = select(Prompt).order_by(Prompt.category, Prompt.name)
@@ -130,7 +129,7 @@ async def list_prompts(
 async def get_prompt(
     prompt_name: str,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("prompt", "read")),
 ):
     """获取 Prompt 详情"""
     result = await session.execute(
@@ -161,7 +160,7 @@ async def update_prompt(
     prompt_name: str,
     data: PromptUpdate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("prompt", "update")),
 ):
     """更新 Prompt"""
     result = await session.execute(
@@ -197,7 +196,7 @@ async def update_prompt(
     except Exception as e:
         logger.warning(f"[PromptsAPI] 清除缓存失败: {e}")
 
-    logger.info(f"[PromptsAPI] 更新 Prompt: {prompt_name} by {admin.email}")
+    logger.info(f"[PromptsAPI] 更新 Prompt: {prompt_name} by {scope.user.email}")
 
     return PromptResponse(
         id=str(prompt.id),
@@ -219,7 +218,7 @@ async def test_prompt(
     prompt_name: str,
     data: PromptTestRequest,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("prompt", "read")),
 ):
     """
     测试 Prompt 渲染
@@ -271,7 +270,7 @@ async def test_prompt(
 @router.get("/{prompt_name}/default")
 async def get_prompt_default(
     prompt_name: str,
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("prompt", "read")),
 ):
     """
     获取 Prompt 的默认值（来自 defaults.py）
@@ -297,7 +296,7 @@ async def get_prompt_default(
 async def reset_prompt_to_default(
     prompt_name: str,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("prompt", "update")),
 ):
     """
     重置 Prompt 为默认值
@@ -325,7 +324,7 @@ async def reset_prompt_to_default(
             content=prompt.content,
             variables=prompt.variables,
             version=prompt.version,
-            changed_by=admin.id,
+            changed_by=scope.user.id,
             change_reason="Reset to default",
         )
         session.add(history)
@@ -337,7 +336,7 @@ async def reset_prompt_to_default(
         prompt.description = default.get("description")
         prompt.version += 1
         prompt.updated_at = datetime.utcnow()
-        prompt.updated_by = admin.id
+        prompt.updated_by = scope.user.id
     else:
         # 从默认值创建
         prompt = Prompt(
@@ -361,7 +360,7 @@ async def reset_prompt_to_default(
     except Exception as e:
         logger.warning(f"[PromptsAPI] 清除缓存失败: {e}")
 
-    logger.info(f"[PromptsAPI] 重置 Prompt 为默认值: {prompt_name} by {admin.email}")
+    logger.info(f"[PromptsAPI] 重置 Prompt 为默认值: {prompt_name} by {scope.user.email}")
 
     return PromptResponse(
         id=str(prompt.id),
@@ -381,7 +380,7 @@ async def reset_prompt_to_default(
 @router.post("/init-defaults")
 async def init_default_prompts(
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("prompt", "update")),
 ):
     """
     初始化默认 Prompt 到数据库
@@ -402,7 +401,7 @@ async def init_default_prompts(
         result = await session.execute(select(Prompt))
         total_count = len(result.scalars().all())
 
-        logger.info(f"[PromptsAPI] 默认 Prompt 已初始化 by {admin.email}")
+        logger.info(f"[PromptsAPI] 默认 Prompt 已初始化 by {scope.user.email}")
 
         return {
             "success": True,

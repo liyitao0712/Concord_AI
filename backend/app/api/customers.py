@@ -31,7 +31,7 @@ from pydantic import BaseModel, Field
 
 from app.core.database import get_db
 from app.core.logging import get_logger
-from app.core.security import get_current_admin_user
+from app.core.security import get_current_admin_user, require_permission, apply_data_scope, DataScope
 from app.models.user import User
 from app.models.customer import Customer, Contact
 from app.schemas.customer import (
@@ -63,14 +63,17 @@ async def list_customers(
     customer_level: Optional[str] = Query(None, description="筛选等级"),
     is_active: Optional[bool] = Query(None, description="筛选状态"),
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("customer", "read")),
 ):
     """
     获取客户列表
 
-    支持搜索、筛选和分页
+    支持搜索、筛选和分页，按数据权限过滤
     """
     query = select(Customer).order_by(Customer.created_at.desc())
+
+    # 数据权限过滤
+    query = await apply_data_scope(query, Customer, "customer", scope, session)
 
     # 搜索：模糊匹配公司名、简称、邮箱
     if search:
@@ -130,7 +133,7 @@ async def list_customers(
 async def create_customer(
     data: CustomerCreate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("customer", "create")),
 ):
     """创建客户"""
     customer = Customer(
@@ -153,13 +156,17 @@ async def create_customer(
         source=data.source,
         notes=data.notes,
         tags=data.tags,
+        # 权限字段自动填充
+        org_id=scope.org_id,
+        owner_id=scope.user.id,
+        owner_dept_id=scope.user.department_id,
     )
 
     session.add(customer)
     await session.commit()
     await session.refresh(customer)
 
-    logger.info(f"[CustomersAPI] 创建客户: {customer.name} by {admin.email}")
+    logger.info(f"[CustomersAPI] 创建客户: {customer.name} by {scope.user.email}")
 
     resp = CustomerResponse.model_validate(customer)
     resp.contact_count = 0
@@ -170,15 +177,17 @@ async def create_customer(
 async def get_customer(
     customer_id: str,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("customer", "read")),
 ):
     """获取客户详情（含联系人列表）"""
-    # 预加载联系人
-    result = await session.execute(
+    # 预加载联系人，并加数据权限过滤
+    query = (
         select(Customer)
         .options(selectinload(Customer.contacts))
         .where(Customer.id == customer_id)
     )
+    query = await apply_data_scope(query, Customer, "customer", scope, session)
+    result = await session.execute(query)
     customer = result.scalar_one_or_none()
 
     if not customer:
@@ -195,10 +204,13 @@ async def update_customer(
     customer_id: str,
     data: CustomerUpdate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("customer", "update")),
 ):
     """更新客户"""
-    customer = await session.get(Customer, customer_id)
+    query = select(Customer).where(Customer.id == customer_id)
+    query = await apply_data_scope(query, Customer, "customer", scope, session)
+    result = await session.execute(query)
+    customer = result.scalar_one_or_none()
     if not customer:
         raise HTTPException(status_code=404, detail="客户不存在")
 
@@ -210,7 +222,7 @@ async def update_customer(
     await session.commit()
     await session.refresh(customer)
 
-    logger.info(f"[CustomersAPI] 更新客户: {customer.name} by {admin.email}")
+    logger.info(f"[CustomersAPI] 更新客户: {customer.name} by {scope.user.email}")
 
     # 查询联系人数量
     contact_count = await session.scalar(
@@ -226,14 +238,17 @@ async def update_customer(
 async def delete_customer(
     customer_id: str,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("customer", "delete")),
 ):
     """
     删除客户
 
     级联删除该客户的所有联系人
     """
-    customer = await session.get(Customer, customer_id)
+    query = select(Customer).where(Customer.id == customer_id)
+    query = await apply_data_scope(query, Customer, "customer", scope, session)
+    result = await session.execute(query)
+    customer = result.scalar_one_or_none()
     if not customer:
         raise HTTPException(status_code=404, detail="客户不存在")
 
@@ -246,11 +261,71 @@ async def delete_customer(
     await session.delete(customer)
     await session.commit()
 
-    logger.info(f"[CustomersAPI] 删除客户: {customer_name} (联系人: {contact_count}) by {admin.email}")
+    logger.info(f"[CustomersAPI] 删除客户: {customer_name} (联系人: {contact_count}) by {scope.user.email}")
     return {"message": "删除成功", "contacts_deleted": contact_count}
 
 
-# ==================== AI 搜索 ====================
+# ==================== AI 草稿（异步搜索）====================
+
+
+class AIDraftRequest(BaseModel):
+    """AI 草稿创建请求"""
+    company_name: str = Field(..., min_length=1, description="公司名称")
+
+
+@router.post(
+    "/ai-draft",
+    response_model=CustomerResponse,
+    status_code=201,
+    summary="AI 草稿创建",
+    description="立即创建草稿客户，后台异步执行 AI 搜索，完成后自动填充客户信息",
+)
+async def ai_create_draft(
+    request: AIDraftRequest,
+    session: AsyncSession = Depends(get_db),
+    scope: DataScope = Depends(require_permission("customer", "create")),
+):
+    """
+    创建 AI 搜索草稿客户
+
+    1. 立即创建客户记录（ai_status=searching）
+    2. 发送 Celery 后台任务执行 AI 搜索
+    3. 立即返回客户信息，用户无需等待
+    """
+    from app.tasks.ai_lookup import ai_lookup_new_customer
+
+    customer = Customer(
+        id=str(uuid4()),
+        name=request.company_name,
+        source="ai",
+        ai_status="searching",
+        org_id=scope.org_id,
+        owner_id=scope.user.id,
+        owner_dept_id=scope.user.department_id,
+    )
+
+    session.add(customer)
+    await session.commit()
+    await session.refresh(customer)
+
+    logger.info(
+        f"[CustomersAPI] AI 草稿创建: {customer.name} (id={customer.id}) by {scope.user.email}"
+    )
+
+    # 发送后台任务（捕获发送失败，避免客户卡在 searching 状态）
+    try:
+        ai_lookup_new_customer.delay(customer.id, request.company_name, org_id=scope.org_id)
+    except Exception as e:
+        logger.error(f"[CustomersAPI] Celery 任务发送失败: {e}")
+        customer.ai_status = "failed"
+        await session.commit()
+
+    resp = CustomerResponse.model_validate(customer)
+    resp.contact_count = 0
+    return resp
+
+
+# ==================== AI 搜索（同步，向后兼容）====================
 
 
 class AILookupRequest(BaseModel):
@@ -260,6 +335,7 @@ class AILookupRequest(BaseModel):
 
 class AILookupResponse(BaseModel):
     """AI 搜索响应"""
+    name: Optional[str] = None  # 公司全称
     short_name: Optional[str] = None
     country: Optional[str] = None
     region: Optional[str] = None
@@ -284,7 +360,7 @@ class AILookupResponse(BaseModel):
 async def ai_lookup_customer(
     request: AILookupRequest,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("customer", "create")),
 ):
     """
     AI 搜索公司信息
@@ -295,7 +371,7 @@ async def ai_lookup_customer(
     from app.llm import apply_llm_settings
     from app.agents.registry import agent_registry
 
-    logger.info(f"[CustomersAPI] AI 搜索: {request.company_name} by {admin.email}")
+    logger.info(f"[CustomersAPI] AI 搜索: {request.company_name} by {scope.user.email}")
 
     # 加载 LLM 设置
     await apply_llm_settings(session)
@@ -315,6 +391,7 @@ async def ai_lookup_customer(
         raise HTTPException(status_code=500, detail=f"AI 搜索失败: {str(e)}")
 
     return AILookupResponse(
+        name=result.get("name"),
         short_name=result.get("short_name"),
         country=result.get("country"),
         region=result.get("region"),
@@ -344,10 +421,11 @@ async def list_contacts(
     search: Optional[str] = Query(None, description="搜索（姓名/邮箱）"),
     is_active: Optional[bool] = Query(None, description="筛选状态"),
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("contact", "read")),
 ):
     """获取联系人列表"""
     query = select(Contact).order_by(Contact.is_primary.desc(), Contact.created_at.desc())
+    query = await apply_data_scope(query, Contact, "contact", scope, session)
 
     if customer_id is not None:
         query = query.where(Contact.customer_id == customer_id)
@@ -382,7 +460,7 @@ async def list_contacts(
 async def create_contact(
     data: ContactCreate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("contact", "create")),
 ):
     """创建联系人"""
     # 验证客户是否存在
@@ -407,13 +485,16 @@ async def create_contact(
         is_primary=data.is_primary,
         is_active=data.is_active,
         notes=data.notes,
+        org_id=scope.org_id,
+        owner_id=scope.user.id,
+        owner_dept_id=scope.user.department_id,
     )
 
     session.add(contact)
     await session.commit()
     await session.refresh(contact)
 
-    logger.info(f"[ContactsAPI] 创建联系人: {contact.name} @ {customer.name} by {admin.email}")
+    logger.info(f"[ContactsAPI] 创建联系人: {contact.name} @ {customer.name} by {scope.user.email}")
     return ContactResponse.model_validate(contact)
 
 
@@ -421,10 +502,13 @@ async def create_contact(
 async def get_contact(
     contact_id: str,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("contact", "read")),
 ):
     """获取联系人详情"""
-    contact = await session.get(Contact, contact_id)
+    query = select(Contact).where(Contact.id == contact_id)
+    query = await apply_data_scope(query, Contact, "contact", scope, session)
+    result = await session.execute(query)
+    contact = result.scalar_one_or_none()
     if not contact:
         raise HTTPException(status_code=404, detail="联系人不存在")
     return ContactResponse.model_validate(contact)
@@ -435,10 +519,13 @@ async def update_contact(
     contact_id: str,
     data: ContactUpdate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("contact", "update")),
 ):
     """更新联系人"""
-    contact = await session.get(Contact, contact_id)
+    query = select(Contact).where(Contact.id == contact_id)
+    query = await apply_data_scope(query, Contact, "contact", scope, session)
+    result = await session.execute(query)
+    contact = result.scalar_one_or_none()
     if not contact:
         raise HTTPException(status_code=404, detail="联系人不存在")
 
@@ -455,7 +542,7 @@ async def update_contact(
     await session.commit()
     await session.refresh(contact)
 
-    logger.info(f"[ContactsAPI] 更新联系人: {contact.name} by {admin.email}")
+    logger.info(f"[ContactsAPI] 更新联系人: {contact.name} by {scope.user.email}")
     return ContactResponse.model_validate(contact)
 
 
@@ -463,10 +550,13 @@ async def update_contact(
 async def delete_contact(
     contact_id: str,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin_user),
+    scope: DataScope = Depends(require_permission("contact", "delete")),
 ):
     """删除联系人"""
-    contact = await session.get(Contact, contact_id)
+    query = select(Contact).where(Contact.id == contact_id)
+    query = await apply_data_scope(query, Contact, "contact", scope, session)
+    result = await session.execute(query)
+    contact = result.scalar_one_or_none()
     if not contact:
         raise HTTPException(status_code=404, detail="联系人不存在")
 
@@ -474,7 +564,7 @@ async def delete_contact(
     await session.delete(contact)
     await session.commit()
 
-    logger.info(f"[ContactsAPI] 删除联系人: {contact_name} by {admin.email}")
+    logger.info(f"[ContactsAPI] 删除联系人: {contact_name} by {scope.user.email}")
     return {"message": "删除成功"}
 
 

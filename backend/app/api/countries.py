@@ -17,9 +17,9 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_admin_user
-from app.models.user import User
+from app.core.security import require_permission, DataScope
 from app.models.country import Country
+from app.models.customer import Customer
 from app.schemas.country import CountryResponse, CountryListResponse
 
 
@@ -31,11 +31,12 @@ async def list_countries(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(50, ge=1, le=300, description="每页数量"),
     search: Optional[str] = Query(None, description="搜索国家名称/ISO代码/区号"),
+    sort_by: Optional[str] = Query(None, description="排序方式：usage=按客户使用次数降序"),
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
 ):
     """获取国家列表（只读）"""
-    query = select(Country).order_by(Country.iso_code_2)
+    query = select(Country)
 
     if search:
         search_filter = f"%{search}%"
@@ -53,6 +54,22 @@ async def list_countries(
                 Country.currency_name_en.ilike(search_filter),
             )
         )
+
+    # 排序：按客户使用次数或默认 ISO 码
+    if sort_by == "usage":
+        usage_sub = (
+            select(
+                Customer.country,
+                func.count().label("cnt"),
+            )
+            .where(Customer.country.isnot(None), Customer.country != "")
+            .group_by(Customer.country)
+            .subquery()
+        )
+        query = query.outerjoin(usage_sub, Country.name_zh == usage_sub.c.country)
+        query = query.order_by(usage_sub.c.cnt.desc().nullslast(), Country.iso_code_2)
+    else:
+        query = query.order_by(Country.iso_code_2)
 
     # 总数
     count_query = select(func.count()).select_from(query.subquery())
@@ -73,7 +90,7 @@ async def list_countries(
 async def get_country(
     country_id: str,
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin_user),
+    _: DataScope = Depends(require_permission("setting", "read")),
 ):
     """获取国家详情"""
     country = await session.get(Country, country_id)

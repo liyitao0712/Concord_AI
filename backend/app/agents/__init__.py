@@ -21,6 +21,7 @@ from app.agents import email_summarizer  # noqa: F401
 from app.agents import work_type_analyzer  # noqa: F401
 from app.agents import customer_extractor  # noqa: F401
 from app.agents import add_new_client_helper  # noqa: F401
+from app.agents import add_new_supplier_helper  # noqa: F401
 
 __all__ = [
     "BaseAgent",

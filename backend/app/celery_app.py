@@ -70,6 +70,9 @@ celery_app.conf.update(
         "health_check_interval": 30,  # 每 30 秒健康检查
     },
 
+    # 默认队列改为 default（与 Worker 启动参数一致）
+    task_default_queue="default",
+
     # 任务路由
     task_routes={
         "app.tasks.email.*": {"queue": "email"},  # 邮件任务专用队列
@@ -193,8 +196,9 @@ def sync_email_tasks_periodic():
     import asyncio
 
     loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
+    # 注意：不要调用 asyncio.set_event_loop(loop)！
+    # 否则会覆盖 worker_process_init 创建的持久 loop，
+    # 然后 loop.close() 会导致后续所有 AsyncTask 任务报 "Event loop is closed"。
     try:
         stats = loop.run_until_complete(email_worker_service.sync_email_tasks())
         logger.info(f"[Celery] 定期邮件任务同步完成: {stats}")

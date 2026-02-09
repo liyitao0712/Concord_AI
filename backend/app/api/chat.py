@@ -185,7 +185,7 @@ async def delete_session(
     await db.commit()
 
     # 清除 Redis 缓存
-    await chat_agent.clear_context(session_id)
+    await chat_agent.clear_context(session_id, org_id=getattr(current_user, 'org_id', None))
 
     logger.info(f"会话已删除: {session_id}")
     return ChatDeleteResponse(
@@ -298,6 +298,7 @@ async def send_message(
     result = await chat_agent.chat(
         session_id=session_id,
         message=data.message,
+        org_id=getattr(current_user, 'org_id', None),
         model=data.model,
         temperature=data.temperature,
     )
@@ -405,6 +406,7 @@ async def stream_chat(
             async for chunk in chat_agent.chat_stream(
                 session_id=session_id,
                 message=data.message,
+                org_id=getattr(current_user, 'org_id', None),
                 model=data.model,
                 temperature=data.temperature,
             ):
