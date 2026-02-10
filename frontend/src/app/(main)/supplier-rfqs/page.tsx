@@ -425,7 +425,7 @@ export default function SupplierRFQsPage() {
 
       {/* 询价单详情弹窗 */}
       <Dialog open={showDetail} onOpenChange={(open) => !open && setShowDetail(false)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
           {detailLoading || !detailData ? (
             <div className="flex justify-center py-8">
               <LoadingSpinner text="加载中..." />

@@ -648,7 +648,7 @@ function ProjectDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FolderKanban className="h-5 w-5" />
@@ -1174,7 +1174,7 @@ export function ProjectsPanel() {
 
       {/* 创建/编辑弹窗 */}
       <Dialog open={showForm} onOpenChange={() => { setShowForm(false); setEditingProject(null); setEditingAssociations([]); }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingProject ? '编辑项目' : '新建项目'}</DialogTitle>
           </DialogHeader>

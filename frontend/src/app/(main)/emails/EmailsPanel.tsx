@@ -353,7 +353,7 @@ export function EmailsPanel() {
           confirmText: '前往配置',
         });
         if (confirmed) {
-          window.location.href = '/admin/llm';
+          window.location.href = '/llm';
         }
       } else {
         toast.error(errorMessage);
@@ -388,7 +388,7 @@ export function EmailsPanel() {
           confirmText: '前往配置',
         });
         if (confirmed) {
-          window.location.href = '/admin/llm';
+          window.location.href = '/llm';
         }
       } else {
         toast.error(errorMessage);
@@ -643,7 +643,7 @@ export function EmailsPanel() {
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-[95vw] md:max-w-3xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-[95vw] md:max-w-4xl">
           <DialogHeader>
             <DialogTitle>邮件详情</DialogTitle>
           </DialogHeader>
@@ -798,7 +798,7 @@ export function EmailsPanel() {
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-[95vw] md:max-w-3xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-[95vw] md:max-w-4xl">
           <DialogHeader>
             <DialogTitle>AI 路由分析</DialogTitle>
           </DialogHeader>
@@ -918,7 +918,7 @@ export function EmailsPanel() {
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-[95vw] md:max-w-3xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-[95vw] md:max-w-4xl">
           <DialogHeader>
             <DialogTitle>AI 邮件分析</DialogTitle>
           </DialogHeader>
@@ -1156,7 +1156,7 @@ export function EmailsPanel() {
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-[95vw] md:max-w-3xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-[95vw] md:max-w-4xl">
           <DialogHeader>
             <DialogTitle>工作类型分析</DialogTitle>
           </DialogHeader>
@@ -1268,7 +1268,7 @@ export function EmailsPanel() {
                     asChild
                     className="border-orange-300 text-orange-700 hover:bg-orange-50"
                   >
-                    <a href="/admin/work-types">
+                    <a href="/work-types">
                       前往审批
                     </a>
                   </Button>
