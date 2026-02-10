@@ -12,7 +12,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   customersApi,
   contactsApi,
-  customerSuggestionsApi,
   countriesApi,
   Customer,
   CustomerDetail,
@@ -21,8 +20,6 @@ import {
   Contact,
   ContactCreate,
   ContactUpdate,
-  CustomerSuggestion,
-  CustomerReviewData,
   Country,
   tradeTermsApi,
   TradeTerm,
@@ -51,7 +48,6 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { PageHeader } from '@/components/PageHeader';
 import { FormSection } from '@/components/FormSection';
@@ -1128,451 +1124,6 @@ function ContactForm({
   );
 }
 
-// ==================== 建议审批状态配置 ====================
-
-const SUGGESTION_STATUS: Record<string, { label: string; color: string }> = {
-  pending: { label: '待审批', color: 'bg-yellow-100 text-yellow-800' },
-  approved: { label: '已通过', color: 'bg-green-100 text-green-800' },
-  rejected: { label: '已拒绝', color: 'bg-red-100 text-red-800' },
-};
-
-const SUGGESTION_TYPE: Record<string, { label: string; color: string }> = {
-  new_customer: { label: '新客户', color: 'bg-blue-100 text-blue-800' },
-  new_contact: { label: '新联系人', color: 'bg-purple-100 text-purple-800' },
-};
-
-// ==================== 建议审批弹窗 ====================
-
-function SuggestionReviewModal({
-  isOpen,
-  onClose,
-  suggestion,
-  onApproved,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  suggestion: CustomerSuggestion | null;
-  onApproved: () => void;
-}) {
-  const [form, setForm] = useState<CustomerReviewData>({});
-  const [loading, setLoading] = useState(false);
-  const confirm = useConfirm();
-
-  useEffect(() => {
-    if (suggestion) {
-      setForm({
-        company_name: suggestion.suggested_company_name,
-        short_name: suggestion.suggested_short_name || '',
-        country: suggestion.suggested_country || '',
-        region: suggestion.suggested_region || '',
-        industry: suggestion.suggested_industry || '',
-        website: suggestion.suggested_website || '',
-        customer_level: suggestion.suggested_customer_level,
-        tags: suggestion.suggested_tags || [],
-        contact_name: suggestion.suggested_contact_name || '',
-        contact_email: suggestion.suggested_contact_email || '',
-        contact_title: suggestion.suggested_contact_title || '',
-        contact_phone: suggestion.suggested_contact_phone || '',
-        contact_department: suggestion.suggested_contact_department || '',
-        note: '',
-      });
-    }
-  }, [suggestion]);
-
-  if (!suggestion) return null;
-
-  const handleApprove = async () => {
-    setLoading(true);
-    try {
-      await customerSuggestionsApi.approve(suggestion.id, form);
-      onApproved();
-      onClose();
-    } catch (err) {
-      toast.error('审批失败: ' + (err instanceof Error ? err.message : '未知错误'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleReject = async () => {
-    const confirmed = await confirm({
-      title: '拒绝建议',
-      description: '确定要拒绝此建议吗？',
-      variant: 'destructive',
-    });
-    if (!confirmed) return;
-    setLoading(true);
-    try {
-      await customerSuggestionsApi.reject(suggestion.id, form.note);
-      onApproved();
-      onClose();
-    } catch (err) {
-      toast.error('拒绝失败: ' + (err instanceof Error ? err.message : '未知错误'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const typeInfo = SUGGESTION_TYPE[suggestion.suggestion_type] || SUGGESTION_TYPE.new_customer;
-
-  return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
-        <DialogHeader>
-          <DialogTitle>审核客户建议</DialogTitle>
-        </DialogHeader>
-
-        {/* AI 分析信息 */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center gap-4 mb-2">
-            <Badge variant="secondary" className={typeInfo.color}>
-              {typeInfo.label}
-            </Badge>
-            <span className="text-sm text-muted-foreground">
-              置信度: <strong className="text-blue-700">{(suggestion.confidence * 100).toFixed(0)}%</strong>
-            </span>
-            {suggestion.email_domain && (
-              <span className="text-sm text-muted-foreground">域名: {suggestion.email_domain}</span>
-            )}
-          </div>
-          {suggestion.reasoning && (
-            <p className="text-sm text-foreground mt-2">{suggestion.reasoning}</p>
-          )}
-          {suggestion.trigger_content && (
-            <details className="mt-2">
-              <summary className="text-xs text-muted-foreground cursor-pointer">查看触发内容</summary>
-              <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{suggestion.trigger_content}</p>
-            </details>
-          )}
-        </div>
-
-        {/* 可编辑表单 */}
-        <div className="space-y-6">
-          {/* 客户信息 */}
-          <div>
-            <h4 className="text-sm font-semibold text-foreground mb-3">客户信息</h4>
-            <Separator className="mb-3" />
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label className="mb-1">公司名称</Label>
-                <Input
-                  type="text"
-                  value={form.company_name || ''}
-                  onChange={e => setForm({ ...form, company_name: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1">简称</Label>
-                <Input
-                  type="text"
-                  value={form.short_name || ''}
-                  onChange={e => setForm({ ...form, short_name: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1">国家</Label>
-                <Input
-                  type="text"
-                  value={form.country || ''}
-                  onChange={e => setForm({ ...form, country: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1">地区</Label>
-                <Input
-                  type="text"
-                  value={form.region || ''}
-                  onChange={e => setForm({ ...form, region: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1">行业</Label>
-                <Input
-                  type="text"
-                  value={form.industry || ''}
-                  onChange={e => setForm({ ...form, industry: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1">网站</Label>
-                <Input
-                  type="text"
-                  value={form.website || ''}
-                  onChange={e => setForm({ ...form, website: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1">客户等级</Label>
-                <select
-                  className={`w-full ${selectClass}`}
-                  value={form.customer_level || 'potential'}
-                  onChange={e => setForm({ ...form, customer_level: e.target.value })}
-                >
-                  {Object.entries(CUSTOMER_LEVELS).map(([value, { label }]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* 联系人信息 */}
-          <div>
-            <h4 className="text-sm font-semibold text-foreground mb-3">联系人信息</h4>
-            <Separator className="mb-3" />
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="mb-1">姓名</Label>
-                <Input
-                  type="text"
-                  value={form.contact_name || ''}
-                  onChange={e => setForm({ ...form, contact_name: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1">邮箱</Label>
-                <Input
-                  type="email"
-                  value={form.contact_email || ''}
-                  onChange={e => setForm({ ...form, contact_email: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1">职位</Label>
-                <Input
-                  type="text"
-                  value={form.contact_title || ''}
-                  onChange={e => setForm({ ...form, contact_title: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1">部门</Label>
-                <Input
-                  type="text"
-                  value={form.contact_department || ''}
-                  onChange={e => setForm({ ...form, contact_department: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1">电话</Label>
-                <Input
-                  type="text"
-                  value={form.contact_phone || ''}
-                  onChange={e => setForm({ ...form, contact_phone: e.target.value })}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* 审核备注 */}
-          <div>
-            <Label className="mb-1">审核备注</Label>
-            <Textarea
-              rows={2}
-              placeholder="可选，填写审核意见..."
-              value={form.note || ''}
-              onChange={e => setForm({ ...form, note: e.target.value })}
-            />
-          </div>
-        </div>
-
-        {/* 操作按钮 */}
-        <Separator />
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose}>
-            取消
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleReject}
-            disabled={loading}
-          >
-            {loading ? '处理中...' : '拒绝'}
-          </Button>
-          <Button
-            onClick={handleApprove}
-            disabled={loading}
-            className="bg-green-600 hover:bg-green-700"
-          >
-            {loading ? '处理中...' : '通过'}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ==================== 待审批客户 Tab ====================
-
-function CustomerSuggestionsTab() {
-  const [suggestions, setSuggestions] = useState<CustomerSuggestion[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState('pending');
-  const [page, setPage] = useState(1);
-  const [reviewingSuggestion, setReviewingSuggestion] = useState<CustomerSuggestion | null>(null);
-  const pageSize = 20;
-
-  const loadSuggestions = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await customerSuggestionsApi.list({
-        page,
-        page_size: pageSize,
-        status: filterStatus || undefined,
-      });
-      setSuggestions(res.items);
-      setTotal(res.total);
-    } catch (err) {
-      console.error('加载客户建议失败:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, filterStatus]);
-
-  useEffect(() => {
-    loadSuggestions();
-  }, [loadSuggestions]);
-
-  const totalPages = Math.ceil(total / pageSize);
-
-  return (
-    <>
-      {/* 状态筛选 */}
-      <Card className="py-4 mb-6">
-        <CardContent>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">状态筛选:</span>
-            <div className="flex items-center gap-2">
-              {[
-                { value: 'pending', label: '待审批' },
-                { value: 'approved', label: '已通过' },
-                { value: 'rejected', label: '已拒绝' },
-                { value: '', label: '全部' },
-              ].map(opt => (
-                <Button
-                  key={opt.value}
-                  size="sm"
-                  variant={filterStatus === opt.value ? 'default' : 'outline'}
-                  onClick={() => { setFilterStatus(opt.value); setPage(1); }}
-                >
-                  {opt.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* 建议列表 */}
-      <Card className="py-0 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="px-6">公司名称</TableHead>
-              <TableHead className="px-6">联系人</TableHead>
-              <TableHead className="px-6">类型</TableHead>
-              <TableHead className="px-6">置信度</TableHead>
-              <TableHead className="px-6">状态</TableHead>
-              <TableHead className="px-6">创建时间</TableHead>
-              <TableHead className="px-6 text-right">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="px-6 py-12 text-center">
-                  <LoadingSpinner text="加载中..." />
-                </TableCell>
-              </TableRow>
-            ) : suggestions.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="px-6 py-12 text-center text-muted-foreground">暂无建议数据</TableCell>
-              </TableRow>
-            ) : (
-              suggestions.map(s => {
-                const statusInfo = SUGGESTION_STATUS[s.status] || SUGGESTION_STATUS.pending;
-                const typeInfo = SUGGESTION_TYPE[s.suggestion_type] || SUGGESTION_TYPE.new_customer;
-                return (
-                  <TableRow key={s.id}>
-                    <TableCell className="px-6 py-4">
-                      <div className="text-sm font-medium text-foreground">{s.suggested_company_name}</div>
-                      {s.suggested_country && (
-                        <div className="text-xs text-muted-foreground">{s.suggested_country}</div>
-                      )}
-                    </TableCell>
-                    <TableCell className="px-6 py-4">
-                      <div className="text-sm text-foreground">{s.suggested_contact_name || '-'}</div>
-                      {s.suggested_contact_email && (
-                        <div className="text-xs text-muted-foreground">{s.suggested_contact_email}</div>
-                      )}
-                    </TableCell>
-                    <TableCell className="px-6 py-4">
-                      <Badge variant="secondary" className={typeInfo.color}>
-                        {typeInfo.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-6 py-4">
-                      <span className={`text-sm font-medium ${
-                        s.confidence >= 0.8 ? 'text-green-600' :
-                        s.confidence >= 0.5 ? 'text-yellow-600' : 'text-red-600'
-                      }`}>
-                        {(s.confidence * 100).toFixed(0)}%
-                      </span>
-                    </TableCell>
-                    <TableCell className="px-6 py-4">
-                      <Badge variant="secondary" className={statusInfo.color}>
-                        {statusInfo.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-6 py-4 text-sm text-muted-foreground">
-                      {formatDateTime(s.created_at)}
-                    </TableCell>
-                    <TableCell className="px-6 py-4 text-right">
-                      {s.status === 'pending' ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setReviewingSuggestion(s)}
-                        >
-                          审核
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setReviewingSuggestion(s)}
-                        >
-                          查看
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-
-        {/* 分页 */}
-        <Pagination
-          page={page}
-          totalPages={totalPages}
-          total={total}
-          onPageChange={setPage}
-        />
-      </Card>
-
-      {/* 审核弹窗 */}
-      <SuggestionReviewModal
-        isOpen={!!reviewingSuggestion}
-        onClose={() => setReviewingSuggestion(null)}
-        suggestion={reviewingSuggestion}
-        onApproved={loadSuggestions}
-      />
-    </>
-  );
-}
 
 // ==================== 移动端客户卡片 ====================
 
@@ -1691,9 +1242,6 @@ export default function CustomersPage() {
   const { isMobile } = useDevice();
   const { can } = usePermission();
 
-  // Tab 状态
-  const [activeTab, setActiveTab] = useState<string>('list');
-
   // 数据状态
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [total, setTotal] = useState(0);
@@ -1809,7 +1357,7 @@ export default function CustomersPage() {
       <PageHeader
         title="客户管理"
         description="管理客户信息和联系人"
-        actions={activeTab === 'list' && can('customer', 'create') ? (
+        actions={can('customer', 'create') ? (
           <Button onClick={() => setShowCreate(true)}>
             <Plus className="h-4 w-4" />
             新建客户
@@ -1817,19 +1365,7 @@ export default function CustomersPage() {
         ) : undefined}
       />
 
-      {/* Tab 切换 */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList variant="line">
-          <TabsTrigger value="list">客户列表</TabsTrigger>
-          <TabsTrigger value="suggestions">待审批客户</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="suggestions">
-          <CustomerSuggestionsTab />
-        </TabsContent>
-
-        <TabsContent value="list">
-          {/* 搜索和筛选 */}
+      {/* 搜索和筛选 */}
           <SearchFilterBar
             searchPlaceholder="搜索公司名称、简称、邮箱..."
             searchValue={searchInput}
@@ -2069,8 +1605,6 @@ export default function CustomersPage() {
             onClose={() => setContactsCustomer(null)}
             customer={contactsCustomer}
           />
-        </TabsContent>
-      </Tabs>
     </div>
   );
 }

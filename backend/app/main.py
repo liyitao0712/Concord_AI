@@ -42,7 +42,6 @@ from app.api import llm_models
 from app.api import work_types as work_types_router
 from app.api import customers as customers_router
 from app.api import suppliers as suppliers_router
-from app.api import customer_suggestions as customer_suggestions_router
 from app.api import categories as categories_router
 from app.api import products as products_router
 from app.api import countries as countries_router
@@ -336,13 +335,13 @@ app.include_router(auth.router)
 app.include_router(llm.router)
 
 # 管理员路由（需要管理员权限）
-# - GET /admin/stats - 系统统计
-# - GET /admin/users - 用户列表
-# - POST /admin/users - 创建用户
-# - PUT /admin/users/{id} - 更新用户
-# - DELETE /admin/users/{id} - 删除用户
-# - POST /admin/users/{id}/toggle - 启用/禁用用户
-# - POST /admin/users/{id}/reset-password - 重置密码
+# - GET /api/stats - 系统统计
+# - GET /api/users - 用户列表
+# - POST /api/users - 创建用户
+# - PUT /api/users/{id} - 更新用户
+# - DELETE /api/users/{id} - 删除用户
+# - POST /api/users/{id}/toggle - 启用/禁用用户
+# - POST /api/users/{id}/reset-password - 重置密码
 app.include_router(admin.router)
 
 # Agent 路由（AI Agent 调用）
@@ -354,19 +353,19 @@ app.include_router(admin.router)
 app.include_router(agents.router)
 
 # 系统设置路由（仅管理员）
-# - GET /admin/settings/llm - 获取 LLM 配置
-# - PUT /admin/settings/llm - 更新 LLM 配置
-# - POST /admin/settings/llm/test - 测试 LLM 连接
-# - GET /admin/settings/email - 获取邮件配置
-# - PUT /admin/settings/email - 更新邮件配置
-# - GET /admin/settings/feishu - 获取飞书配置
-# - PUT /admin/settings/feishu - 更新飞书配置
+# - GET /api/settings/llm - 获取 LLM 配置
+# - PUT /api/settings/llm - 更新 LLM 配置
+# - POST /api/settings/llm/test - 测试 LLM 连接
+# - GET /api/settings/email - 获取邮件配置
+# - PUT /api/settings/email - 更新邮件配置
+# - GET /api/settings/feishu - 获取飞书配置
+# - PUT /api/settings/feishu - 更新飞书配置
 app.include_router(settings_router.router)
 
 # 监控路由（仅管理员，只读）
-# - GET /admin/monitor/summary - 监控摘要
-# - GET /admin/monitor/workflows - 工作流列表
-# - GET /admin/monitor/agents - Agent 统计
+# - GET /api/monitor/summary - 监控摘要
+# - GET /api/monitor/workflows - 工作流列表
+# - GET /api/monitor/agents - Agent 统计
 app.include_router(admin_monitor.router)
 
 # Chat 路由（SSE 流式对话）
@@ -380,113 +379,106 @@ app.include_router(admin_monitor.router)
 app.include_router(chat.router)
 
 # 邮箱账户管理路由（仅管理员）
-# - GET /admin/email-accounts - 邮箱账户列表
-# - POST /admin/email-accounts - 创建邮箱账户
-# - GET /admin/email-accounts/{id} - 邮箱账户详情
-# - PUT /admin/email-accounts/{id} - 更新邮箱账户
-# - DELETE /admin/email-accounts/{id} - 删除邮箱账户
-# - PUT /admin/email-accounts/{id}/default - 设为默认
-# - POST /admin/email-accounts/{id}/test - 测试连接
+# - GET /api/email-accounts - 邮箱账户列表
+# - POST /api/email-accounts - 创建邮箱账户
+# - GET /api/email-accounts/{id} - 邮箱账户详情
+# - PUT /api/email-accounts/{id} - 更新邮箱账户
+# - DELETE /api/email-accounts/{id} - 删除邮箱账户
+# - PUT /api/email-accounts/{id}/default - 设为默认
+# - POST /api/email-accounts/{id}/test - 测试连接
 app.include_router(email_accounts.router)
 
 # Worker 管理路由（仅管理员）
-# - GET /admin/workers - Worker 列表
-# - POST /admin/workers - 创建 Worker
-# - GET /admin/workers/{id} - Worker 详情
-# - PUT /admin/workers/{id} - 更新 Worker
-# - DELETE /admin/workers/{id} - 删除 Worker
-# - POST /admin/workers/{id}/start - 启动 Worker
-# - POST /admin/workers/{id}/stop - 停止 Worker
-# - POST /admin/workers/{id}/restart - 重启 Worker
-# - POST /admin/workers/{id}/test - 测试连接
+# - GET /api/workers - Worker 列表
+# - POST /api/workers - 创建 Worker
+# - GET /api/workers/{id} - Worker 详情
+# - PUT /api/workers/{id} - 更新 Worker
+# - DELETE /api/workers/{id} - 删除 Worker
+# - POST /api/workers/{id}/start - 启动 Worker
+# - POST /api/workers/{id}/stop - 停止 Worker
+# - POST /api/workers/{id}/restart - 重启 Worker
+# - POST /api/workers/{id}/test - 测试连接
 app.include_router(workers_router.router)
 
 # 邮件记录路由（仅管理员）
-# - GET /admin/emails - 邮件列表
-# - GET /admin/emails/{id} - 邮件详情
-# - GET /admin/emails/{id}/raw - 下载原始邮件
-# - GET /admin/emails/{id}/attachments/{att_id} - 下载附件
-# - POST /admin/emails/{id}/analyze - 分析邮件意图
-# - POST /admin/emails/{id}/execute - 执行邮件处理
+# - GET /api/emails - 邮件列表
+# - GET /api/emails/{id} - 邮件详情
+# - GET /api/emails/{id}/raw - 下载原始邮件
+# - GET /api/emails/{id}/attachments/{att_id} - 下载附件
+# - POST /api/emails/{id}/analyze - 分析邮件意图
+# - POST /api/emails/{id}/execute - 执行邮件处理
 app.include_router(emails_router.router)
 
 # 工作类型管理路由（仅管理员）
-# - GET/POST /admin/work-types - 工作类型 CRUD
-# - GET /admin/work-types/tree - 树形结构
-# - GET /admin/work-type-suggestions - 建议列表
-# - POST /admin/work-type-suggestions/{id}/approve - 批准建议
-# - POST /admin/work-type-suggestions/{id}/reject - 拒绝建议
+# - GET/POST /api/work-types - 工作类型 CRUD
+# - GET /api/work-types/tree - 树形结构
+# - GET /api/work-type-suggestions - 建议列表
+# - POST /api/work-type-suggestions/{id}/approve - 批准建议
+# - POST /api/work-type-suggestions/{id}/reject - 拒绝建议
 app.include_router(work_types_router.router)
 app.include_router(work_types_router.suggestions_router)
 
 # Prompt 模板管理路由（仅管理员）
-# - GET /admin/prompts - Prompt 列表
-# - GET /admin/prompts/{name} - Prompt 详情
-# - PUT /admin/prompts/{name} - 更新 Prompt
-# - POST /admin/prompts/{name}/test - 测试渲染
+# - GET /api/prompts - Prompt 列表
+# - GET /api/prompts/{name} - Prompt 详情
+# - PUT /api/prompts/{name} - 更新 Prompt
+# - POST /api/prompts/{name}/test - 测试渲染
 app.include_router(prompts_router.router)
 
 # LLM 模型配置路由（仅管理员）
-# - GET /admin/llm/models - 模型列表
-# - GET /admin/llm/models/{model_id} - 模型详情
-# - PUT /admin/llm/models/{model_id} - 更新模型配置
-# - POST /admin/llm/models/{model_id}/test - 测试模型连接
-# - GET /admin/llm/models/stats/usage - 使用统计
+# - GET /api/llm/models - 模型列表
+# - GET /api/llm/models/{model_id} - 模型详情
+# - PUT /api/llm/models/{model_id} - 更新模型配置
+# - POST /api/llm/models/{model_id}/test - 测试模型连接
+# - GET /api/llm/models/stats/usage - 使用统计
 app.include_router(llm_models.router)
 
 # 客户管理路由（仅管理员）
-# - GET/POST /admin/customers - 客户 CRUD
-# - GET/PUT/DELETE /admin/customers/{id} - 客户详情/更新/删除
-# - GET/POST /admin/contacts - 联系人 CRUD
-# - GET/PUT/DELETE /admin/contacts/{id} - 联系人详情/更新/删除
+# - GET/POST /api/customers - 客户 CRUD
+# - GET/PUT/DELETE /api/customers/{id} - 客户详情/更新/删除
+# - GET/POST /api/contacts - 联系人 CRUD
+# - GET/PUT/DELETE /api/contacts/{id} - 联系人详情/更新/删除
 app.include_router(customers_router.router)
 app.include_router(customers_router.contacts_router)
 
-# 客户建议审批路由（仅管理员）
-# - GET /admin/customer-suggestions - 建议列表
-# - GET /admin/customer-suggestions/{id} - 建议详情
-# - POST /admin/customer-suggestions/{id}/approve - 批准建议
-# - POST /admin/customer-suggestions/{id}/reject - 拒绝建议
-app.include_router(customer_suggestions_router.router)
-
 # 供应商管理路由（仅管理员）
-# - GET/POST /admin/suppliers - 供应商 CRUD
-# - GET/PUT/DELETE /admin/suppliers/{id} - 供应商详情/更新/删除
-# - GET/POST /admin/supplier-contacts - 供应商联系人 CRUD
-# - GET/PUT/DELETE /admin/supplier-contacts/{id} - 供应商联系人详情/更新/删除
+# - GET/POST /api/suppliers - 供应商 CRUD
+# - GET/PUT/DELETE /api/suppliers/{id} - 供应商详情/更新/删除
+# - GET/POST /api/supplier-contacts - 供应商联系人 CRUD
+# - GET/PUT/DELETE /api/supplier-contacts/{id} - 供应商联系人详情/更新/删除
 app.include_router(suppliers_router.router)
 app.include_router(suppliers_router.supplier_contacts_router)
 
 # 品类管理路由（仅管理员）
-# - GET/POST /admin/categories - 品类 CRUD
-# - GET /admin/categories/tree - 品类树形结构
-# - GET/PUT/DELETE /admin/categories/{id} - 品类详情/更新/删除
+# - GET/POST /api/categories - 品类 CRUD
+# - GET /api/categories/tree - 品类树形结构
+# - GET/PUT/DELETE /api/categories/{id} - 品类详情/更新/删除
 app.include_router(categories_router.router)
 
 # 产品管理路由（仅管理员）
-# - GET/POST /admin/products - 产品 CRUD
-# - GET/PUT/DELETE /admin/products/{id} - 产品详情/更新/删除
-# - POST /admin/products/{id}/suppliers - 添加供应商关联
-# - PUT/DELETE /admin/products/{id}/suppliers/{supplier_id} - 更新/移除供应商关联
+# - GET/POST /api/products - 产品 CRUD
+# - GET/PUT/DELETE /api/products/{id} - 产品详情/更新/删除
+# - POST /api/products/{id}/suppliers - 添加供应商关联
+# - PUT/DELETE /api/products/{id}/suppliers/{supplier_id} - 更新/移除供应商关联
 app.include_router(products_router.router)
 
 # 国家数据库路由（仅管理员，只读）
-# - GET /admin/countries - 国家列表
-# - GET /admin/countries/{id} - 国家详情
+# - GET /api/countries - 国家列表
+# - GET /api/countries/{id} - 国家详情
 app.include_router(countries_router.router)
 
 # 贸易术语路由（仅管理员，只读）
-# - GET /admin/trade-terms - 贸易术语列表
-# - GET /admin/trade-terms/{id} - 贸易术语详情
+# - GET /api/trade-terms - 贸易术语列表
+# - GET /api/trade-terms/{id} - 贸易术语详情
 app.include_router(trade_terms_ref_router.router)
 
 # 付款方式路由（仅管理员，只读）
-# - GET /admin/payment-methods - 付款方式列表
-# - GET /admin/payment-methods/{id} - 付款方式详情
+# - GET /api/payment-methods - 付款方式列表
+# - GET /api/payment-methods/{id} - 付款方式详情
 app.include_router(payment_methods_ref_router.router)
 
 # 文件上传路由（仅管理员）
-# - POST /admin/upload - 通用文件上传
+# - POST /api/upload - 通用文件上传
 app.include_router(upload_router.router)
 
 # 文件下载路由（公开，通过 token 验证）
@@ -494,130 +486,130 @@ app.include_router(upload_router.router)
 app.include_router(storage_router.router)
 
 # 仓库管理路由（仅管理员）
-# - GET/POST /admin/warehouses - 仓库 CRUD
-# - GET/PUT/DELETE /admin/warehouses/{id} - 仓库详情/更新/删除
+# - GET/POST /api/warehouses - 仓库 CRUD
+# - GET/PUT/DELETE /api/warehouses/{id} - 仓库详情/更新/删除
 app.include_router(warehouses_router.router)
 
 # 库存管理路由（仅管理员，只读）
-# - GET /admin/inventories - 库存列表
-# - GET /admin/inventories/summary - 库存汇总
+# - GET /api/inventories - 库存列表
+# - GET /api/inventories/summary - 库存汇总
 app.include_router(inventories_router.router)
 
 # 采购合同管理路由（仅管理员）
-# - GET/POST /admin/purchase-contracts - 采购合同 CRUD
-# - GET/PUT/DELETE /admin/purchase-contracts/{id} - 详情/更新/删除
-# - PUT /admin/purchase-contracts/{id}/status - 状态变更
-# - PUT /admin/purchase-contracts/{id}/lines - 更新明细行
+# - GET/POST /api/purchase-contracts - 采购合同 CRUD
+# - GET/PUT/DELETE /api/purchase-contracts/{id} - 详情/更新/删除
+# - PUT /api/purchase-contracts/{id}/status - 状态变更
+# - PUT /api/purchase-contracts/{id}/lines - 更新明细行
 app.include_router(purchase_contracts_router.router)
 
 # 销售合同管理路由（仅管理员）
-# - GET/POST /admin/sales-contracts - 销售合同 CRUD
-# - GET/PUT/DELETE /admin/sales-contracts/{id} - 详情/更新/删除
-# - PUT /admin/sales-contracts/{id}/status - 状态变更
-# - PUT /admin/sales-contracts/{id}/lines - 更新明细行
-# - POST /admin/sales-contracts/{id}/link-purchase - 绑定采购合同
+# - GET/POST /api/sales-contracts - 销售合同 CRUD
+# - GET/PUT/DELETE /api/sales-contracts/{id} - 详情/更新/删除
+# - PUT /api/sales-contracts/{id}/status - 状态变更
+# - PUT /api/sales-contracts/{id}/lines - 更新明细行
+# - POST /api/sales-contracts/{id}/link-purchase - 绑定采购合同
 app.include_router(sales_contracts_router.router)
 
 # 入仓单管理路由（仅管理员）
-# - GET/POST /admin/inbound-orders - 入仓单 CRUD
-# - GET/PUT/DELETE /admin/inbound-orders/{id} - 详情/更新/删除
-# - PUT /admin/inbound-orders/{id}/status - 状态变更
-# - POST /admin/inbound-orders/{id}/confirm-receive - 确认收货
+# - GET/POST /api/inbound-orders - 入仓单 CRUD
+# - GET/PUT/DELETE /api/inbound-orders/{id} - 详情/更新/删除
+# - PUT /api/inbound-orders/{id}/status - 状态变更
+# - POST /api/inbound-orders/{id}/confirm-receive - 确认收货
 app.include_router(inbound_orders_router.router)
 
 # 出仓单管理路由（仅管理员）
-# - GET/POST /admin/outbound-orders - 出仓单 CRUD
-# - GET/PUT/DELETE /admin/outbound-orders/{id} - 详情/更新/删除
-# - PUT /admin/outbound-orders/{id}/status - 状态变更
-# - POST /admin/outbound-orders/{id}/confirm-ship - 确认出仓
+# - GET/POST /api/outbound-orders - 出仓单 CRUD
+# - GET/PUT/DELETE /api/outbound-orders/{id} - 详情/更新/删除
+# - PUT /api/outbound-orders/{id}/status - 状态变更
+# - POST /api/outbound-orders/{id}/confirm-ship - 确认出仓
 app.include_router(outbound_orders_router.router)
 
 # 合同编号规则路由（仅管理员）
-# - GET /admin/contract-number-rules - 规则列表
-# - PUT /admin/contract-number-rules/{type} - 更新规则
-# - POST /admin/contract-number-rules/preview - 预览编号
+# - GET /api/contract-number-rules - 规则列表
+# - PUT /api/contract-number-rules/{type} - 更新规则
+# - POST /api/contract-number-rules/preview - 预览编号
 app.include_router(contract_numbers_router.router)
 
 # TTS 语音合成路由（仅管理员）
-# - POST /admin/tts/synthesize - 文本转语音
+# - POST /api/tts/synthesize - 文本转语音
 app.include_router(tts_router.router)
 
 # 客户询价单管理路由（仅管理员）
-# - GET/POST /admin/client-rfqs - 客户询价单 CRUD
-# - GET/PUT/DELETE /admin/client-rfqs/{id} - 详情/更新/删除
-# - PUT /admin/client-rfqs/{id}/status - 状态变更
-# - PUT /admin/client-rfqs/{id}/lines - 更新明细行
+# - GET/POST /api/client-rfqs - 客户询价单 CRUD
+# - GET/PUT/DELETE /api/client-rfqs/{id} - 详情/更新/删除
+# - PUT /api/client-rfqs/{id}/status - 状态变更
+# - PUT /api/client-rfqs/{id}/lines - 更新明细行
 app.include_router(client_rfqs_router.router)
 
 # 报价单管理路由（仅管理员）
-# - GET/POST /admin/quotations - 报价单 CRUD
-# - GET/PUT/DELETE /admin/quotations/{id} - 详情/更新/删除
-# - PUT /admin/quotations/{id}/status - 状态变更
-# - PUT /admin/quotations/{id}/lines - 更新明细行
+# - GET/POST /api/quotations - 报价单 CRUD
+# - GET/PUT/DELETE /api/quotations/{id} - 详情/更新/删除
+# - PUT /api/quotations/{id}/status - 状态变更
+# - PUT /api/quotations/{id}/lines - 更新明细行
 app.include_router(quotations_router.router)
 
 # 供应商询价单管理路由（仅管理员）
-# - GET/POST /admin/supplier-rfqs - 供应商询价单 CRUD
-# - GET/PUT/DELETE /admin/supplier-rfqs/{id} - 详情/更新/删除
-# - PUT /admin/supplier-rfqs/{id}/status - 状态变更
-# - PUT /admin/supplier-rfqs/{id}/lines - 更新明细行
+# - GET/POST /api/supplier-rfqs - 供应商询价单 CRUD
+# - GET/PUT/DELETE /api/supplier-rfqs/{id} - 详情/更新/删除
+# - PUT /api/supplier-rfqs/{id}/status - 状态变更
+# - PUT /api/supplier-rfqs/{id}/lines - 更新明细行
 app.include_router(supplier_rfqs_router.router)
 
 # 供应商报价单管理路由（仅管理员）
-# - GET/POST /admin/supplier-quotations - 供应商报价单 CRUD
-# - GET/PUT/DELETE /admin/supplier-quotations/{id} - 详情/更新/删除
-# - PUT /admin/supplier-quotations/{id}/status - 状态变更
-# - PUT /admin/supplier-quotations/{id}/lines - 更新明细行
+# - GET/POST /api/supplier-quotations - 供应商报价单 CRUD
+# - GET/PUT/DELETE /api/supplier-quotations/{id} - 详情/更新/删除
+# - PUT /api/supplier-quotations/{id}/status - 状态变更
+# - PUT /api/supplier-quotations/{id}/lines - 更新明细行
 app.include_router(supplier_quotations_router.router)
 
 # 项目管理路由（仅管理员）
-# - GET/POST /admin/projects - 项目 CRUD
-# - GET/PUT/DELETE /admin/projects/{id} - 项目详情/更新/删除
-# - PUT /admin/projects/{id}/status - 状态变更
-# - POST/DELETE /admin/projects/{id}/associations - 关联管理
-# - POST /admin/projects/from-email/{email_id} - 从邮件预填
+# - GET/POST /api/projects - 项目 CRUD
+# - GET/PUT/DELETE /api/projects/{id} - 项目详情/更新/删除
+# - PUT /api/projects/{id}/status - 状态变更
+# - POST/DELETE /api/projects/{id}/associations - 关联管理
+# - POST /api/projects/from-email/{email_id} - 从邮件预填
 app.include_router(projects_router.router)
 
 # 任务管理路由（仅管理员）
-# - GET/POST /admin/tasks - 任务 CRUD（列表需 project_id）
-# - GET/PUT/DELETE /admin/tasks/{id} - 任务详情/更新/删除
+# - GET/POST /api/tasks - 任务 CRUD（列表需 project_id）
+# - GET/PUT/DELETE /api/tasks/{id} - 任务详情/更新/删除
 app.include_router(tasks_router.router)
 
 # 进度记录路由（仅管理员）
-# - GET/POST /admin/progress - 进度 CRUD（列表需 task_id）
-# - DELETE /admin/progress/{id} - 删除进度
+# - GET/POST /api/progress - 进度 CRUD（列表需 task_id）
+# - DELETE /api/progress/{id} - 删除进度
 app.include_router(progress_router.router)
 
 # 项目建议审批路由（仅管理员）
-# - GET /admin/project-suggestions - 建议列表
-# - GET /admin/project-suggestions/{id} - 建议详情
-# - POST /admin/project-suggestions/{id}/approve - 批准建议
-# - POST /admin/project-suggestions/{id}/reject - 拒绝建议
+# - GET /api/project-suggestions - 建议列表
+# - GET /api/project-suggestions/{id} - 建议详情
+# - POST /api/project-suggestions/{id}/approve - 批准建议
+# - POST /api/project-suggestions/{id}/reject - 拒绝建议
 app.include_router(project_suggestions_router.router)
 
 # 权限管理路由（只读，仅管理员）
-# - GET /admin/permissions - 获取所有权限（按资源分组）
+# - GET /api/permissions - 获取所有权限（按资源分组）
 app.include_router(permissions_api_router.router)
 
 # 组织管理路由（仅超级管理员）
-# - GET/POST /admin/organizations - 组织 CRUD
-# - GET/PUT/DELETE /admin/organizations/{id} - 组织详情/更新/删除
+# - GET/POST /api/organizations - 组织 CRUD
+# - GET/PUT/DELETE /api/organizations/{id} - 组织详情/更新/删除
 app.include_router(organizations_router.router)
 
 # 部门管理路由（仅管理员）
-# - GET /admin/departments - 部门列表（扁平）
-# - GET /admin/departments/tree - 部门树
-# - POST /admin/departments - 创建部门
-# - PUT /admin/departments/{id} - 更新部门
-# - DELETE /admin/departments/{id} - 删除部门
-# - PUT /admin/departments/sort - 批量更新排序
+# - GET /api/departments - 部门列表（扁平）
+# - GET /api/departments/tree - 部门树
+# - POST /api/departments - 创建部门
+# - PUT /api/departments/{id} - 更新部门
+# - DELETE /api/departments/{id} - 删除部门
+# - PUT /api/departments/sort - 批量更新排序
 app.include_router(departments_router.router)
 
 # 角色管理路由（仅管理员）
-# - GET/POST /admin/roles - 角色 CRUD
-# - GET/PUT/DELETE /admin/roles/{id} - 角色详情/更新/删除
-# - PUT /admin/roles/{id}/permissions - 批量设置权限
-# - PUT /admin/roles/{id}/data-scopes - 批量设置数据范围
+# - GET/POST /api/roles - 角色 CRUD
+# - GET/PUT/DELETE /api/roles/{id} - 角色详情/更新/删除
+# - PUT /api/roles/{id}/permissions - 批量设置权限
+# - PUT /api/roles/{id}/data-scopes - 批量设置数据范围
 app.include_router(roles_router.router)
 
 

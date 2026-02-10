@@ -220,6 +220,29 @@ export async function login(data: LoginRequest): Promise<ApiResponse<LoginRespon
   return response;
 }
 
+export interface RegisterWithOrgRequest {
+  email: string;
+  password: string;
+  name: string;
+  org_name: string;
+}
+
+export async function registerWithOrg(
+  data: RegisterWithOrgRequest,
+): Promise<ApiResponse<LoginResponse>> {
+  const response = await request<LoginResponse>('/api/auth/register-org', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+  // 注册成功后保存 token（与 login 相同处理）
+  if (response.data) {
+    setTokens(response.data.access_token, response.data.refresh_token);
+  }
+
+  return response;
+}
+
 export async function getCurrentUser(): Promise<ApiResponse<User>> {
   return request<User>('/api/auth/me');
 }
@@ -263,7 +286,7 @@ export interface MessageResponse {
 
 // 获取系统统计
 export async function getStats(): Promise<ApiResponse<StatsResponse>> {
-  return request<StatsResponse>('/admin/stats');
+  return request<StatsResponse>('/api/stats');
 }
 
 // 获取用户列表
@@ -282,17 +305,17 @@ export async function getUsers(params?: {
   if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
 
   const query = searchParams.toString();
-  return request<UserListResponse>(`/admin/users${query ? `?${query}` : ''}`);
+  return request<UserListResponse>(`/api/users${query ? `?${query}` : ''}`);
 }
 
 // 获取单个用户
 export async function getUser(userId: string): Promise<ApiResponse<User>> {
-  return request<User>(`/admin/users/${userId}`);
+  return request<User>(`/api/users/${userId}`);
 }
 
 // 创建用户
 export async function createUser(data: CreateUserRequest): Promise<ApiResponse<User>> {
-  return request<User>('/admin/users', {
+  return request<User>('/api/users', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -300,7 +323,7 @@ export async function createUser(data: CreateUserRequest): Promise<ApiResponse<U
 
 // 更新用户
 export async function updateUser(userId: string, data: UpdateUserRequest): Promise<ApiResponse<User>> {
-  return request<User>(`/admin/users/${userId}`, {
+  return request<User>(`/api/users/${userId}`, {
     method: 'PUT',
     body: JSON.stringify(data),
   });
@@ -308,21 +331,21 @@ export async function updateUser(userId: string, data: UpdateUserRequest): Promi
 
 // 删除用户
 export async function deleteUser(userId: string): Promise<ApiResponse<MessageResponse>> {
-  return request<MessageResponse>(`/admin/users/${userId}`, {
+  return request<MessageResponse>(`/api/users/${userId}`, {
     method: 'DELETE',
   });
 }
 
 // 切换用户状态
 export async function toggleUserStatus(userId: string): Promise<ApiResponse<User>> {
-  return request<User>(`/admin/users/${userId}/toggle`, {
+  return request<User>(`/api/users/${userId}/toggle`, {
     method: 'POST',
   });
 }
 
 // 重置用户密码
 export async function resetUserPassword(userId: string, newPassword: string): Promise<ApiResponse<MessageResponse>> {
-  return request<MessageResponse>(`/admin/users/${userId}/reset-password`, {
+  return request<MessageResponse>(`/api/users/${userId}/reset-password`, {
     method: 'POST',
     body: JSON.stringify({ new_password: newPassword }),
   });
@@ -368,13 +391,13 @@ export interface EmailConfigUpdate {
 export const settingsApi = {
   // 邮件配置
   async getEmailConfig(): Promise<EmailConfig> {
-    const response = await request<EmailConfig>('/admin/settings/email');
+    const response = await request<EmailConfig>('/api/settings/email');
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   async updateEmailConfig(data: EmailConfigUpdate): Promise<any> {
-    const response = await request('/admin/settings/email', {
+    const response = await request('/api/settings/email', {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -446,13 +469,13 @@ export interface OSSTestResult {
 
 export const ossApi = {
   async getConfig(): Promise<OSSConfig> {
-    const response = await request<OSSConfig>('/admin/settings/oss');
+    const response = await request<OSSConfig>('/api/settings/oss');
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   async updateConfig(data: OSSConfigUpdate): Promise<any> {
-    const response = await request('/admin/settings/oss', {
+    const response = await request('/api/settings/oss', {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -461,7 +484,7 @@ export const ossApi = {
   },
 
   async testConnection(): Promise<OSSTestResult> {
-    const response = await request<OSSTestResult>('/admin/settings/oss/test', {
+    const response = await request<OSSTestResult>('/api/settings/oss/test', {
       method: 'POST',
     });
     if (response.error) throw new Error(response.error);
@@ -473,13 +496,13 @@ export const ossApi = {
 
 export const feishuApi = {
   async getConfig(): Promise<FeishuConfig> {
-    const response = await request<FeishuConfig>('/admin/settings/feishu');
+    const response = await request<FeishuConfig>('/api/settings/feishu');
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   async updateConfig(data: FeishuConfigUpdate): Promise<any> {
-    const response = await request('/admin/settings/feishu', {
+    const response = await request('/api/settings/feishu', {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -488,7 +511,7 @@ export const feishuApi = {
   },
 
   async testConnection(): Promise<FeishuTestResult> {
-    const response = await request<FeishuTestResult>('/admin/settings/feishu/test', {
+    const response = await request<FeishuTestResult>('/api/settings/feishu/test', {
       method: 'POST',
     });
     if (response.error) throw new Error(response.error);
@@ -496,7 +519,7 @@ export const feishuApi = {
   },
 
   async getWorkerStatus(): Promise<FeishuWorkerStatus> {
-    const response = await request<FeishuWorkerStatus>('/admin/settings/feishu/status');
+    const response = await request<FeishuWorkerStatus>('/api/settings/feishu/status');
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -583,19 +606,19 @@ export interface EmailAccountTestResult {
 
 export const emailAccountsApi = {
   async list(): Promise<{ total: number; items: EmailAccount[] }> {
-    const response = await request<{ total: number; items: EmailAccount[] }>('/admin/email-accounts');
+    const response = await request<{ total: number; items: EmailAccount[] }>('/api/email-accounts');
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   async get(id: number): Promise<EmailAccount> {
-    const response = await request<EmailAccount>(`/admin/email-accounts/${id}`);
+    const response = await request<EmailAccount>(`/api/email-accounts/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   async create(data: EmailAccountCreate): Promise<EmailAccount> {
-    const response = await request<EmailAccount>('/admin/email-accounts', {
+    const response = await request<EmailAccount>('/api/email-accounts', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -604,7 +627,7 @@ export const emailAccountsApi = {
   },
 
   async update(id: number, data: EmailAccountUpdate): Promise<EmailAccount> {
-    const response = await request<EmailAccount>(`/admin/email-accounts/${id}`, {
+    const response = await request<EmailAccount>(`/api/email-accounts/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -613,14 +636,14 @@ export const emailAccountsApi = {
   },
 
   async delete(id: number): Promise<void> {
-    const response = await request(`/admin/email-accounts/${id}`, {
+    const response = await request(`/api/email-accounts/${id}`, {
       method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);
   },
 
   async setDefault(id: number): Promise<EmailAccount> {
-    const response = await request<EmailAccount>(`/admin/email-accounts/${id}/default`, {
+    const response = await request<EmailAccount>(`/api/email-accounts/${id}/default`, {
       method: 'PUT',
     });
     if (response.error) throw new Error(response.error);
@@ -628,7 +651,7 @@ export const emailAccountsApi = {
   },
 
   async test(id: number): Promise<EmailAccountTestResult> {
-    const response = await request<EmailAccountTestResult>(`/admin/email-accounts/${id}/test`, {
+    const response = await request<EmailAccountTestResult>(`/api/email-accounts/${id}/test`, {
       method: 'POST',
     });
     if (response.error) throw new Error(response.error);
@@ -646,7 +669,7 @@ export const emailAccountsApi = {
       emails_found: number;
       emails_saved: number;
       duration_seconds: number;
-    }>(`/admin/email-accounts/${id}/fetch?limit=${limit}`, {
+    }>(`/api/email-accounts/${id}/fetch?limit=${limit}`, {
       method: 'POST',
     });
     if (response.error) throw new Error(response.error);
@@ -880,7 +903,7 @@ export interface TodayBriefingResponse {
 export const emailsApi = {
   // 获取当日邮件播报
   async todayBriefing(): Promise<TodayBriefingResponse> {
-    const response = await request<TodayBriefingResponse>('/admin/emails/today-briefing');
+    const response = await request<TodayBriefingResponse>('/api/emails/today-briefing');
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -899,28 +922,28 @@ export const emailsApi = {
     if (params?.is_processed !== undefined) searchParams.set('is_processed', params.is_processed.toString());
     if (params?.search) searchParams.set('search', params.search);
     const query = searchParams.toString();
-    const response = await request<EmailListResponse>(`/admin/emails${query ? `?${query}` : ''}`);
+    const response = await request<EmailListResponse>(`/api/emails${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   async get(emailId: string): Promise<EmailDetail> {
-    const response = await request<EmailDetail>(`/admin/emails/${emailId}`);
+    const response = await request<EmailDetail>(`/api/emails/${emailId}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   getRawUrl(emailId: string): string {
-    return `${API_BASE_URL}/admin/emails/${emailId}/raw`;
+    return `${API_BASE_URL}/api/emails/${emailId}/raw`;
   },
 
   getAttachmentUrl(emailId: string, attachmentId: string): string {
-    return `${API_BASE_URL}/admin/emails/${emailId}/attachments/${attachmentId}`;
+    return `${API_BASE_URL}/api/emails/${emailId}/attachments/${attachmentId}`;
   },
 
   // 分析邮件意图
   async analyze(emailId: string): Promise<EmailRouteAnalyzeResult> {
-    const response = await request<EmailRouteAnalyzeResult>(`/admin/emails/${emailId}/analyze`, {
+    const response = await request<EmailRouteAnalyzeResult>(`/api/emails/${emailId}/analyze`, {
       method: 'POST',
     });
     if (response.error) throw new Error(response.error);
@@ -929,7 +952,7 @@ export const emailsApi = {
 
   // 执行邮件处理
   async execute(emailId: string, data?: { intent?: string; force?: boolean }): Promise<EmailRouteExecuteResult> {
-    const response = await request<EmailRouteExecuteResult>(`/admin/emails/${emailId}/execute`, {
+    const response = await request<EmailRouteExecuteResult>(`/api/emails/${emailId}/execute`, {
       method: 'POST',
       body: JSON.stringify(data || {}),
     });
@@ -939,7 +962,7 @@ export const emailsApi = {
 
   // AI 分析邮件（外贸场景）
   async aiAnalyze(emailId: string, force: boolean = false): Promise<EmailAnalysisResult> {
-    const response = await request<EmailAnalysisResult>(`/admin/emails/${emailId}/ai-analyze?force=${force}`, {
+    const response = await request<EmailAnalysisResult>(`/api/emails/${emailId}/ai-analyze?force=${force}`, {
       method: 'POST',
     });
     if (response.error) throw new Error(response.error);
@@ -948,14 +971,14 @@ export const emailsApi = {
 
   // 获取已保存的分析结果
   async getAnalysis(emailId: string): Promise<EmailAnalysisResult | null> {
-    const response = await request<EmailAnalysisResult | null>(`/admin/emails/${emailId}/analysis`);
+    const response = await request<EmailAnalysisResult | null>(`/api/emails/${emailId}/analysis`);
     if (response.error) throw new Error(response.error);
     return response.data ?? null;
   },
 
   // 工作类型分析
   async workTypeAnalyze(emailId: string): Promise<WorkTypeAnalyzeResult> {
-    const response = await request<WorkTypeAnalyzeResult>(`/admin/emails/${emailId}/work-type-analyze`, {
+    const response = await request<WorkTypeAnalyzeResult>(`/api/emails/${emailId}/work-type-analyze`, {
       method: 'POST',
     });
     if (response.error) throw new Error(response.error);
@@ -1096,14 +1119,14 @@ export const promptsApi = {
     if (params?.category) searchParams.set('category', params.category);
     if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
     const query = searchParams.toString();
-    const response = await request<PromptListResponse>(`/admin/prompts${query ? `?${query}` : ''}`);
+    const response = await request<PromptListResponse>(`/api/prompts${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 获取 Prompt 详情
   async get(name: string): Promise<PromptItem> {
-    const response = await request<PromptItem>(`/admin/prompts/${name}`);
+    const response = await request<PromptItem>(`/api/prompts/${name}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -1116,7 +1139,7 @@ export const promptsApi = {
     variables?: Record<string, string>;
     is_active?: boolean;
   }): Promise<PromptItem> {
-    const response = await request<PromptItem>(`/admin/prompts/${name}`, {
+    const response = await request<PromptItem>(`/api/prompts/${name}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -1126,7 +1149,7 @@ export const promptsApi = {
 
   // 测试 Prompt 渲染
   async test(name: string, variables: Record<string, string>): Promise<PromptTestResult> {
-    const response = await request<PromptTestResult>(`/admin/prompts/${name}/test`, {
+    const response = await request<PromptTestResult>(`/api/prompts/${name}/test`, {
       method: 'POST',
       body: JSON.stringify({ variables }),
     });
@@ -1142,14 +1165,14 @@ export const promptsApi = {
     display_name: string | null;
     description: string | null;
   }> {
-    const response = await request(`/admin/prompts/${name}/default`);
+    const response = await request(`/api/prompts/${name}/default`);
     if (response.error) throw new Error(response.error);
     return response.data as any;
   },
 
   // 重置 Prompt 为默认值
   async resetToDefault(name: string): Promise<PromptItem> {
-    const response = await request<PromptItem>(`/admin/prompts/${name}/reset`, {
+    const response = await request<PromptItem>(`/api/prompts/${name}/reset`, {
       method: 'POST',
     });
     if (response.error) throw new Error(response.error);
@@ -1237,14 +1260,14 @@ export const llmModelsApi = {
     if (params?.is_enabled !== undefined) searchParams.set('is_enabled', params.is_enabled.toString());
     if (params?.is_configured !== undefined) searchParams.set('is_configured', params.is_configured.toString());
     const query = searchParams.toString();
-    const response = await request<LLMModelListResponse>(`/admin/llm/models${query ? `?${query}` : ''}`);
+    const response = await request<LLMModelListResponse>(`/api/llm/models${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 创建新模型
   async create(data: LLMModelCreateRequest): Promise<LLMModelConfig> {
-    const response = await request<LLMModelConfig>('/admin/llm/models', {
+    const response = await request<LLMModelConfig>('/api/llm/models', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -1254,14 +1277,14 @@ export const llmModelsApi = {
 
   // 获取模型详情
   async get(modelId: string): Promise<LLMModelConfig> {
-    const response = await request<LLMModelConfig>(`/admin/llm/models/${encodeURIComponent(modelId)}`);
+    const response = await request<LLMModelConfig>(`/api/llm/models/${encodeURIComponent(modelId)}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 更新模型配置
   async update(modelId: string, data: LLMModelUpdateRequest): Promise<LLMModelConfig> {
-    const response = await request<LLMModelConfig>(`/admin/llm/models/${encodeURIComponent(modelId)}`, {
+    const response = await request<LLMModelConfig>(`/api/llm/models/${encodeURIComponent(modelId)}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -1271,7 +1294,7 @@ export const llmModelsApi = {
 
   // 删除模型
   async delete(modelId: string): Promise<void> {
-    const response = await request(`/admin/llm/models/${encodeURIComponent(modelId)}`, {
+    const response = await request(`/api/llm/models/${encodeURIComponent(modelId)}`, {
       method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);
@@ -1279,7 +1302,7 @@ export const llmModelsApi = {
 
   // 测试模型连接
   async test(modelId: string, data?: LLMModelTestRequest): Promise<LLMModelTestResponse> {
-    const response = await request<LLMModelTestResponse>(`/admin/llm/models/${encodeURIComponent(modelId)}/test`, {
+    const response = await request<LLMModelTestResponse>(`/api/llm/models/${encodeURIComponent(modelId)}/test`, {
       method: 'POST',
       body: JSON.stringify(data || { test_prompt: '你好' }),
     });
@@ -1289,7 +1312,7 @@ export const llmModelsApi = {
 
   // 获取使用统计
   async getUsageStats(): Promise<LLMModelUsageStats> {
-    const response = await request<LLMModelUsageStats>('/admin/llm/models/stats/usage');
+    const response = await request<LLMModelUsageStats>('/api/llm/models/stats/usage');
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -1448,7 +1471,7 @@ export const workTypesApi = {
     if (params?.level !== undefined) searchParams.set('level', params.level.toString());
     if (params?.parent_id) searchParams.set('parent_id', params.parent_id);
     const query = searchParams.toString();
-    const response = await request<WorkTypeListResponse>(`/admin/work-types${query ? `?${query}` : ''}`);
+    const response = await request<WorkTypeListResponse>(`/api/work-types${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -1458,21 +1481,21 @@ export const workTypesApi = {
     const searchParams = new URLSearchParams();
     if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
     const query = searchParams.toString();
-    const response = await request<WorkTypeTreeResponse>(`/admin/work-types/tree${query ? `?${query}` : ''}`);
+    const response = await request<WorkTypeTreeResponse>(`/api/work-types/tree${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 获取工作类型详情
   async get(id: string): Promise<WorkType> {
-    const response = await request<WorkType>(`/admin/work-types/${id}`);
+    const response = await request<WorkType>(`/api/work-types/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 创建工作类型
   async create(data: WorkTypeCreate): Promise<WorkType> {
-    const response = await request<WorkType>('/admin/work-types', {
+    const response = await request<WorkType>('/api/work-types', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -1482,7 +1505,7 @@ export const workTypesApi = {
 
   // 更新工作类型
   async update(id: string, data: WorkTypeUpdate): Promise<WorkType> {
-    const response = await request<WorkType>(`/admin/work-types/${id}`, {
+    const response = await request<WorkType>(`/api/work-types/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -1492,7 +1515,7 @@ export const workTypesApi = {
 
   // 删除工作类型
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/work-types/${id}`, {
+    const response = await request(`/api/work-types/${id}`, {
       method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);
@@ -1505,14 +1528,14 @@ export const workTypesApi = {
     if (params?.page) searchParams.set('page', params.page.toString());
     if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
     const query = searchParams.toString();
-    const response = await request<WorkTypeSuggestionListResponse>(`/admin/work-type-suggestions${query ? `?${query}` : ''}`);
+    const response = await request<WorkTypeSuggestionListResponse>(`/api/work-type-suggestions${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 获取建议详情
   async getSuggestion(id: string): Promise<WorkTypeSuggestion> {
-    const response = await request<WorkTypeSuggestion>(`/admin/work-type-suggestions/${id}`);
+    const response = await request<WorkTypeSuggestion>(`/api/work-type-suggestions/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -1527,7 +1550,7 @@ export const workTypesApi = {
     keywords?: string[];
     examples?: string[];
   }): Promise<WorkType> {
-    const response = await request<WorkType>(`/admin/work-type-suggestions/${id}/approve`, {
+    const response = await request<WorkType>(`/api/work-type-suggestions/${id}/approve`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -1537,7 +1560,7 @@ export const workTypesApi = {
 
   // 拒绝建议
   async rejectSuggestion(id: string, note?: string): Promise<void> {
-    const response = await request(`/admin/work-type-suggestions/${id}/reject`, {
+    const response = await request(`/api/work-type-suggestions/${id}/reject`, {
       method: 'POST',
       body: JSON.stringify({ note }),
     });
@@ -1710,21 +1733,21 @@ export const customersApi = {
     if (params?.customer_level) searchParams.set('customer_level', params.customer_level);
     if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
     const query = searchParams.toString();
-    const response = await request<CustomerListResponse>(`/admin/customers${query ? `?${query}` : ''}`);
+    const response = await request<CustomerListResponse>(`/api/customers${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 获取客户详情（含联系人）
   async get(id: string): Promise<CustomerDetail> {
-    const response = await request<CustomerDetail>(`/admin/customers/${id}`);
+    const response = await request<CustomerDetail>(`/api/customers/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 创建客户
   async create(data: CustomerCreate): Promise<Customer> {
-    const response = await request<Customer>('/admin/customers', {
+    const response = await request<Customer>('/api/customers', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -1734,7 +1757,7 @@ export const customersApi = {
 
   // 更新客户
   async update(id: string, data: CustomerUpdate): Promise<Customer> {
-    const response = await request<Customer>(`/admin/customers/${id}`, {
+    const response = await request<Customer>(`/api/customers/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -1744,7 +1767,7 @@ export const customersApi = {
 
   // 删除客户
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/customers/${id}`, {
+    const response = await request(`/api/customers/${id}`, {
       method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);
@@ -1752,7 +1775,7 @@ export const customersApi = {
 
   // AI 搜索公司信息（同步，向后兼容）
   async aiLookup(companyName: string): Promise<AILookupResponse> {
-    const response = await request<AILookupResponse>('/admin/customers/ai-lookup', {
+    const response = await request<AILookupResponse>('/api/customers/ai-lookup', {
       method: 'POST',
       body: JSON.stringify({ company_name: companyName }),
     });
@@ -1762,7 +1785,7 @@ export const customersApi = {
 
   // AI 草稿创建（异步：立即创建客户草稿，后台 AI 搜索）
   async aiCreateDraft(companyName: string): Promise<Customer> {
-    const response = await request<Customer>('/admin/customers/ai-draft', {
+    const response = await request<Customer>('/api/customers/ai-draft', {
       method: 'POST',
       body: JSON.stringify({ company_name: companyName }),
     });
@@ -1787,21 +1810,21 @@ export const contactsApi = {
     if (params?.search) searchParams.set('search', params.search);
     if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
     const query = searchParams.toString();
-    const response = await request<ContactListResponse>(`/admin/contacts${query ? `?${query}` : ''}`);
+    const response = await request<ContactListResponse>(`/api/contacts${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 获取联系人详情
   async get(id: string): Promise<Contact> {
-    const response = await request<Contact>(`/admin/contacts/${id}`);
+    const response = await request<Contact>(`/api/contacts/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 创建联系人
   async create(data: ContactCreate): Promise<Contact> {
-    const response = await request<Contact>('/admin/contacts', {
+    const response = await request<Contact>('/api/contacts', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -1811,7 +1834,7 @@ export const contactsApi = {
 
   // 更新联系人
   async update(id: string, data: ContactUpdate): Promise<Contact> {
-    const response = await request<Contact>(`/admin/contacts/${id}`, {
+    const response = await request<Contact>(`/api/contacts/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -1821,140 +1844,13 @@ export const contactsApi = {
 
   // 删除联系人
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/contacts/${id}`, {
+    const response = await request(`/api/contacts/${id}`, {
       method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);
   },
 };
 
-
-// ==================== 客户建议审批 ====================
-
-export interface CustomerSuggestion {
-  id: string;
-  suggestion_type: string; // "new_customer" | "new_contact"
-
-  // AI 提取的客户信息
-  suggested_company_name: string;
-  suggested_short_name: string | null;
-  suggested_country: string | null;
-  suggested_region: string | null;
-  suggested_industry: string | null;
-  suggested_website: string | null;
-  suggested_email_domain: string | null;
-  suggested_customer_level: string;
-  suggested_tags: string[];
-
-  // AI 提取的联系人信息
-  suggested_contact_name: string | null;
-  suggested_contact_email: string | null;
-  suggested_contact_title: string | null;
-  suggested_contact_phone: string | null;
-  suggested_contact_department: string | null;
-
-  // AI 分析
-  confidence: number;
-  reasoning: string | null;
-  sender_type: string | null;
-
-  // 触发来源
-  trigger_email_id: string | null;
-  trigger_content: string;
-  trigger_source: string;
-
-  // 查重
-  email_domain: string | null;
-  matched_customer_id: string | null;
-
-  // 审批状态
-  status: string;
-  workflow_id: string | null;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  review_note: string | null;
-  created_customer_id: string | null;
-  created_contact_id: string | null;
-
-  created_at: string;
-}
-
-export interface CustomerSuggestionListResponse {
-  items: CustomerSuggestion[];
-  total: number;
-}
-
-export interface CustomerReviewData {
-  note?: string;
-  company_name?: string;
-  short_name?: string;
-  country?: string;
-  region?: string;
-  industry?: string;
-  website?: string;
-  customer_level?: string;
-  tags?: string[];
-  contact_name?: string;
-  contact_email?: string;
-  contact_title?: string;
-  contact_phone?: string;
-  contact_department?: string;
-}
-
-export const customerSuggestionsApi = {
-  // 获取客户建议列表
-  async list(params?: {
-    page?: number;
-    page_size?: number;
-    status?: string;
-    search?: string;
-  }): Promise<CustomerSuggestionListResponse> {
-    const searchParams = new URLSearchParams();
-    if (params?.page) searchParams.set('page', params.page.toString());
-    if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
-    if (params?.status) searchParams.set('status', params.status);
-    if (params?.search) searchParams.set('search', params.search);
-    const query = searchParams.toString();
-    const response = await request<CustomerSuggestionListResponse>(
-      `/admin/customer-suggestions${query ? `?${query}` : ''}`
-    );
-    if (response.error) throw new Error(response.error);
-    return response.data!;
-  },
-
-  // 获取建议详情
-  async get(id: string): Promise<CustomerSuggestion> {
-    const response = await request<CustomerSuggestion>(`/admin/customer-suggestions/${id}`);
-    if (response.error) throw new Error(response.error);
-    return response.data!;
-  },
-
-  // 批准建议
-  async approve(id: string, data: CustomerReviewData): Promise<{ message: string; customer_id?: string; contact_id?: string }> {
-    const response = await request<{ message: string; customer_id?: string; contact_id?: string }>(
-      `/admin/customer-suggestions/${id}/approve`,
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }
-    );
-    if (response.error) throw new Error(response.error);
-    return response.data!;
-  },
-
-  // 拒绝建议
-  async reject(id: string, note?: string): Promise<{ message: string }> {
-    const response = await request<{ message: string }>(
-      `/admin/customer-suggestions/${id}/reject`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ note }),
-      }
-    );
-    if (response.error) throw new Error(response.error);
-    return response.data!;
-  },
-};
 
 
 // ==================== 供应商管理 ====================
@@ -2120,21 +2016,21 @@ export const suppliersApi = {
     if (params?.supplier_level) searchParams.set('supplier_level', params.supplier_level);
     if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
     const query = searchParams.toString();
-    const response = await request<SupplierListResponse>(`/admin/suppliers${query ? `?${query}` : ''}`);
+    const response = await request<SupplierListResponse>(`/api/suppliers${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 获取供应商详情（含联系人）
   async get(id: string): Promise<SupplierDetail> {
-    const response = await request<SupplierDetail>(`/admin/suppliers/${id}`);
+    const response = await request<SupplierDetail>(`/api/suppliers/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 创建供应商
   async create(data: SupplierCreate): Promise<Supplier> {
-    const response = await request<Supplier>('/admin/suppliers', {
+    const response = await request<Supplier>('/api/suppliers', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -2144,7 +2040,7 @@ export const suppliersApi = {
 
   // 更新供应商
   async update(id: string, data: SupplierUpdate): Promise<Supplier> {
-    const response = await request<Supplier>(`/admin/suppliers/${id}`, {
+    const response = await request<Supplier>(`/api/suppliers/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -2154,7 +2050,7 @@ export const suppliersApi = {
 
   // 删除供应商
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/suppliers/${id}`, {
+    const response = await request(`/api/suppliers/${id}`, {
       method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);
@@ -2162,7 +2058,7 @@ export const suppliersApi = {
 
   // AI 搜索供应商信息
   async aiLookup(companyName: string): Promise<SupplierAILookupResponse> {
-    const response = await request<SupplierAILookupResponse>('/admin/suppliers/ai-lookup', {
+    const response = await request<SupplierAILookupResponse>('/api/suppliers/ai-lookup', {
       method: 'POST',
       body: JSON.stringify({ company_name: companyName }),
     });
@@ -2187,21 +2083,21 @@ export const supplierContactsApi = {
     if (params?.search) searchParams.set('search', params.search);
     if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
     const query = searchParams.toString();
-    const response = await request<SupplierContactListResponse>(`/admin/supplier-contacts${query ? `?${query}` : ''}`);
+    const response = await request<SupplierContactListResponse>(`/api/supplier-contacts${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 获取联系人详情
   async get(id: string): Promise<SupplierContact> {
-    const response = await request<SupplierContact>(`/admin/supplier-contacts/${id}`);
+    const response = await request<SupplierContact>(`/api/supplier-contacts/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 创建联系人
   async create(data: SupplierContactCreate): Promise<SupplierContact> {
-    const response = await request<SupplierContact>('/admin/supplier-contacts', {
+    const response = await request<SupplierContact>('/api/supplier-contacts', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -2211,7 +2107,7 @@ export const supplierContactsApi = {
 
   // 更新联系人
   async update(id: string, data: SupplierContactUpdate): Promise<SupplierContact> {
-    const response = await request<SupplierContact>(`/admin/supplier-contacts/${id}`, {
+    const response = await request<SupplierContact>(`/api/supplier-contacts/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -2221,7 +2117,7 @@ export const supplierContactsApi = {
 
   // 删除联系人
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/supplier-contacts/${id}`, {
+    const response = await request(`/api/supplier-contacts/${id}`, {
       method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);
@@ -2244,7 +2140,7 @@ export const uploadApi = {
     formData.append('directory', directory);
 
     const token = getAccessToken();
-    const response = await fetch(`${API_BASE_URL}/admin/upload`, {
+    const response = await fetch(`${API_BASE_URL}/api/upload`, {
       method: 'POST',
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -2341,7 +2237,7 @@ export const categoriesApi = {
     if (params?.search) searchParams.set('search', params.search);
     if (params?.parent_id) searchParams.set('parent_id', params.parent_id);
     const query = searchParams.toString();
-    const response = await request<CategoryListResponse>(`/admin/categories${query ? `?${query}` : ''}`);
+    const response = await request<CategoryListResponse>(`/api/categories${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -2351,7 +2247,7 @@ export const categoriesApi = {
     const searchParams = new URLSearchParams();
     if (params?.is_active !== undefined) searchParams.set('is_active', String(params.is_active));
     const query = searchParams.toString();
-    const response = await request<CategoryTreeResponse>(`/admin/categories/tree${query ? `?${query}` : ''}`);
+    const response = await request<CategoryTreeResponse>(`/api/categories/tree${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -2361,21 +2257,21 @@ export const categoriesApi = {
     const searchParams = new URLSearchParams();
     if (parentId) searchParams.set('parent_id', parentId);
     const query = searchParams.toString();
-    const response = await request<{ code: string }>(`/admin/categories/next-code${query ? `?${query}` : ''}`);
+    const response = await request<{ code: string }>(`/api/categories/next-code${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 获取品类详情
   async get(id: string): Promise<Category> {
-    const response = await request<Category>(`/admin/categories/${id}`);
+    const response = await request<Category>(`/api/categories/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 创建品类
   async create(data: CategoryCreate): Promise<Category> {
-    const response = await request<Category>('/admin/categories', {
+    const response = await request<Category>('/api/categories', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -2385,7 +2281,7 @@ export const categoriesApi = {
 
   // 更新品类
   async update(id: string, data: CategoryUpdate): Promise<Category> {
-    const response = await request<Category>(`/admin/categories/${id}`, {
+    const response = await request<Category>(`/api/categories/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -2395,7 +2291,7 @@ export const categoriesApi = {
 
   // 删除品类
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/categories/${id}`, {
+    const response = await request(`/api/categories/${id}`, {
       method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);
@@ -2529,21 +2425,21 @@ export const productsApi = {
     if (params?.category_id) searchParams.set('category_id', params.category_id);
     if (params?.status) searchParams.set('status', params.status);
     const query = searchParams.toString();
-    const response = await request<ProductListResponse>(`/admin/products${query ? `?${query}` : ''}`);
+    const response = await request<ProductListResponse>(`/api/products${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 获取产品详情（含供应商）
   async get(id: string): Promise<ProductDetail> {
-    const response = await request<ProductDetail>(`/admin/products/${id}`);
+    const response = await request<ProductDetail>(`/api/products/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 创建产品
   async create(data: ProductCreate): Promise<Product> {
-    const response = await request<Product>('/admin/products', {
+    const response = await request<Product>('/api/products', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -2553,7 +2449,7 @@ export const productsApi = {
 
   // 更新产品
   async update(id: string, data: ProductUpdate): Promise<Product> {
-    const response = await request<Product>(`/admin/products/${id}`, {
+    const response = await request<Product>(`/api/products/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -2563,7 +2459,7 @@ export const productsApi = {
 
   // 删除产品
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/products/${id}`, {
+    const response = await request(`/api/products/${id}`, {
       method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);
@@ -2571,7 +2467,7 @@ export const productsApi = {
 
   // 添加供应商关联
   async addSupplier(productId: string, data: ProductSupplierCreate): Promise<ProductSupplierInfo> {
-    const response = await request<ProductSupplierInfo>(`/admin/products/${productId}/suppliers`, {
+    const response = await request<ProductSupplierInfo>(`/api/products/${productId}/suppliers`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -2581,7 +2477,7 @@ export const productsApi = {
 
   // 更新供应商关联
   async updateSupplier(productId: string, supplierId: string, data: ProductSupplierUpdate): Promise<ProductSupplierInfo> {
-    const response = await request<ProductSupplierInfo>(`/admin/products/${productId}/suppliers/${supplierId}`, {
+    const response = await request<ProductSupplierInfo>(`/api/products/${productId}/suppliers/${supplierId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -2591,7 +2487,7 @@ export const productsApi = {
 
   // 移除供应商关联
   async removeSupplier(productId: string, supplierId: string): Promise<void> {
-    const response = await request(`/admin/products/${productId}/suppliers/${supplierId}`, {
+    const response = await request(`/api/products/${productId}/suppliers/${supplierId}`, {
       method: 'DELETE',
     });
     if (response.error) throw new Error(response.error);
@@ -2636,14 +2532,14 @@ export const countriesApi = {
     if (params?.search) searchParams.set('search', params.search);
     if (params?.sort_by) searchParams.set('sort_by', params.sort_by);
     const query = searchParams.toString();
-    const response = await request<CountryListResponse>(`/admin/countries${query ? `?${query}` : ''}`);
+    const response = await request<CountryListResponse>(`/api/countries${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 获取国家详情
   async get(id: string): Promise<Country> {
-    const response = await request<Country>(`/admin/countries/${id}`);
+    const response = await request<Country>(`/api/countries/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -2688,14 +2584,14 @@ export const tradeTermsApi = {
     if (params?.version) searchParams.set('version', params.version);
     if (params?.is_current !== undefined) searchParams.set('is_current', String(params.is_current));
     const query = searchParams.toString();
-    const response = await request<TradeTermListResponse>(`/admin/trade-terms${query ? `?${query}` : ''}`);
+    const response = await request<TradeTermListResponse>(`/api/trade-terms${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 获取贸易术语详情
   async get(id: string): Promise<TradeTerm> {
-    const response = await request<TradeTerm>(`/admin/trade-terms/${id}`);
+    const response = await request<TradeTerm>(`/api/trade-terms/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -2736,14 +2632,14 @@ export const paymentMethodsApi = {
     if (params?.search) searchParams.set('search', params.search);
     if (params?.category) searchParams.set('category', params.category);
     const query = searchParams.toString();
-    const response = await request<PaymentMethodListResponse>(`/admin/payment-methods${query ? `?${query}` : ''}`);
+    const response = await request<PaymentMethodListResponse>(`/api/payment-methods${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
 
   // 获取付款方式详情
   async get(id: string): Promise<PaymentMethod> {
-    const response = await request<PaymentMethod>(`/admin/payment-methods/${id}`);
+    const response = await request<PaymentMethod>(`/api/payment-methods/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -2808,27 +2704,27 @@ export const warehousesApi = {
     if (params?.warehouse_type) searchParams.set('warehouse_type', params.warehouse_type);
     if (params?.is_active !== undefined) searchParams.set('is_active', params.is_active.toString());
     const query = searchParams.toString();
-    const response = await request<WarehouseListResponse>(`/admin/warehouses${query ? `?${query}` : ''}`);
+    const response = await request<WarehouseListResponse>(`/api/warehouses${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async get(id: string): Promise<Warehouse> {
-    const response = await request<Warehouse>(`/admin/warehouses/${id}`);
+    const response = await request<Warehouse>(`/api/warehouses/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: WarehouseCreate): Promise<Warehouse> {
-    const response = await request<Warehouse>('/admin/warehouses', { method: 'POST', body: JSON.stringify(data) });
+    const response = await request<Warehouse>('/api/warehouses', { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async update(id: string, data: WarehouseUpdate): Promise<Warehouse> {
-    const response = await request<Warehouse>(`/admin/warehouses/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    const response = await request<Warehouse>(`/api/warehouses/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/warehouses/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/warehouses/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
 };
@@ -2936,31 +2832,31 @@ export const purchaseContractsApi = {
     if (params?.status) searchParams.set('status', params.status);
     if (params?.supplier_id) searchParams.set('supplier_id', params.supplier_id);
     const query = searchParams.toString();
-    const response = await request<PurchaseContractListResponse>(`/admin/purchase-contracts${query ? `?${query}` : ''}`);
+    const response = await request<PurchaseContractListResponse>(`/api/purchase-contracts${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async get(id: string): Promise<any> {
-    const response = await request(`/admin/purchase-contracts/${id}`);
+    const response = await request(`/api/purchase-contracts/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: PurchaseContractCreate): Promise<any> {
-    const response = await request('/admin/purchase-contracts', { method: 'POST', body: JSON.stringify(data) });
+    const response = await request('/api/purchase-contracts', { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async update(id: string, data: PurchaseContractUpdate): Promise<any> {
-    const response = await request(`/admin/purchase-contracts/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    const response = await request(`/api/purchase-contracts/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/purchase-contracts/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/purchase-contracts/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
   async updateStatus(id: string, status: string): Promise<any> {
-    const response = await request(`/admin/purchase-contracts/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    const response = await request(`/api/purchase-contracts/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -3087,36 +2983,36 @@ export const salesContractsApi = {
     if (params?.customer_id) searchParams.set('customer_id', params.customer_id);
     if (params?.is_zero_stock !== undefined) searchParams.set('is_zero_stock', params.is_zero_stock.toString());
     const query = searchParams.toString();
-    const response = await request<SalesContractListResponse>(`/admin/sales-contracts${query ? `?${query}` : ''}`);
+    const response = await request<SalesContractListResponse>(`/api/sales-contracts${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async get(id: string): Promise<any> {
-    const response = await request(`/admin/sales-contracts/${id}`);
+    const response = await request(`/api/sales-contracts/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: SalesContractCreate): Promise<any> {
-    const response = await request('/admin/sales-contracts', { method: 'POST', body: JSON.stringify(data) });
+    const response = await request('/api/sales-contracts', { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async update(id: string, data: SalesContractUpdate): Promise<any> {
-    const response = await request(`/admin/sales-contracts/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    const response = await request(`/api/sales-contracts/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/sales-contracts/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/sales-contracts/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
   async updateStatus(id: string, status: string): Promise<any> {
-    const response = await request(`/admin/sales-contracts/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    const response = await request(`/api/sales-contracts/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async linkPurchase(id: string, purchaseContractId: string): Promise<any> {
-    const response = await request(`/admin/sales-contracts/${id}/link-purchase`, { method: 'POST', body: JSON.stringify({ purchase_contract_id: purchaseContractId }) });
+    const response = await request(`/api/sales-contracts/${id}/link-purchase`, { method: 'POST', body: JSON.stringify({ purchase_contract_id: purchaseContractId }) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -3164,31 +3060,31 @@ export const inboundOrdersApi = {
     if (params?.status) searchParams.set('status', params.status);
     if (params?.warehouse_id) searchParams.set('warehouse_id', params.warehouse_id);
     const query = searchParams.toString();
-    const response = await request<InboundOrderListResponse>(`/admin/inbound-orders${query ? `?${query}` : ''}`);
+    const response = await request<InboundOrderListResponse>(`/api/inbound-orders${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async get(id: string): Promise<any> {
-    const response = await request(`/admin/inbound-orders/${id}`);
+    const response = await request(`/api/inbound-orders/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: any): Promise<any> {
-    const response = await request('/admin/inbound-orders', { method: 'POST', body: JSON.stringify(data) });
+    const response = await request('/api/inbound-orders', { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/inbound-orders/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/inbound-orders/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
   async updateStatus(id: string, status: string): Promise<any> {
-    const response = await request(`/admin/inbound-orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    const response = await request(`/api/inbound-orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async confirmReceive(id: string, data: any): Promise<any> {
-    const response = await request(`/admin/inbound-orders/${id}/confirm-receive`, { method: 'POST', body: JSON.stringify(data) });
+    const response = await request(`/api/inbound-orders/${id}/confirm-receive`, { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -3236,31 +3132,31 @@ export const outboundOrdersApi = {
     if (params?.status) searchParams.set('status', params.status);
     if (params?.warehouse_id) searchParams.set('warehouse_id', params.warehouse_id);
     const query = searchParams.toString();
-    const response = await request<OutboundOrderListResponse>(`/admin/outbound-orders${query ? `?${query}` : ''}`);
+    const response = await request<OutboundOrderListResponse>(`/api/outbound-orders${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async get(id: string): Promise<any> {
-    const response = await request(`/admin/outbound-orders/${id}`);
+    const response = await request(`/api/outbound-orders/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: any): Promise<any> {
-    const response = await request('/admin/outbound-orders', { method: 'POST', body: JSON.stringify(data) });
+    const response = await request('/api/outbound-orders', { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/outbound-orders/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/outbound-orders/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
   async updateStatus(id: string, status: string): Promise<any> {
-    const response = await request(`/admin/outbound-orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    const response = await request(`/api/outbound-orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async confirmShip(id: string, data: any): Promise<any> {
-    const response = await request(`/admin/outbound-orders/${id}/confirm-ship`, { method: 'POST', body: JSON.stringify(data) });
+    const response = await request(`/api/outbound-orders/${id}/confirm-ship`, { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -3281,7 +3177,7 @@ export const ttsApi = {
   // 调用后端 AI TTS 合成，返回音频 Blob
   async synthesize(text: string, provider: string, voice?: string, speed?: number): Promise<Blob> {
     const token = getAccessToken();
-    const response = await fetch(`${API_BASE_URL}/admin/tts/synthesize`, {
+    const response = await fetch(`${API_BASE_URL}/api/tts/synthesize`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -3391,17 +3287,17 @@ export const projectsApi = {
     if (params?.priority) searchParams.set('priority', params.priority);
     if (params?.owner_id) searchParams.set('owner_id', params.owner_id);
     const query = searchParams.toString();
-    const response = await request<ProjectListResponse>(`/admin/projects${query ? `?${query}` : ''}`);
+    const response = await request<ProjectListResponse>(`/api/projects${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async get(id: string): Promise<ProjectDetail> {
-    const response = await request<ProjectDetail>(`/admin/projects/${id}`);
+    const response = await request<ProjectDetail>(`/api/projects/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: ProjectCreate): Promise<ProjectDetail> {
-    const response = await request<ProjectDetail>('/admin/projects', {
+    const response = await request<ProjectDetail>('/api/projects', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -3409,7 +3305,7 @@ export const projectsApi = {
     return response.data!;
   },
   async update(id: string, data: ProjectUpdate): Promise<Project> {
-    const response = await request<Project>(`/admin/projects/${id}`, {
+    const response = await request<Project>(`/api/projects/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -3417,11 +3313,11 @@ export const projectsApi = {
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/projects/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/projects/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
   async updateStatus(id: string, status: string): Promise<Project> {
-    const response = await request<Project>(`/admin/projects/${id}/status`, {
+    const response = await request<Project>(`/api/projects/${id}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
     });
@@ -3429,7 +3325,7 @@ export const projectsApi = {
     return response.data!;
   },
   async addAssociation(projectId: string, data: { entity_type: string; entity_id: string; notes?: string }): Promise<ProjectAssociation> {
-    const response = await request<ProjectAssociation>(`/admin/projects/${projectId}/associations`, {
+    const response = await request<ProjectAssociation>(`/api/projects/${projectId}/associations`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -3437,7 +3333,7 @@ export const projectsApi = {
     return response.data!;
   },
   async removeAssociation(projectId: string, assocId: string): Promise<void> {
-    const response = await request(`/admin/projects/${projectId}/associations/${assocId}`, { method: 'DELETE' });
+    const response = await request(`/api/projects/${projectId}/associations/${assocId}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
 };
@@ -3524,17 +3420,17 @@ export const tasksApi = {
     if (params.assignee_id) searchParams.set('assignee_id', params.assignee_id);
     if (params.parent_task_id) searchParams.set('parent_task_id', params.parent_task_id);
     const query = searchParams.toString();
-    const response = await request<TaskListResponse>(`/admin/tasks?${query}`);
+    const response = await request<TaskListResponse>(`/api/tasks?${query}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async get(id: string): Promise<TaskDetail> {
-    const response = await request<TaskDetail>(`/admin/tasks/${id}`);
+    const response = await request<TaskDetail>(`/api/tasks/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: TaskCreate): Promise<TaskItem> {
-    const response = await request<TaskItem>('/admin/tasks', {
+    const response = await request<TaskItem>('/api/tasks', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -3542,7 +3438,7 @@ export const tasksApi = {
     return response.data!;
   },
   async update(id: string, data: TaskUpdate): Promise<TaskItem> {
-    const response = await request<TaskItem>(`/admin/tasks/${id}`, {
+    const response = await request<TaskItem>(`/api/tasks/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -3550,7 +3446,7 @@ export const tasksApi = {
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/tasks/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/tasks/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
 };
@@ -3601,12 +3497,12 @@ export const progressApi = {
     if (params.page) searchParams.set('page', params.page.toString());
     if (params.page_size) searchParams.set('page_size', params.page_size.toString());
     const query = searchParams.toString();
-    const response = await request<ProgressListResponse>(`/admin/progress?${query}`);
+    const response = await request<ProgressListResponse>(`/api/progress?${query}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: ProgressCreate): Promise<ProgressEntry> {
-    const response = await request<ProgressEntry>('/admin/progress', {
+    const response = await request<ProgressEntry>('/api/progress', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -3614,7 +3510,7 @@ export const progressApi = {
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/progress/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/progress/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
 };
@@ -3698,31 +3594,31 @@ export const clientRfqsApi = {
     if (params?.status) searchParams.set('status', params.status);
     if (params?.customer_id) searchParams.set('customer_id', params.customer_id);
     const query = searchParams.toString();
-    const response = await request<ClientRFQListResponse>(`/admin/client-rfqs${query ? `?${query}` : ''}`);
+    const response = await request<ClientRFQListResponse>(`/api/client-rfqs${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async get(id: string): Promise<any> {
-    const response = await request(`/admin/client-rfqs/${id}`);
+    const response = await request(`/api/client-rfqs/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: ClientRFQCreate): Promise<any> {
-    const response = await request('/admin/client-rfqs', { method: 'POST', body: JSON.stringify(data) });
+    const response = await request('/api/client-rfqs', { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async update(id: string, data: Partial<ClientRFQCreate>): Promise<any> {
-    const response = await request(`/admin/client-rfqs/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    const response = await request(`/api/client-rfqs/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/client-rfqs/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/client-rfqs/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
   async updateStatus(id: string, status: string): Promise<any> {
-    const response = await request(`/admin/client-rfqs/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    const response = await request(`/api/client-rfqs/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -3812,31 +3708,31 @@ export const quotationsApi = {
     if (params?.status) searchParams.set('status', params.status);
     if (params?.customer_id) searchParams.set('customer_id', params.customer_id);
     const query = searchParams.toString();
-    const response = await request<QuotationListResponse>(`/admin/quotations${query ? `?${query}` : ''}`);
+    const response = await request<QuotationListResponse>(`/api/quotations${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async get(id: string): Promise<any> {
-    const response = await request(`/admin/quotations/${id}`);
+    const response = await request(`/api/quotations/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: QuotationCreate): Promise<any> {
-    const response = await request('/admin/quotations', { method: 'POST', body: JSON.stringify(data) });
+    const response = await request('/api/quotations', { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async update(id: string, data: Partial<QuotationCreate>): Promise<any> {
-    const response = await request(`/admin/quotations/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    const response = await request(`/api/quotations/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/quotations/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/quotations/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
   async updateStatus(id: string, status: string): Promise<any> {
-    const response = await request(`/admin/quotations/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    const response = await request(`/api/quotations/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -3919,31 +3815,31 @@ export const supplierRfqsApi = {
     if (params?.status) searchParams.set('status', params.status);
     if (params?.supplier_id) searchParams.set('supplier_id', params.supplier_id);
     const query = searchParams.toString();
-    const response = await request<SupplierRFQListResponse>(`/admin/supplier-rfqs${query ? `?${query}` : ''}`);
+    const response = await request<SupplierRFQListResponse>(`/api/supplier-rfqs${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async get(id: string): Promise<any> {
-    const response = await request(`/admin/supplier-rfqs/${id}`);
+    const response = await request(`/api/supplier-rfqs/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: SupplierRFQCreate): Promise<any> {
-    const response = await request('/admin/supplier-rfqs', { method: 'POST', body: JSON.stringify(data) });
+    const response = await request('/api/supplier-rfqs', { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async update(id: string, data: Partial<SupplierRFQCreate>): Promise<any> {
-    const response = await request(`/admin/supplier-rfqs/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    const response = await request(`/api/supplier-rfqs/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/supplier-rfqs/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/supplier-rfqs/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
   async updateStatus(id: string, status: string): Promise<any> {
-    const response = await request(`/admin/supplier-rfqs/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    const response = await request(`/api/supplier-rfqs/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -4027,31 +3923,31 @@ export const supplierQuotationsApi = {
     if (params?.status) searchParams.set('status', params.status);
     if (params?.supplier_id) searchParams.set('supplier_id', params.supplier_id);
     const query = searchParams.toString();
-    const response = await request<SupplierQuotationListResponse>(`/admin/supplier-quotations${query ? `?${query}` : ''}`);
+    const response = await request<SupplierQuotationListResponse>(`/api/supplier-quotations${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async get(id: string): Promise<any> {
-    const response = await request(`/admin/supplier-quotations/${id}`);
+    const response = await request(`/api/supplier-quotations/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: SupplierQuotationCreate): Promise<any> {
-    const response = await request('/admin/supplier-quotations', { method: 'POST', body: JSON.stringify(data) });
+    const response = await request('/api/supplier-quotations', { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async update(id: string, data: Partial<SupplierQuotationCreate>): Promise<any> {
-    const response = await request(`/admin/supplier-quotations/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    const response = await request(`/api/supplier-quotations/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/supplier-quotations/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/supplier-quotations/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
   async updateStatus(id: string, status: string): Promise<any> {
-    const response = await request(`/admin/supplier-quotations/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    const response = await request(`/api/supplier-quotations/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
@@ -4092,27 +3988,27 @@ export const organizationsApi = {
     if (params?.page_size) searchParams.set('page_size', params.page_size.toString());
     if (params?.search) searchParams.set('search', params.search);
     const query = searchParams.toString();
-    const response = await request<{ total: number; items: Organization[] }>(`/admin/organizations${query ? `?${query}` : ''}`);
+    const response = await request<{ total: number; items: Organization[] }>(`/api/organizations${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async get(id: string): Promise<Organization> {
-    const response = await request<Organization>(`/admin/organizations/${id}`);
+    const response = await request<Organization>(`/api/organizations/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: OrganizationCreate): Promise<Organization> {
-    const response = await request<Organization>('/admin/organizations', { method: 'POST', body: JSON.stringify(data) });
+    const response = await request<Organization>('/api/organizations', { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async update(id: string, data: OrganizationUpdate): Promise<Organization> {
-    const response = await request<Organization>(`/admin/organizations/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    const response = await request<Organization>(`/api/organizations/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/organizations/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/organizations/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
 };
@@ -4155,7 +4051,7 @@ export const departmentsApi = {
     const searchParams = new URLSearchParams();
     if (params?.org_id) searchParams.set('org_id', params.org_id);
     const query = searchParams.toString();
-    const response = await request<{ total: number; items: Department[] }>(`/admin/departments${query ? `?${query}` : ''}`);
+    const response = await request<{ total: number; items: Department[] }>(`/api/departments${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!.items;
   },
@@ -4163,26 +4059,26 @@ export const departmentsApi = {
     const searchParams = new URLSearchParams();
     if (params?.org_id) searchParams.set('org_id', params.org_id);
     const query = searchParams.toString();
-    const response = await request<Department[]>(`/admin/departments/tree${query ? `?${query}` : ''}`);
+    const response = await request<Department[]>(`/api/departments/tree${query ? `?${query}` : ''}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: DepartmentCreate): Promise<Department> {
-    const response = await request<Department>('/admin/departments', { method: 'POST', body: JSON.stringify(data) });
+    const response = await request<Department>('/api/departments', { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async update(id: string, data: DepartmentUpdate): Promise<Department> {
-    const response = await request<Department>(`/admin/departments/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    const response = await request<Department>(`/api/departments/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/departments/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/departments/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
   async sort(items: Array<{ id: string; sort_order: number; parent_id?: string | null }>): Promise<void> {
-    const response = await request('/admin/departments/sort', { method: 'PUT', body: JSON.stringify({ items }) });
+    const response = await request('/api/departments/sort', { method: 'PUT', body: JSON.stringify({ items }) });
     if (response.error) throw new Error(response.error);
   },
 };
@@ -4239,42 +4135,42 @@ export interface PermissionGroup {
 
 export const rolesApi = {
   async list(): Promise<{ total: number; items: RoleListItem[] }> {
-    const response = await request<{ total: number; items: RoleListItem[] }>('/admin/roles');
+    const response = await request<{ total: number; items: RoleListItem[] }>('/api/roles');
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async get(id: string): Promise<RoleDetail> {
-    const response = await request<RoleDetail>(`/admin/roles/${id}`);
+    const response = await request<RoleDetail>(`/api/roles/${id}`);
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async create(data: RoleCreate): Promise<RoleDetail> {
-    const response = await request<RoleDetail>('/admin/roles', { method: 'POST', body: JSON.stringify(data) });
+    const response = await request<RoleDetail>('/api/roles', { method: 'POST', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async update(id: string, data: RoleUpdate): Promise<RoleDetail> {
-    const response = await request<RoleDetail>(`/admin/roles/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    const response = await request<RoleDetail>(`/api/roles/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     if (response.error) throw new Error(response.error);
     return response.data!;
   },
   async delete(id: string): Promise<void> {
-    const response = await request(`/admin/roles/${id}`, { method: 'DELETE' });
+    const response = await request(`/api/roles/${id}`, { method: 'DELETE' });
     if (response.error) throw new Error(response.error);
   },
   async setPermissions(id: string, permissionIds: string[]): Promise<void> {
-    const response = await request(`/admin/roles/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ permission_ids: permissionIds }) });
+    const response = await request(`/api/roles/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ permission_ids: permissionIds }) });
     if (response.error) throw new Error(response.error);
   },
   async setDataScopes(id: string, scopes: Array<{ resource: string; scope_type: string }>): Promise<void> {
-    const response = await request(`/admin/roles/${id}/data-scopes`, { method: 'PUT', body: JSON.stringify({ scopes }) });
+    const response = await request(`/api/roles/${id}/data-scopes`, { method: 'PUT', body: JSON.stringify({ scopes }) });
     if (response.error) throw new Error(response.error);
   },
 };
 
 export const permissionsApi = {
   async list(): Promise<PermissionGroup[]> {
-    const response = await request<PermissionGroup[]>('/admin/permissions');
+    const response = await request<PermissionGroup[]>('/api/permissions');
     if (response.error) throw new Error(response.error);
     return response.data!;
   },

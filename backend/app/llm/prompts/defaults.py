@@ -109,7 +109,7 @@ Return analysis results in JSON format with the following fields:
 
     "sender_type": "Sender type: customer/supplier/freight/bank/other",
 
-    "sender_company": "Sender company name, null if unidentifiable",
+    "sender_company": "Sender company's full official name (公司全称, e.g. 'Hyde Tools, Inc.', 'Samsung Electronics Co., Ltd.'), extracted from email signature, domain, or body. Must include legal suffixes (Inc./Ltd./Co./GmbH etc.) when identifiable. null if unidentifiable",
 
     "sender_country": "Sender country/region, null if unidentifiable",
 
@@ -261,106 +261,6 @@ Return analysis results in JSON format:
 3. The new suggestion should represent a more granular or specific category that could be useful for workflow routing
 4. If the existing suggestions list already contains a semantically similar type (same meaning, similar code or name) — whether pending or rejected — set should_suggest to false to avoid duplicates
 5. Return only JSON, no other content""",
-    },
-
-    # ==================== Customer Extractor ====================
-    "customer_extractor_system": {
-        "display_name": "Customer Extractor - System Prompt",
-        "category": "agent",
-        "description": "System prompt for the customer extractor agent",
-        "model_hint": "claude-3-sonnet-20240229",
-        "variables": {},
-        "content": """You are a professional foreign trade customer information extraction expert.
-
-Your role:
-- Analyze incoming business emails and extract customer (company) and contact person information
-- Determine if the sender represents a new customer or an existing customer
-- Return results strictly in the requested JSON format
-
-Important:
-- Leverage the pre-analysis results (sender_company, sender_country, etc.) when available
-- Focus on extracting detailed contact information (name, title, department, phone) that the email summarizer may not capture
-- Extract company information from email signatures, headers, and body text
-- Infer industry from product mentions and business context
-- Only return valid JSON, no additional text or explanation
-- If you cannot determine a field, use null""",
-    },
-
-    "customer_extractor": {
-        "display_name": "Customer Extractor",
-        "category": "agent",
-        "description": "Extracts customer and contact information from trade emails",
-        "model_hint": "claude-3-sonnet-20240229",
-        "variables": {
-            "sender": "Sender email address",
-            "sender_name": "Sender display name",
-            "subject": "Email subject",
-            "content": "Email body text",
-            "email_analysis_context": "Pre-analyzed email information from EmailSummarizer",
-            "existing_customers": "List of existing customers for deduplication",
-            "pending_suggestions": "List of pending customer suggestions",
-        },
-        "content": """Extract customer and contact information from the following email.
-
-## Pre-Analysis Results (from Email Summarizer)
-{{email_analysis_context}}
-
-## Existing Customers (for deduplication)
-{{existing_customers}}
-
-## Pending Customer Suggestions (avoid duplicates)
-{{pending_suggestions}}
-
-## Email Information
-- Sender: {{sender}} ({{sender_name}})
-- Subject: {{subject}}
-
-## Email Body
-{{content}}
-
-## Extraction Requirements
-
-Analyze the email and extract customer/contact information. Return results in JSON format:
-
-```json
-{
-    "is_new_customer": true,
-    "confidence": 0.85,
-    "reasoning": "Brief explanation of why this is/isn't a new customer (in Chinese)",
-
-    "company": {
-        "name": "Full company name (e.g., 'Hyde Tools, Inc.')",
-        "short_name": "Short name or alias (e.g., 'Hyde'), null if not clear",
-        "country": "Country (e.g., 'United States'), null if unknown",
-        "region": "Region/continent (e.g., 'North America'), null if unknown",
-        "industry": "Industry inferred from email context (e.g., 'Tools & Hardware'), null if unknown",
-        "website": "Company website if mentioned, null otherwise"
-    },
-
-    "contact": {
-        "name": "Contact person's full name, null if unknown",
-        "email": "Contact email (usually same as sender)",
-        "title": "Job title (e.g., 'Purchasing Manager'), null if unknown",
-        "department": "Department (e.g., 'Procurement'), null if unknown",
-        "phone": "Phone number if mentioned, null otherwise"
-    },
-
-    "suggested_tags": ["product_category_1", "product_category_2"],
-
-    "matched_existing_customer": "ID of matched existing customer if this is a known company, null if new customer",
-
-    "sender_type": "customer/supplier/other"
-}
-```
-
-## Important Notes
-1. If the pre-analysis already identified sender_company and sender_country, trust and reuse those values
-2. Check the existing customers list carefully - if the sender's company or email domain matches an existing customer, set is_new_customer to false and provide matched_existing_customer
-3. Check the pending suggestions list - if there's already a pending suggestion for the same company/domain, set is_new_customer to false
-4. Extract contact details (name, title, department) from email signatures, "Best regards" blocks, and header
-5. Infer industry from product mentions, trade context, and company name
-6. suggested_tags should contain product categories or business keywords mentioned in the email
-7. Return only JSON, no other content""",
     },
 
 

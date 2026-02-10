@@ -21,7 +21,6 @@ from app.models.email_analysis import EmailAnalysis
 from app.models.llm_model_config import LLMModelConfig
 from app.models.work_type import WorkType, WorkTypeSuggestion
 from app.models.customer import Customer, Contact
-from app.models.customer_suggestion import CustomerSuggestion
 from app.models.supplier import Supplier, SupplierContact
 from app.models.category import Category
 from app.models.product import Product, ProductSupplier
@@ -76,7 +75,6 @@ __all__ = [
     "WorkTypeSuggestion",
     "Customer",
     "Contact",
-    "CustomerSuggestion",
     "Supplier",
     "SupplierContact",
     "Category",
