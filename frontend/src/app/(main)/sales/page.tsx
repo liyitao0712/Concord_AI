@@ -12,45 +12,40 @@ import { PageLoading } from '@/components/LoadingSpinner';
 import { Building2, FileSearch, FileOutput, Receipt } from 'lucide-react';
 
 const CustomersPanel = dynamic(
-  () => import('@/app/admin/customers/page'),
+  () => import('@/app/(main)/customers/page'),
   { loading: () => <PageLoading /> }
 );
 const ClientRfqsPanel = dynamic(
-  () => import('@/app/admin/client-rfqs/page'),
+  () => import('@/app/(main)/client-rfqs/page'),
   { loading: () => <PageLoading /> }
 );
 const QuotationsPanel = dynamic(
-  () => import('@/app/admin/quotations/page'),
+  () => import('@/app/(main)/quotations/page'),
   { loading: () => <PageLoading /> }
 );
 const SalesContractsPanel = dynamic(
-  () => import('@/app/admin/sales-contracts/page'),
+  () => import('@/app/(main)/sales-contracts/page'),
   { loading: () => <PageLoading /> }
 );
 
 export default function SalesPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">销售管理</h1>
-        <p className="mt-1 text-sm text-muted-foreground">客户、询价、报价与销售合同</p>
-      </div>
-
       <Tabs defaultValue="customers">
-        <TabsList variant="line">
-          <TabsTrigger value="customers" className="gap-1.5">
+        <TabsList variant="line" className="h-auto">
+          <TabsTrigger value="customers" className="gap-1.5 text-base px-4 py-2">
             <Building2 className="h-4 w-4" />
             客户管理
           </TabsTrigger>
-          <TabsTrigger value="client-rfqs" className="gap-1.5">
+          <TabsTrigger value="client-rfqs" className="gap-1.5 text-base px-4 py-2">
             <FileSearch className="h-4 w-4" />
             客户询价
           </TabsTrigger>
-          <TabsTrigger value="quotations" className="gap-1.5">
+          <TabsTrigger value="quotations" className="gap-1.5 text-base px-4 py-2">
             <FileOutput className="h-4 w-4" />
             报价单
           </TabsTrigger>
-          <TabsTrigger value="sales-contracts" className="gap-1.5">
+          <TabsTrigger value="sales-contracts" className="gap-1.5 text-base px-4 py-2">
             <Receipt className="h-4 w-4" />
             销售合同
           </TabsTrigger>

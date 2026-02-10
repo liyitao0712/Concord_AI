@@ -29,7 +29,6 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { LoadingSpinner, PageLoading } from '@/components/LoadingSpinner';
-import { PageHeader } from '@/components/PageHeader';
 import { FormSection } from '@/components/FormSection';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
@@ -190,12 +189,6 @@ function OSSConfigTab() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <PageHeader
-        title="OSS 存储配置"
-        description="配置阿里云 OSS 对象存储，用于保存邮件附件等文件"
-      />
-
       {/* 提示消息 */}
       {message && message.type === 'error' && (
         <ErrorAlert message={message.text} />
@@ -610,17 +603,12 @@ function EmailAccountsTab() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <PageHeader
-        title="邮箱管理"
-        description="管理系统邮箱账户，支持多邮箱配置"
-        actions={
-          <Button onClick={handleAdd}>
-            <Plus className="size-4" />
-            新增邮箱
-          </Button>
-        }
-      />
+      <div className="flex justify-end">
+        <Button onClick={handleAdd}>
+          <Plus className="size-4" />
+          新增邮箱
+        </Button>
+      </div>
 
       {/* 提示消息 */}
       {message && message.type === 'error' && (

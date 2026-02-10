@@ -34,7 +34,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { PageHeader } from '@/components/PageHeader';
 import { FormSection } from '@/components/FormSection';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
@@ -254,21 +253,6 @@ export default function PurchaseContractsPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页头 */}
-      <PageHeader
-        title="采购合同"
-        description="管理采购合同"
-        actions={
-          can('purchase_contract', 'create') ? (
-            <Button onClick={openCreateForm}>
-              <Plus />
-              新建合同
-            </Button>
-          ) : undefined
-        }
-      />
-
-      {/* 搜索和筛选 */}
       <SearchFilterBar
         searchPlaceholder="搜索合同编号/供应商名称..."
         searchValue={searchInput}
@@ -284,6 +268,14 @@ export default function PurchaseContractsPage() {
         onFilterChange={(key, value) => {
           if (key === 'status') setStatusFilter(value);
         }}
+        actions={
+          can('purchase_contract', 'create') ? (
+            <Button onClick={openCreateForm}>
+              <Plus />
+              新建合同
+            </Button>
+          ) : undefined
+        }
       />
 
       {/* 错误信息 */}

@@ -35,7 +35,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { PageHeader } from '@/components/PageHeader';
 import { FormSection } from '@/components/FormSection';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
@@ -457,21 +456,6 @@ export default function InboundOrdersPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <PageHeader
-        title="入仓单管理"
-        description="管理入仓单和收货"
-        actions={
-          can('inbound_order', 'create') ? (
-            <Button onClick={() => setShowCreate(true)}>
-              <Plus className="h-4 w-4" />
-              新建入仓单
-            </Button>
-          ) : undefined
-        }
-      />
-
-      {/* 搜索和筛选 */}
       <SearchFilterBar
         searchPlaceholder="搜索单号、仓库、供应商..."
         searchValue={searchInput}
@@ -490,6 +474,14 @@ export default function InboundOrdersPage() {
         onFilterChange={(key, value) => {
           if (key === 'status') setStatusFilter(value);
         }}
+        actions={
+          can('inbound_order', 'create') ? (
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus className="h-4 w-4" />
+              新建入仓单
+            </Button>
+          ) : undefined
+        }
       />
 
       {/* 错误信息 */}

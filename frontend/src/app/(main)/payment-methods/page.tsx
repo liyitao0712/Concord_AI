@@ -20,7 +20,6 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import { PageHeader } from '@/components/PageHeader';
 import { SearchFilterBar } from '@/components/DataTable/SearchFilterBar';
 import { DataTableShell } from '@/components/DataTable/DataTableShell';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -115,12 +114,6 @@ export default function PaymentMethodsPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页头 */}
-      <PageHeader
-        title="付款方式"
-        description="国际贸易常用付款方式，包含汇款、信用证、托收及其他方式"
-      />
-
       {/* 搜索和筛选 */}
       <SearchFilterBar
         searchPlaceholder="搜索代码或名称..."

@@ -36,7 +36,6 @@ import {
   TableCell,
 } from '@/components/ui/table';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
@@ -368,18 +367,13 @@ export default function CategoriesPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页头 */}
-      <PageHeader
-        title="品类管理"
-        description="管理产品品类的树形结构，支持多级分类"
-        actions={
-          can('category', 'create') ? (
-            <Button onClick={() => openCreateForm()}>
-              新增根品类
-            </Button>
-          ) : undefined
-        }
-      />
+      <div className="flex justify-end">
+        {can('category', 'create') && (
+          <Button onClick={() => openCreateForm()}>
+            新增根品类
+          </Button>
+        )}
+      </div>
 
       {/* 错误信息 */}
       {error && <ErrorAlert message={error} onRetry={loadTree} />}

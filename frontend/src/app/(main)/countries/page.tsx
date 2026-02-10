@@ -19,7 +19,6 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import { PageHeader } from '@/components/PageHeader';
 import { SearchFilterBar } from '@/components/DataTable/SearchFilterBar';
 import { DataTableShell } from '@/components/DataTable/DataTableShell';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -73,12 +72,6 @@ export default function CountriesPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页头 */}
-      <PageHeader
-        title="国家数据库"
-        description="系统预置的国家/地区基础数据，包含 ISO 标准代码、国际区号和货币信息"
-      />
-
       {/* 搜索栏 */}
       <SearchFilterBar
         searchPlaceholder="搜索国家名称、ISO 代码、区号、货币..."

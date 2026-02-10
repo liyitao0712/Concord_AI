@@ -49,7 +49,6 @@ import {
   TableCell,
 } from '@/components/ui/table';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { PageHeader } from '@/components/PageHeader';
 import { FormSection } from '@/components/FormSection';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
@@ -1354,9 +1353,30 @@ export default function CustomersPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="客户管理"
-        description="管理客户信息和联系人"
+      <SearchFilterBar
+        searchPlaceholder="搜索公司名称、简称、邮箱..."
+        searchValue={searchInput}
+        onSearchChange={setSearchInput}
+        filters={[
+          {
+            key: 'level',
+            placeholder: '全部等级',
+            options: Object.entries(CUSTOMER_LEVELS).map(([value, { label }]) => ({ value, label })),
+          },
+          {
+            key: 'active',
+            placeholder: '全部状态',
+            options: [
+              { value: 'true', label: '活跃' },
+              { value: 'false', label: '停用' },
+            ],
+          },
+        ]}
+        filterValues={{ level: filterLevel, active: filterActive }}
+        onFilterChange={(key, value) => {
+          if (key === 'level') { setFilterLevel(value); setPage(1); }
+          if (key === 'active') { setFilterActive(value); setPage(1); }
+        }}
         actions={can('customer', 'create') ? (
           <Button onClick={() => setShowCreate(true)}>
             <Plus className="h-4 w-4" />
@@ -1364,33 +1384,6 @@ export default function CustomersPage() {
           </Button>
         ) : undefined}
       />
-
-      {/* 搜索和筛选 */}
-          <SearchFilterBar
-            searchPlaceholder="搜索公司名称、简称、邮箱..."
-            searchValue={searchInput}
-            onSearchChange={setSearchInput}
-            filters={[
-              {
-                key: 'level',
-                placeholder: '全部等级',
-                options: Object.entries(CUSTOMER_LEVELS).map(([value, { label }]) => ({ value, label })),
-              },
-              {
-                key: 'active',
-                placeholder: '全部状态',
-                options: [
-                  { value: 'true', label: '活跃' },
-                  { value: 'false', label: '停用' },
-                ],
-              },
-            ]}
-            filterValues={{ level: filterLevel, active: filterActive }}
-            onFilterChange={(key, value) => {
-              if (key === 'level') { setFilterLevel(value); setPage(1); }
-              if (key === 'active') { setFilterActive(value); setPage(1); }
-            }}
-          />
 
           {/* 客户列表 */}
           {isMobile ? (

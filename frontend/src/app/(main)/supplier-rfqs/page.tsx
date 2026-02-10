@@ -34,7 +34,6 @@ import {
 } from '@/components/ui/dialog';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePermission } from '@/hooks/usePermission';
-import { PageHeader } from '@/components/PageHeader';
 import { SearchFilterBar } from '@/components/DataTable/SearchFilterBar';
 import { DataTableShell } from '@/components/DataTable/DataTableShell';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -238,21 +237,6 @@ export default function SupplierRFQsPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页头 */}
-      <PageHeader
-        title="供应商询价"
-        description="管理供应商询价单"
-        actions={
-          can('supplier_rfq', 'create') ? (
-            <Button onClick={openCreateForm}>
-              <Plus />
-              新建询价单
-            </Button>
-          ) : undefined
-        }
-      />
-
-      {/* 搜索和筛选 */}
       <SearchFilterBar
         searchPlaceholder="搜索询价单编号..."
         searchValue={searchInput}
@@ -271,6 +255,14 @@ export default function SupplierRFQsPage() {
         onFilterChange={(key, value) => {
           if (key === 'status') setStatusFilter(value);
         }}
+        actions={
+          can('supplier_rfq', 'create') ? (
+            <Button onClick={openCreateForm}>
+              <Plus />
+              新建询价单
+            </Button>
+          ) : undefined
+        }
       />
 
       {/* 错误信息 */}

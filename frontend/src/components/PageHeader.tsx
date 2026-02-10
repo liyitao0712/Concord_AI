@@ -7,7 +7,7 @@
 import type { ReactNode } from 'react';
 
 interface PageHeaderProps {
-  title: string;
+  title?: string;
   description?: string;
   /** 右侧操作区域（如新增按钮） */
   actions?: ReactNode;
@@ -17,9 +17,9 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
     <div className="flex items-center justify-between">
       <div>
-        <h1 className="text-2xl font-semibold">{title}</h1>
+        {title && <h1 className="text-2xl font-semibold">{title}</h1>}
         {description && (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          <p className={`text-sm text-muted-foreground${title ? ' mt-1' : ''}`}>{description}</p>
         )}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}

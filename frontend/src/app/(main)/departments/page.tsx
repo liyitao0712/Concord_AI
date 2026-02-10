@@ -37,7 +37,6 @@ import {
   FolderOpen,
   Folder,
 } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -477,27 +476,20 @@ export default function DepartmentsPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <PageHeader
-        title="部门管理"
-        description="管理组织内的部门结构"
-        actions={
-          <>
-            <Button variant="outline" size="sm" onClick={expandAll}>
-              全部展开
-            </Button>
-            <Button variant="outline" size="sm" onClick={collapseAll}>
-              全部折叠
-            </Button>
-            {canEdit && (
-              <Button onClick={() => openCreateModal()}>
-                <Plus className="h-4 w-4 mr-1" />
-                创建部门
-              </Button>
-            )}
-          </>
-        }
-      />
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={expandAll}>
+          全部展开
+        </Button>
+        <Button variant="outline" size="sm" onClick={collapseAll}>
+          全部折叠
+        </Button>
+        {canEdit && (
+          <Button onClick={() => openCreateModal()}>
+            <Plus className="h-4 w-4 mr-1" />
+            创建部门
+          </Button>
+        )}
+      </div>
 
       {/* 错误提示 */}
       {error && <ErrorAlert message={error} onRetry={loadTree} />}

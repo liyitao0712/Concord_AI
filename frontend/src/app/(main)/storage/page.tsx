@@ -12,26 +12,21 @@ import { PageLoading } from '@/components/LoadingSpinner';
 import { Warehouse, PackagePlus, PackageMinus } from 'lucide-react';
 
 const WarehousesPanel = dynamic(
-  () => import('@/app/admin/warehouses/page'),
+  () => import('@/app/(main)/warehouses/page'),
   { loading: () => <PageLoading /> }
 );
 const InboundOrdersPanel = dynamic(
-  () => import('@/app/admin/inbound-orders/page'),
+  () => import('@/app/(main)/inbound-orders/page'),
   { loading: () => <PageLoading /> }
 );
 const OutboundOrdersPanel = dynamic(
-  () => import('@/app/admin/outbound-orders/page'),
+  () => import('@/app/(main)/outbound-orders/page'),
   { loading: () => <PageLoading /> }
 );
 
 export default function StoragePage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">仓储管理</h1>
-        <p className="mt-1 text-sm text-muted-foreground">仓库、入仓与出仓</p>
-      </div>
-
       <Tabs defaultValue="warehouses">
         <TabsList variant="line">
           <TabsTrigger value="warehouses" className="gap-1.5">

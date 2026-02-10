@@ -33,7 +33,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { PageHeader } from '@/components/PageHeader';
 import { SearchFilterBar } from '@/components/DataTable/SearchFilterBar';
 import { DataTableShell } from '@/components/DataTable/DataTableShell';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -239,16 +238,6 @@ export default function ClientRFQsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="客户询价单"
-        actions={can('client_rfq', 'create') ? (
-          <Button onClick={openCreateForm}>
-            <Plus className="h-4 w-4" />
-            新建询价单
-          </Button>
-        ) : undefined}
-      />
-
       <SearchFilterBar
         searchPlaceholder="搜索询价单编号..."
         searchValue={searchInput}
@@ -264,6 +253,12 @@ export default function ClientRFQsPage() {
         onFilterChange={(key, value) => {
           if (key === 'status') { setStatusFilter(value); setPage(1); }
         }}
+        actions={can('client_rfq', 'create') ? (
+          <Button onClick={openCreateForm}>
+            <Plus className="h-4 w-4" />
+            新建询价单
+          </Button>
+        ) : undefined}
       />
 
       {error && <ErrorAlert message={error} onRetry={loadRFQs} />}

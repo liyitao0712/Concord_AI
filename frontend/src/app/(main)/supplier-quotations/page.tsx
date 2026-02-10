@@ -33,7 +33,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { PageHeader } from '@/components/PageHeader';
 import { SearchFilterBar } from '@/components/DataTable/SearchFilterBar';
 import { DataTableShell } from '@/components/DataTable/DataTableShell';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -225,17 +224,6 @@ export default function SupplierQuotationsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="供应商报价"
-        description="管理供应商报价单"
-        actions={can('supplier_quotation', 'create') ? (
-          <Button onClick={openCreateForm}>
-            <Plus />
-            新建报价单
-          </Button>
-        ) : undefined}
-      />
-
       <SearchFilterBar
         searchPlaceholder="搜索报价单编号..."
         searchValue={searchInput}
@@ -251,6 +239,12 @@ export default function SupplierQuotationsPage() {
         onFilterChange={(key, value) => {
           if (key === 'status') { setStatusFilter(value); setPage(1); }
         }}
+        actions={can('supplier_quotation', 'create') ? (
+          <Button onClick={openCreateForm}>
+            <Plus />
+            新建报价单
+          </Button>
+        ) : undefined}
       />
 
       {error && <ErrorAlert message={error} onRetry={loadQuotations} />}

@@ -127,18 +127,6 @@ export default function LogsPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">系统日志</h1>
-          <p className="mt-1 text-sm text-muted-foreground">查看系统运行日志</p>
-        </div>
-        <Button variant="outline" onClick={loadLogs}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          刷新
-        </Button>
-      </div>
-
       {/* 筛选和搜索 */}
       <Card>
         <CardContent className="p-4">

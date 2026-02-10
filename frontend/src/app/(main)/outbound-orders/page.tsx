@@ -34,7 +34,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { PageHeader } from '@/components/PageHeader';
 import { SearchFilterBar } from '@/components/DataTable/SearchFilterBar';
 import { DataTableShell } from '@/components/DataTable/DataTableShell';
 import { FormDialog } from '@/components/FormDialog';
@@ -445,19 +444,6 @@ export default function OutboundOrdersPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <PageHeader
-        title="出仓单管理"
-        description="管理出仓单和发货"
-        actions={can('outbound_order', 'create') ? (
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus className="h-4 w-4" />
-            新建出仓单
-          </Button>
-        ) : undefined}
-      />
-
-      {/* 搜索和筛选 */}
       <SearchFilterBar
         searchPlaceholder="搜索单号、客户、合同号..."
         searchValue={searchInput}
@@ -473,6 +459,12 @@ export default function OutboundOrdersPage() {
         onFilterChange={(key, value) => {
           if (key === 'status') { setFilterStatus(value); setPage(1); }
         }}
+        actions={can('outbound_order', 'create') ? (
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus className="h-4 w-4" />
+            新建出仓单
+          </Button>
+        ) : undefined}
       />
 
       {/* 出仓单列表 */}

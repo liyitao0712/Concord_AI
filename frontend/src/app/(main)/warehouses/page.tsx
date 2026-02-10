@@ -33,7 +33,6 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import { PageHeader } from '@/components/PageHeader';
 import { SearchFilterBar } from '@/components/DataTable/SearchFilterBar';
 import { DataTableShell } from '@/components/DataTable/DataTableShell';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -319,21 +318,6 @@ export default function WarehousesPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页头 */}
-      <PageHeader
-        title="仓库管理"
-        description="管理仓库信息"
-        actions={
-          can('warehouse', 'create') ? (
-            <Button onClick={openCreateForm}>
-              <Plus />
-              新增仓库
-            </Button>
-          ) : undefined
-        }
-      />
-
-      {/* 搜索和筛选 */}
       <SearchFilterBar
         searchPlaceholder="搜索仓库编码/名称..."
         searchValue={searchInput}
@@ -352,6 +336,14 @@ export default function WarehousesPage() {
         onFilterChange={(key, value) => {
           if (key === 'warehouse_type') setTypeFilter(value);
         }}
+        actions={
+          can('warehouse', 'create') ? (
+            <Button onClick={openCreateForm}>
+              <Plus />
+              新增仓库
+            </Button>
+          ) : undefined
+        }
       />
 
       {/* 错误信息 */}

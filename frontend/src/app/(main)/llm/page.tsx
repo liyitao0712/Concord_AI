@@ -15,7 +15,6 @@ import { Switch } from '@/components/ui/switch';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { PageLoading } from '@/components/LoadingSpinner';
 import { usePermission } from '@/hooks/usePermission';
-import { PageHeader } from '@/components/PageHeader';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -274,18 +273,13 @@ export default function LLMConfigPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <PageHeader
-        title="LLM 模型配置"
-        description="配置各个 AI 模型的 API Key 和参数"
-        actions={
-          can('llm_model', 'create') ? (
-            <Button onClick={() => setShowCreateModal(true)}>
-              新增模型
-            </Button>
-          ) : undefined
-        }
-      />
+      <div className="flex justify-end">
+        {can('llm_model', 'create') && (
+          <Button onClick={() => setShowCreateModal(true)}>
+            新增模型
+          </Button>
+        )}
+      </div>
 
       {/* 统计信息 */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-4">

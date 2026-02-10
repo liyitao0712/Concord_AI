@@ -50,7 +50,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { PageHeader } from '@/components/PageHeader';
 import { FormSection } from '@/components/FormSection';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
@@ -640,21 +639,6 @@ export default function SuppliersPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页头 */}
-      <PageHeader
-        title="供应商管理"
-        description="管理供应商信息和联系人"
-        actions={
-          can('supplier', 'create') ? (
-            <Button onClick={openCreateForm}>
-              <Plus />
-              新增供应商
-            </Button>
-          ) : undefined
-        }
-      />
-
-      {/* 搜索和筛选 */}
       <SearchFilterBar
         searchPlaceholder="搜索公司名/简称/邮箱..."
         searchValue={searchInput}
@@ -673,6 +657,14 @@ export default function SuppliersPage() {
         onFilterChange={(key, value) => {
           if (key === 'level') setLevelFilter(value);
         }}
+        actions={
+          can('supplier', 'create') ? (
+            <Button onClick={openCreateForm}>
+              <Plus />
+              新增供应商
+            </Button>
+          ) : undefined
+        }
       />
 
       {/* 错误信息 */}

@@ -9,7 +9,7 @@
 
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -41,6 +41,48 @@ export default function AdminLayout({
   const { user, isLoading, isAuthenticated, isAdmin, logout } = useAuth();
   const { isMobile } = useDevice();
 
+  // 从导航配置构建路由权限映射（按 href 长度降序，保证最具体的路由优先匹配）
+  const routePermissionMap = useMemo(() => {
+    const entries: Array<{
+      href: string;
+      superAdminOnly?: boolean;
+      requiredPermission?: { resource: string; action: string };
+      requiredPermissions?: Array<{ resource: string; action: string }>;
+    }> = [];
+    for (const entry of navigation) {
+      if ('topLevel' in entry) {
+        if (entry.requiredPermission || entry.requiredPermissions || entry.superAdminOnly) {
+          entries.push(entry);
+        }
+      } else {
+        for (const item of entry.items) {
+          if (item.requiredPermission || item.requiredPermissions || ('superAdminOnly' in item && item.superAdminOnly)) {
+            entries.push(item);
+          }
+        }
+      }
+    }
+    return entries.sort((a, b) => b.href.length - a.href.length);
+  }, []);
+
+  // 检查当前路由是否有权限访问
+  const checkRoutePermission = useCallback((currentPath: string): boolean => {
+    const match = routePermissionMap.find((rp) =>
+      rp.href === '/system'
+        ? currentPath === '/system'
+        : currentPath === rp.href || currentPath.startsWith(rp.href + '/')
+    );
+    if (!match) return true; // 无匹配权限配置，默认允许
+    if (match.superAdminOnly && !user?.is_super_admin) return false;
+    if (match.requiredPermission) {
+      if (!hasPermission(user, match.requiredPermission.resource, match.requiredPermission.action)) return false;
+    }
+    if (match.requiredPermissions) {
+      if (!hasAnyPermission(user, match.requiredPermissions)) return false;
+    }
+    return true;
+  }, [routePermissionMap, user]);
+
   // 权限验证：未登录或非管理员跳转到登录页
   useEffect(() => {
     if (!isLoading) {
@@ -51,6 +93,15 @@ export default function AdminLayout({
       }
     }
   }, [isLoading, isAuthenticated, isAdmin, router]);
+
+  // 页面级权限守卫：无权限时重定向到牛批工作台
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && isAdmin && user) {
+      if (!checkRoutePermission(pathname)) {
+        router.replace('/dashboard');
+      }
+    }
+  }, [pathname, isLoading, isAuthenticated, isAdmin, user, checkRoutePermission, router]);
 
   // 登出处理
   const handleLogout = () => {
@@ -74,7 +125,7 @@ export default function AdminLayout({
 
   // 判断导航项是否激活
   const isItemActive = (href: string) =>
-    pathname === href || (href !== '/admin' && pathname.startsWith(href));
+    pathname === href || (href !== '/system' && pathname.startsWith(href));
 
   // 判断分组是否有激活项
   const isGroupActive = (items: NavItem[]) =>
@@ -112,6 +163,24 @@ export default function AdminLayout({
       })
       .filter(Boolean) as NavEntry[];
   }, [user]);
+
+  // 根据当前路径计算顶级菜单名称
+  const currentTitle = useMemo(() => {
+    for (const entry of filteredNavigation) {
+      if ('topLevel' in entry) {
+        if (pathname === entry.href || (entry.href !== '/system' && pathname.startsWith(entry.href))) {
+          return entry.name;
+        }
+      } else {
+        for (const item of entry.items) {
+          if (pathname === item.href || (item.href !== '/system' && pathname.startsWith(item.href))) {
+            return item.name;
+          }
+        }
+      }
+    }
+    return '';
+  }, [pathname, filteredNavigation]);
 
   // 加载中或无权限时显示空白
   if (isLoading || !isAuthenticated || !isAdmin) {
@@ -271,9 +340,11 @@ export default function AdminLayout({
               <div className="flex items-center gap-3">
                 {/* 移动端汉堡菜单 */}
                 <MobileNav navigation={filteredNavigation} />
-                <div className="text-lg font-semibold">
-                  管理后台
-                </div>
+                {currentTitle && (
+                  <div className="text-2xl font-bold">
+                    {currentTitle}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-muted-foreground hidden sm:inline">

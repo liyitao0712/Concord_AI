@@ -127,14 +127,6 @@ export default function FeishuSettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <div>
-        <h1 className="text-2xl font-bold">飞书配置</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          配置飞书机器人，实现与飞书的消息互通
-        </p>
-      </div>
-
       {/* 提示信息 */}
       {error && (
         <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4">

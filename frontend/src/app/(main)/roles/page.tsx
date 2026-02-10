@@ -40,7 +40,6 @@ import {
   Save,
   Lock,
 } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
 
@@ -277,12 +276,6 @@ export default function RolesPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <PageHeader
-        title="角色管理"
-        description="管理角色和权限分配"
-      />
-
       {/* 主体内容：左侧角色列表 + 右侧权限矩阵 */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* 左侧：角色列表 */}

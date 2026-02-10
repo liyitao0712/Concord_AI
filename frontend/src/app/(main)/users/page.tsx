@@ -50,7 +50,6 @@ import {
 import { toast } from 'sonner';
 import { Plus, Pencil, KeyRound, Trash2, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { usePermission } from '@/hooks/usePermission';
-import { PageHeader } from '@/components/PageHeader';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
 import { SearchFilterBar } from '@/components/DataTable/SearchFilterBar';
@@ -266,27 +265,6 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <PageHeader
-        title="用户管理"
-        description="管理系统用户账户"
-        actions={
-          can('user', 'create') ? (
-            <Button
-              onClick={() => {
-                setFormData({ email: '', password: '', name: '', role: 'user' });
-                setFormError('');
-                setShowCreateModal(true);
-              }}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              创建用户
-            </Button>
-          ) : undefined
-        }
-      />
-
-      {/* 搜索和筛选 */}
       <SearchFilterBar
         searchPlaceholder="搜索邮箱或名称..."
         searchValue={searchInput}
@@ -305,6 +283,20 @@ export default function UsersPage() {
         onFilterChange={(key, value) => {
           if (key === 'role') setRoleFilter(value);
         }}
+        actions={
+          can('user', 'create') ? (
+            <Button
+              onClick={() => {
+                setFormData({ email: '', password: '', name: '', role: 'user' });
+                setFormError('');
+                setShowCreateModal(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              创建用户
+            </Button>
+          ) : undefined
+        }
       />
 
       {/* 错误提示 */}

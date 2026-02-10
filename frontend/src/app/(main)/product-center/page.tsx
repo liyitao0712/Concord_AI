@@ -12,22 +12,17 @@ import { PageLoading } from '@/components/LoadingSpinner';
 import { FolderTree, Package } from 'lucide-react';
 
 const CategoriesPanel = dynamic(
-  () => import('@/app/admin/categories/page'),
+  () => import('@/app/(main)/categories/page'),
   { loading: () => <PageLoading /> }
 );
 const ProductsPanel = dynamic(
-  () => import('@/app/admin/products/page'),
+  () => import('@/app/(main)/products/page'),
   { loading: () => <PageLoading /> }
 );
 
 export default function ProductCenterPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">产品管理</h1>
-        <p className="mt-1 text-sm text-muted-foreground">品类与产品</p>
-      </div>
-
       <Tabs defaultValue="categories">
         <TabsList variant="line">
           <TabsTrigger value="categories" className="gap-1.5">

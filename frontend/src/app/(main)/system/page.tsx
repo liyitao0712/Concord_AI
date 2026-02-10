@@ -51,12 +51,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <div>
-        <h1 className="text-2xl font-bold">仪表盘</h1>
-        <p className="mt-1 text-sm text-muted-foreground">系统概览和统计数据</p>
-      </div>
-
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
@@ -92,7 +86,7 @@ export default function AdminDashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Link href="/admin/users">
+            <Link href="/users">
               <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
                 <CardContent className="flex items-center gap-3 p-4">
                   <div className="p-2 bg-blue-100 rounded-lg">
@@ -105,7 +99,7 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
             </Link>
-            <Link href="/admin/users?action=create">
+            <Link href="/users?action=create">
               <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
                 <CardContent className="flex items-center gap-3 p-4">
                   <div className="p-2 bg-green-100 rounded-lg">

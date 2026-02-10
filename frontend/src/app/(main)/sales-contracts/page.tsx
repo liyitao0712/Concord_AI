@@ -35,7 +35,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { PageHeader } from '@/components/PageHeader';
 import { FormSection } from '@/components/FormSection';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
@@ -494,17 +493,6 @@ export default function SalesContractsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="销售合同"
-        actions={can('sales_contract', 'create') ? (
-          <Button onClick={() => { resetCreateForm(); setShowCreate(true); }}>
-            <Plus className="h-4 w-4" />
-            新建合同
-          </Button>
-        ) : undefined}
-      />
-
-      {/* 搜索和筛选 */}
       <SearchFilterBar
         searchPlaceholder="搜索合同编号、客户名称..."
         searchValue={searchInput}
@@ -520,6 +508,12 @@ export default function SalesContractsPage() {
         onFilterChange={(key, value) => {
           if (key === 'status') { setFilterStatus(value); setPage(1); }
         }}
+        actions={can('sales_contract', 'create') ? (
+          <Button onClick={() => { resetCreateForm(); setShowCreate(true); }}>
+            <Plus className="h-4 w-4" />
+            新建合同
+          </Button>
+        ) : undefined}
       />
 
       {/* 合同列表 */}

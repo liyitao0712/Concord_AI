@@ -29,7 +29,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
@@ -432,12 +431,6 @@ export default function WorkTypesPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <PageHeader
-        title="工作类型管理"
-        description="管理系统工作类型，AI 自动识别的新类型需要人工审批"
-      />
-
       {/* Tab 切换 */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList variant="line">

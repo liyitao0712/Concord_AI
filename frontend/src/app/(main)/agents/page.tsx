@@ -21,7 +21,6 @@ import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { PageLoading } from '@/components/LoadingSpinner';
 import { usePermission } from '@/hooks/usePermission';
-import { PageHeader } from '@/components/PageHeader';
 import { FormDialog } from '@/components/FormDialog';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { formatDate, formatDateTime } from '@/lib/format';
@@ -209,12 +208,6 @@ export default function AgentsPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <PageHeader
-        title="Agent 管理"
-        description="配置 AI Agent 的模型、参数和 Prompt（Agent 列表从后端自动加载，新增 Agent 无需修改前端）"
-      />
-
       {/* 错误提示 */}
       {error && <ErrorAlert message={error} onRetry={loadData} />}
 

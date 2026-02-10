@@ -31,7 +31,6 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { usePermission } from '@/hooks/usePermission';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Building2, Users, Network } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
 import { SearchFilterBar } from '@/components/DataTable/SearchFilterBar';
@@ -195,23 +194,16 @@ export default function OrganizationsPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <PageHeader
-        title="组织管理"
-        description="管理系统中的组织机构"
+      <SearchFilterBar
+        searchPlaceholder="搜索组织名称或编码..."
+        searchValue={searchInput}
+        onSearchChange={setSearchInput}
         actions={
           <Button onClick={openCreateModal}>
             <Plus className="h-4 w-4 mr-1" />
             创建组织
           </Button>
         }
-      />
-
-      {/* 搜索 */}
-      <SearchFilterBar
-        searchPlaceholder="搜索组织名称或编码..."
-        searchValue={searchInput}
-        onSearchChange={setSearchInput}
       />
 
       {/* 错误提示 */}

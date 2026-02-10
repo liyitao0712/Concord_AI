@@ -22,7 +22,6 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 import { PageLoading } from '@/components/LoadingSpinner';
-import { PageHeader } from '@/components/PageHeader';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { emailsApi, ttsApi, TTS_PROVIDER_OPTIONS, type BriefingItem, type TTSProvider } from '@/lib/api';
 import {
@@ -114,10 +113,6 @@ function useChineseVoice() {
 export default function DashboardPage() {
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <PageHeader title="牛批工作台" description="高效工作，从这里开始" />
-
-      {/* Tab 导航 */}
       <Tabs defaultValue="emails">
         <TabsList variant="line">
           <TabsTrigger value="emails" className="gap-1.5">

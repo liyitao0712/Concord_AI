@@ -20,7 +20,6 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import { PageHeader } from '@/components/PageHeader';
 import { SearchFilterBar } from '@/components/DataTable/SearchFilterBar';
 import { DataTableShell } from '@/components/DataTable/DataTableShell';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -126,12 +125,6 @@ export default function TradeTermsPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页头 */}
-      <PageHeader
-        title="贸易术语"
-        description="国际商会（ICC）Incoterms 国际贸易术语，包含当前 2020 版本及历史版本"
-      />
-
       {/* 版本筛选 Tab */}
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex gap-1 bg-muted p-1 rounded-lg">

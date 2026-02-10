@@ -12,30 +12,25 @@ import { PageLoading } from '@/components/LoadingSpinner';
 import { Factory, FileInput, FileCheck, ShoppingCart } from 'lucide-react';
 
 const SuppliersPanel = dynamic(
-  () => import('@/app/admin/suppliers/page'),
+  () => import('@/app/(main)/suppliers/page'),
   { loading: () => <PageLoading /> }
 );
 const SupplierRfqsPanel = dynamic(
-  () => import('@/app/admin/supplier-rfqs/page'),
+  () => import('@/app/(main)/supplier-rfqs/page'),
   { loading: () => <PageLoading /> }
 );
 const SupplierQuotationsPanel = dynamic(
-  () => import('@/app/admin/supplier-quotations/page'),
+  () => import('@/app/(main)/supplier-quotations/page'),
   { loading: () => <PageLoading /> }
 );
 const PurchaseContractsPanel = dynamic(
-  () => import('@/app/admin/purchase-contracts/page'),
+  () => import('@/app/(main)/purchase-contracts/page'),
   { loading: () => <PageLoading /> }
 );
 
 export default function ProcurementPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">采购管理</h1>
-        <p className="mt-1 text-sm text-muted-foreground">供应商、询价、报价与采购合同</p>
-      </div>
-
       <Tabs defaultValue="suppliers">
         <TabsList variant="line">
           <TabsTrigger value="suppliers" className="gap-1.5">

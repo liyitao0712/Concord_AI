@@ -50,7 +50,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { PageHeader } from '@/components/PageHeader';
 import { FormSection } from '@/components/FormSection';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
@@ -370,21 +369,6 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页头 */}
-      <PageHeader
-        title="产品管理"
-        description="管理外贸产品信息和供应商关联"
-        actions={
-          can('product', 'create') ? (
-            <Button onClick={openCreateForm}>
-              <Plus />
-              新增产品
-            </Button>
-          ) : undefined
-        }
-      />
-
-      {/* 搜索和筛选 */}
       <SearchFilterBar
         searchPlaceholder="搜索品名/型号/HS编码..."
         searchValue={searchInput}
@@ -406,6 +390,14 @@ export default function ProductsPage() {
           if (key === 'category') setCategoryFilter(value);
           if (key === 'status') setStatusFilter(value);
         }}
+        actions={
+          can('product', 'create') ? (
+            <Button onClick={openCreateForm}>
+              <Plus />
+              新增产品
+            </Button>
+          ) : undefined
+        }
       />
 
       {/* 错误信息 */}

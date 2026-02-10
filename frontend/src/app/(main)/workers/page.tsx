@@ -25,7 +25,6 @@ import {
 import { useConfirm } from '@/components/ConfirmProvider';
 import { Plus, Play, Square, FlaskConical, Pencil, Trash2 } from 'lucide-react';
 import { usePermission } from '@/hooks/usePermission';
-import { PageHeader } from '@/components/PageHeader';
 import { FormDialog } from '@/components/FormDialog';
 import { FormFooter } from '@/components/FormFooter';
 import { StatusBadge, type StatusConfig } from '@/components/StatusBadge';
@@ -321,10 +320,10 @@ export default function WorkersPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
-      <PageHeader
-        title="Worker 管理"
-        description="管理消息渠道 Worker（飞书、邮件等）"
+      <SearchFilterBar
+        searchPlaceholder="搜索 Worker 名称/类型/Agent..."
+        searchValue={searchInput}
+        onSearchChange={setSearchInput}
         actions={
           can('worker', 'create') ? (
             <Button onClick={openCreateModal}>
@@ -333,13 +332,6 @@ export default function WorkersPage() {
             </Button>
           ) : undefined
         }
-      />
-
-      {/* 搜索栏 */}
-      <SearchFilterBar
-        searchPlaceholder="搜索 Worker 名称/类型/Agent..."
-        searchValue={searchInput}
-        onSearchChange={setSearchInput}
       />
 
       {/* 提示信息 */}
